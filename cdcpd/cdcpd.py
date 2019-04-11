@@ -1,6 +1,7 @@
 import numpy as np
 from .cpd import CPDParams, CPD
 from .optimizer import Optimizer
+from .prior import Prior
 from .lle import locally_linear_embedding
 import copy
 
@@ -36,7 +37,12 @@ class ConstrainedDeformableCPD:
             self.M_LLE = locally_linear_embedding(
                 self.template, n_neighbors=self.cdcpd_params.lle_neighbors).todense()
 
-    def step(self, point_cloud, mask, cpd_param: CPDParams, optimizer: Optimizer):
+    def step(self,
+             point_cloud,
+             mask,
+             cpd_param: CPDParams,
+             optimizer: Optimizer,
+             prior: Prior=None):
         """
         Performs one time-step of ConstrainedDeformableCPD.
         :param point_cloud: (H,W,3) point cloud image in camera frame.
@@ -44,6 +50,7 @@ class ConstrainedDeformableCPD:
         :param cpd_param: CPD parameters used in current time step. Generally, the first time step
         in a tracking sequence should have less regularization (lower beta and lambd) than others.
         :param optimizer: Optimizer used for constrained optimization, subclass of Optimizer.
+        :param prior:
         :return: (M, 3) tracking result. Same shape as template.
         """
         filtered_points = point_cloud[mask]
@@ -57,6 +64,8 @@ class ConstrainedDeformableCPD:
         curr_cpd_param = copy.deepcopy(cpd_param)
         if self.cdcpd_params.use_lle is True:
             curr_cpd_param.M_LLE = self.M_LLE
+        if prior is not None:
+            curr_cpd_param.Y_emit_prior = prior.run(self.template)
 
         # CPD
         cpd = CPD(down_sampled_points, self.template, curr_cpd_param)
