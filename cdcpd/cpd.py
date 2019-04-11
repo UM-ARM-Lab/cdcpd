@@ -12,8 +12,7 @@ class CPDParams:
                  lambd=1.0,
                  lambd_annealing_factor=0.6,
                  Y_emit_prior = None,
-                 M_LLE=None,
-                 percent_fake_points=0):
+                 M_LLE=None):
         """
         Parameters for our version of Coherent Point Drift.
         :param alpha: Trade-off parameter between fitting and CPD
@@ -31,7 +30,6 @@ class CPDParams:
         accelerate convergence.
         :param Y_emit_prior: (M,) Prior probability for a gaussian centroid to generate observation.
         :param M_LLE: (M, M) LLE adjacency matrix. Should be pre-computed.
-        :param percent_fake_points: Percentage of fake points generated to improve robustness against
         occlusion.
         """
         self.alpha = alpha
@@ -44,7 +42,6 @@ class CPDParams:
         self.lambd_annealing_factor = lambd_annealing_factor
         self.Y_emit_prior = Y_emit_prior
         self.M_LLE = M_LLE
-        self.percent_fake_points = percent_fake_points
 
 
 class CPD:
