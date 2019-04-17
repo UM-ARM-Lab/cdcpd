@@ -1,6 +1,6 @@
 import numpy as np
 import gurobipy
-from itertools import product
+import cdcpd.gurobi_utils as grb_utils
 
 
 class Optimizer:
@@ -11,6 +11,12 @@ class Optimizer:
         :return: (M, 3) optimization result. Same shape as input.
         """
         return verts
+
+
+def edge_squared_distances(points, edges):
+    diff = points[edges[:, 0]] - points[edges[:, 1]]
+    sqr_dist = np.sum(np.square(diff), axis=1)
+    return sqr_dist
 
 
 class DistanceConstrainedOptimizer(Optimizer):
@@ -27,30 +33,23 @@ class DistanceConstrainedOptimizer(Optimizer):
         self.stretch_coefficient = stretch_coefficient
 
     def run(self, verts):
-        target = verts
-        constrain_consts = np.square(
-            self.stretch_coefficient * np.linalg.norm(
-                self.template[self.edges[:, 0]] - self.template[self.edges[:, 1]], axis=1))
-        # constrained optimization
         model = gurobipy.Model()
         model.setParam('OutputFlag', False)
-        template_vars = model.addVars(*verts.shape, lb=-gurobipy.GRB.INFINITY, name='template')
-        for i in range(self.edges.shape[0]):
-            left, right = self.edges[i]
-            diff = [template_vars[left, j] - template_vars[right, j] for j in range(verts.shape[1])]
-            qexpr = gurobipy.quicksum([diff[j] * diff[j] for j in range(len(diff))])
-            model.addQConstr(qexpr, gurobipy.GRB.LESS_EQUAL, rhs=constrain_consts[i], name='edge{}'.format(i))
-        diff = [template_vars[i, j] - target[i, j] for i, j in
-                product(range(verts.shape[0]), range(verts.shape[1]))]
-        objective_expr = gurobipy.quicksum([diff[i] * diff[i] for i in range(len(diff))])
-        model.setObjective(objective_expr, gurobipy.GRB.MINIMIZE)
+        g_verts = grb_utils.create_gurobi_arr(model, verts.shape, name="verts")
+
+        # distance constraint
+        rhs = (self.stretch_coefficient ** 2) * edge_squared_distances(self.template, self.edges)
+        lhs = edge_squared_distances(g_verts, self.edges)
+        grb_utils.add_constraints(model, lhs, "<=", rhs, name="edge")
+
+        # objective function
+        g_objective = np.sum(np.square(g_verts - verts))
+        model.setObjective(g_objective, gurobipy.GRB.MINIMIZE)
         model.update()
         model.optimize()
-        optimize_result = np.empty(verts.shape, dtype=verts.dtype)
-        for i in range(verts.shape[0]):
-            for j in range(verts.shape[1]):
-                optimize_result[i, j] = template_vars[i, j].x
-        return optimize_result
+
+        verts_result = grb_utils.get_value(g_verts)
+        return verts_result
 
 
 class PriorConstrainedOptimizer(Optimizer):
@@ -81,33 +80,26 @@ class PriorConstrainedOptimizer(Optimizer):
         self.prior_idx = prior_idx
 
     def run(self, verts):
-        target = verts
-        constrain_consts = np.square(
-            self.stretch_coefficient * np.linalg.norm(
-                self.template[self.edges[:, 0]] - self.template[self.edges[:, 1]], axis=1))
-        # constrained optimization
         model = gurobipy.Model()
         model.setParam('OutputFlag', False)
-        template_vars = model.addVars(*verts.shape, lb=-gurobipy.GRB.INFINITY, name='template')
-        for i in range(self.edges.shape[0]):
-            left, right = self.edges[i]
-            diff = [template_vars[left, j] - template_vars[right, j] for j in range(verts.shape[1])]
-            qexpr = gurobipy.quicksum([diff[j] * diff[j] for j in range(len(diff))])
-            model.addQConstr(qexpr, gurobipy.GRB.LESS_EQUAL, rhs=constrain_consts[i], name='edge{}'.format(i))
+        g_verts = grb_utils.create_gurobi_arr(model, verts.shape, name="verts")
 
-        for i in range(len(self.prior_idx)):
-            idx = self.prior_idx[i]
-            assert (0 <= idx < verts.shape[0])
-            model.addConstrs((template_vars[idx, j] == self.prior_pos[i, j] for j in range(verts.shape[1])))
+        # distance constraint
+        rhs = (self.stretch_coefficient ** 2) * edge_squared_distances(self.template, self.edges)
+        lhs = edge_squared_distances(g_verts, self.edges)
+        grb_utils.add_constraints(model, lhs, "<=", rhs, name="edge")
 
-        diff = [template_vars[i, j] - target[i, j] for i, j in
-                product(range(verts.shape[0]), range(verts.shape[1]))]
-        objective_expr = gurobipy.quicksum([diff[i] * diff[i] for i in range(len(diff))])
-        model.setObjective(objective_expr, gurobipy.GRB.MINIMIZE)
+        # prior pos constraint
+        lhs = g_verts[self.prior_idx]
+        rhs = self.prior_pos
+        grb_utils.add_constraints(model, lhs, "==", rhs, name="prior")
+
+        # objective function
+        g_objective = np.sum(np.square(g_verts - verts))
+        model.setObjective(g_objective, gurobipy.GRB.MINIMIZE)
         model.update()
         model.optimize()
-        optimize_result = np.empty(verts.shape, dtype=verts.dtype)
-        for i in range(verts.shape[0]):
-            for j in range(verts.shape[1]):
-                optimize_result[i, j] = template_vars[i, j].x
-        return optimize_result
+
+        verts_result = grb_utils.get_value(g_verts)
+        return verts_result
+
