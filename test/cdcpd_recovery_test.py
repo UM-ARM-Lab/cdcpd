@@ -3,38 +3,42 @@ import pickle
 from cdcpd.cdcpd import CDCPDParams, ConstrainedDeformableCPD
 from cdcpd.cpd import CPDParams
 from cdcpd.optimizer import DistanceConstrainedOptimizer
-from cdcpd.geometry_utils import build_line
-from cdcpd.cv_utils import chroma_key_rope
+from cdcpd.geometry_utils import build_rectangle
+from cdcpd.cv_utils import chroma_key_mflag_home
 from cdcpd.visualization import simple_visualize
 from cdcpd.prior import ThresholdVisibilityPrior
-
-
-kinect_intrinsics = np.array(
-    [1068.842896477257, 0.0, 950.2974736758024, 0.0, 1066.0150152835104, 537.097974092338, 0.0, 0.0, 1.0],
-    dtype=np.float32).reshape((3, 3))
-kinect_intrinsics[:2] /= 2.0
+from cdcpd.failure_recovery import SmoothFreeSpaceCost
 
 
 def main():
     # file_path = "data/rope_fast.pk"
     # file_path = "data/rope_simple.pk"
-    # file_path = '/home/chicheng/ARMLab/data/rope_fast_2018-10-31-12-01-42.bag.pk'
-    file_path = '/media/chicheng/OSM/data/old_pk/rope_2018-10-17-13-44-49.bag.pk'
-    input_arr = pickle.load(open(file_path, 'rb'), encoding='bytes')
-    template_verts, template_edges = build_line(1.0, 50)
-    key_func = chroma_key_rope
+    file_path = '/media/chicheng/OSM/data/IROS2019/hand_flag/mflag_fold_2018-10-31-11-58-25.bag.pk'
+    input_pack = pickle.load(open(file_path, 'rb'), encoding='bytes')
+    color_imgs = input_pack["color_img"]
+    point_imgs = input_pack["point_img"]
+    camera_intrinsic = input_pack["camera_intrinsic"]
 
-    prior = ThresholdVisibilityPrior(kinect_intrinsics)
+    template_verts, template_edges = build_rectangle(0.32, 0.45, grid_size=0.03)
+    key_func = chroma_key_mflag_home
+
+    prior = ThresholdVisibilityPrior(camera_intrinsic)
     optimizer = DistanceConstrainedOptimizer(template=template_verts, edges=template_edges)
+    cost_estimator = SmoothFreeSpaceCost(camera_intrinsic)
 
-    cpd_params = CPDParams(beta=4.0)
-    cdcpd_params = CDCPDParams(prior=prior, optimizer=optimizer)
+    cpd_params = CPDParams(beta=1.0)
+    cdcpd_params = CDCPDParams(prior=prior,
+                               optimizer=optimizer,
+                               use_recovery=True,
+                               recovery_cost_estimator=cost_estimator,
+                               recovery_cost_threshold=0.1)
     cdcpd = ConstrainedDeformableCPD(template=template_verts,
                                      cdcpd_params=cdcpd_params)
 
     tracking_result_history = []
-    for i in range(len(input_arr)):
-        point_cloud_img, color_img = input_arr[i]
+    for i in range(len(point_imgs)):
+        point_cloud_img = point_imgs[i]
+        color_img = color_imgs[i]
         mask_img = key_func(point_cloud_img, color_img)
 
         prior.set_point_cloud(point_cloud_img, mask_img)
@@ -45,11 +49,11 @@ def main():
 
         tracking_result_history.append(tracking_result)
 
-    simple_visualize(input_arr=input_arr,
+    simple_visualize(input_arr=list(zip(point_imgs, color_imgs)),
                      tracking_result_history=tracking_result_history,
                      template_edges=template_edges,
                      key_func=key_func,
                      filter_point_cloud=False,
                      target_fps=10)
 
-main()
+# main()

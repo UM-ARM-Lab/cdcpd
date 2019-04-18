@@ -5,11 +5,12 @@ from .cv_utils import project_image_space
 
 
 class KnnLibrary:
-    def __init__(self):
+    def __init__(self, sample_size=1500):
+        self.sample_size = sample_size
+
         FLANN_INDEX_KDTREE = 0
         index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
         search_params = dict(checks=50)  # or pass empty dictionary
-
         self.flann = cv2.FlannBasedMatcher(index_params, search_params)
 
         self.features = []
@@ -18,9 +19,8 @@ class KnnLibrary:
     def num_features(self):
         return len(self.features)
 
-    @staticmethod
-    def down_sampled_feature(filtered_points, sample_size=1500, feature_func=vfh):
-        if filtered_points.shape[0] > sample_size:
+    def down_sampled_feature(self, filtered_points, feature_func=vfh):
+        if filtered_points.shape[0] > self.sample_size:
             rand_idx = np.random.randint(0, filtered_points.shape[0], size=sample_size, dtype=np.uint32)
             filtered_points = filtered_points[rand_idx]
         feature = feature_func(filtered_points)

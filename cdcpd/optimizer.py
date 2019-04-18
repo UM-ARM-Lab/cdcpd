@@ -20,6 +20,11 @@ def edge_squared_distances(points, edges):
 
 
 class DistanceConstrainedOptimizer(Optimizer):
+    """
+    Performs constrained optimization that optimizes MSE between output and verts,
+    subject to constraint that edges length in output is within stretch_coefficient
+    of original distance.
+    """
     def __init__(self, template, edges, stretch_coefficient=1.0):
         """
         Constructor.
@@ -53,6 +58,12 @@ class DistanceConstrainedOptimizer(Optimizer):
 
 
 class PriorConstrainedOptimizer(Optimizer):
+    """
+    Performs constrained optimization that optimizes MSE between output and verts,
+    subject to constraint that edges length in output is within stretch_coefficient
+    of original distance. It also constraints some specified nodes to be certain
+     position known a priori.
+    """
     def __init__(self, template, edges, stretch_coefficient=1.0):
         """
         Constructor.

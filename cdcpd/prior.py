@@ -4,26 +4,53 @@ from .cv_utils import project_image_space
 
 
 class Prior:
+    """
+    Base class for prior estimators.
+    """
     def set_point_cloud(self, point_cloud, mask):
+        """
+        Set the point cloud being used for estimation.
+        :param point_cloud: (H, W, 3) numpy array for point cloud image received from Kinect
+        :param mask: (H, W) bool mask for object of interest. True means pixel belong to object.
+        :return:
+        """
         pass
 
     def run(self, verts):
+        """
+        Estimates prior probability of vertices to be seen.
+        :param verts: (M, 3) numpy array of float
+        :return: (M,) numpy array of float, between 0 and 1
+        """
         pass
 
 
 class UniformPrior(Prior):
-    def set_point_cloud(self, point_cloud, mask):
-        pass
-
+    """
+    Generates uniform distribution for visibility probability
+    """
     def run(self, verts):
         prior = np.ones(verts.shape[0], dtype=verts.dtype)
         prior /= verts.shape[0]
+        return prior
 
 
 class ThresholdVisibilityPrior(Prior):
-    def __init__(self, intrinsic_mat, threshold=2.0):
+    """
+    Generates visibility of nodes based on how far away it is from point cloud
+    and how far away it is from object mask.
+    """
+    def __init__(self, intrinsic_mat, k=1e1, saturation_threshold=0.01):
+        """
+        Constructor
+        :param intrinsic_mat: (3, 3) numpy array for camera intrinsics matrix
+        :param k: controls flatness of exp(-k*x). The larger the more tolerant.
+        :param saturation_threshold: Above this threshold, probability will be filled as 1.
+        """
+
         self.intrinsic_mat = intrinsic_mat
-        self.threshold = threshold
+        self.k = k
+        self.saturation_threshold = saturation_threshold
         self.point_cloud = None
         self.mask = None
 
@@ -44,21 +71,16 @@ class ThresholdVisibilityPrior(Prior):
         image_depth = self.point_cloud[coords[:, 1], coords[:, 0], 2]
 
         depth_diff = np.clip(depth - image_depth, 0, np.inf)
+        # fill nan with positive value to prevent numerical problem
         depth_diff[np.isnan(depth_diff)] = 0.02
-        # cost = np.nanmean(depth_diff)
 
         dist_img = cv2.distanceTransform(
             np.logical_not(self.mask).astype(np.uint8), distanceType=cv2.DIST_L2, maskSize=5)
         dist_to_mask = dist_img[coords[:, 1], coords[:, 0]]
 
         score = dist_to_mask * depth_diff
-        # prob = np.clip(score, 0, threshold) / threshold
-        # prob = 1 - prob
-        k = 1e1
-        # print(k*score)
-        prob = np.exp(-k * score)
-        # print(prob)
+        prob = np.exp(-self.k * score)
 
-        if prob.sum() < 0.01:
+        if prob.sum() < self.saturation_threshold:
             prob[:] = 1
         return prob

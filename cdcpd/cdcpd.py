@@ -1,9 +1,9 @@
 import numpy as np
 from .cpd import CPDParams, CPD
 from .optimizer import Optimizer
-from .prior import Prior, UniformPrior
+from .prior import Prior
 from .lle import locally_linear_embedding
-from .failure_recovery import KnnLibrary, SmoothFreeSpaceCost
+from .failure_recovery import KnnLibrary
 import copy
 
 
@@ -17,13 +17,24 @@ class CDCPDParams:
                  use_recovery=False,
                  recovery_cost_estimator=None,
                  recovery_knn_k=12,
-                 recovery_cost_threshold=1.0):
+                 recovery_featrue_sample_size=1500,
+                 recovery_cost_threshold=0.5):
         """
         Parameters for CDCPD
-        :param down_sample_size: Target size for point cloud random down-sample
+        :param prior: Reference to prior estimator, which estimates
+         the prior emission probability for gaussian centroids. subclass of Prior
+        :param optimizer: Reference to optimizer used for constrained optimization, subclass of Optimizer.
+        :param down_sample_size: Target size for point cloud random down-sample for CPD
         :param use_lle: Whether uses LLE loss or not for additional regularization
         :param lle_neighbors: k for k-nearest-neighbors number for LLE
+        :param use_recovery: Whether uses tracking failure recovery or not.
+        :param recovery_cost_estimator: Reference to a cost estimator, estimates likelihood of current tracking
+        result to be correct. The higher the cost, the lower the likelihood.
+        :param recovery_knn_k: k for k-nearest-neighbors of feature library query
+        :param recovery_featrue_sample_size: Target size for point cloud random down-sample for feature extractor
+        :param recovery_cost_threshold: Threshold for recovery_cost to be deemed as tracking failure.
         """
+
         self.down_sample_size = down_sample_size
         self.prior = prior
         self.optimizer = optimizer
@@ -32,6 +43,7 @@ class CDCPDParams:
         self.use_recovery = use_recovery
         self.recovery_cost_estimator = recovery_cost_estimator
         self.recovery_knn_k = recovery_knn_k
+        self.recovery_featrue_sample_size = recovery_featrue_sample_size
         self.recovery_cost_threshold = recovery_cost_threshold
 
 
@@ -63,8 +75,6 @@ class ConstrainedDeformableCPD:
         :param mask: (H, W) binary mask for object of interest in point cloud.
         :param cpd_param: CPD parameters used in current time step. Generally, the first time step
         in a tracking sequence should have less regularization (lower beta and lambd) than others.
-        :param optimizer: Optimizer used for constrained optimization, subclass of Optimizer.
-        :param prior:
         :return: (M, 3) tracking result. Same shape as template.
         """
         filtered_points = point_cloud[mask]
