@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from PCL_features import vfh
+from cdcpd.pcl_features import vfh
 from .cv_utils import project_image_space
 
 
