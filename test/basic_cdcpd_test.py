@@ -17,9 +17,7 @@ kinect_intrinsics[:2] /= 2.0
 
 def main():
     # file_path = "data/rope_fast.pk"
-    # file_path = "data/rope_simple.pk"
-    # file_path = '/home/chicheng/ARMLab/data/rope_fast_2018-10-31-12-01-42.bag.pk'
-    file_path = '/media/chicheng/OSM/data/old_pk/rope_2018-10-17-13-44-49.bag.pk'
+    file_path = "data/rope_simple.pk"
     input_arr = pickle.load(open(file_path, 'rb'), encoding='bytes')
     template_verts, template_edges = build_line(1.0, 50)
     key_func = chroma_key_rope

@@ -26,6 +26,7 @@ setup(
         "scipy",
         "numexpr",
         "scikit-learn",
+        "matplotlib",
         "glplotlib"
     ],
     **setupOpts

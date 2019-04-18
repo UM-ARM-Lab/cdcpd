@@ -11,9 +11,7 @@ from cdcpd.failure_recovery import SmoothFreeSpaceCost
 
 
 def main():
-    # file_path = "data/rope_fast.pk"
-    # file_path = "data/rope_simple.pk"
-    file_path = '/media/chicheng/OSM/data/IROS2019/hand_flag/mflag_fold_2018-10-31-11-58-25.bag.pk'
+    file_path = "data/mflag_fold.pk"
     input_pack = pickle.load(open(file_path, 'rb'), encoding='bytes')
     color_imgs = input_pack["color_img"]
     point_imgs = input_pack["point_img"]
@@ -56,4 +54,4 @@ def main():
                      filter_point_cloud=False,
                      target_fps=10)
 
-# main()
+main()

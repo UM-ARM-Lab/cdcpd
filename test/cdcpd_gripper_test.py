@@ -21,8 +21,7 @@ class InputPack:
 
 
 def main():
-    file_path = "/media/chicheng/OSM/data/old_pk/robot_rope_touch_2018-11-20-16-38-13.bag.pk"
-    # file_path = "data/gripper_touch.pk"
+    file_path = "data/gripper_touch.pk"
     input_arr = pickle.load(open(file_path, 'rb'), encoding='bytes')
     template_verts, template_edges = build_line(1.0, 50)
     key_func = chroma_key_rope
