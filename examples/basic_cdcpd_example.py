@@ -35,8 +35,6 @@ def main():
         point_cloud_img, color_img = input_arr[i]
         mask_img = key_func(point_cloud_img, color_img)
 
-        prior.set_point_cloud(point_cloud_img, mask_img)
-
         tracking_result = cdcpd.step(point_cloud=point_cloud_img,
                                      mask=mask_img,
                                      cpd_param=cpd_params)

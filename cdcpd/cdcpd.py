@@ -103,7 +103,7 @@ class ConstrainedDeformableCPD:
         if self.cdcpd_params.optimizer is not None:
             optimizer = self.cdcpd_params.optimizer
             optimization_result = optimizer.run(tracking_result)
-            tracking_result = optimization_result
+            tracking_result = optimization_result.astype(self.template.dtype)
 
         # skipping recovery if not enabled
         if not self.cdcpd_params.use_recovery:
