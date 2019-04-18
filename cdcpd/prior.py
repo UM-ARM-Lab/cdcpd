@@ -1,18 +1,23 @@
 import numpy as np
 import cv2
-
-
-def project_image_space(points, intrinsic_mat):
-    projected = points @ intrinsic_mat.T
-    # projected = points @ np.linalg.inv(intrinsic_mat)
-    projected[:, 0] /= projected[:, 2]
-    projected[:, 1] /= projected[:, 2]
-    return projected
+from .cv_utils import project_image_space
 
 
 class Prior:
+    def set_point_cloud(self, point_cloud, mask):
+        pass
+
     def run(self, verts):
         pass
+
+
+class UniformPrior(Prior):
+    def set_point_cloud(self, point_cloud, mask):
+        pass
+
+    def run(self, verts):
+        prior = np.ones(verts.shape[0], dtype=verts.dtype)
+        prior /= verts.shape[0]
 
 
 class ThresholdVisibilityPrior(Prior):

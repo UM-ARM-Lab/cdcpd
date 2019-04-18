@@ -17,16 +17,17 @@ kinect_intrinsics[:2] /= 2.0
 
 def main():
     # file_path = "data/rope_fast.pk"
-    file_path = "data/rope_simple.pk"
+    # file_path = "data/rope_simple.pk"
+    file_path = '/home/chicheng/ARMLab/data/rope_fast_2018-10-31-12-01-42.bag.pk'
     input_arr = pickle.load(open(file_path, 'rb'), encoding='bytes')
     template_verts, template_edges = build_line(1.0, 50)
     key_func = chroma_key_rope
 
-    cpd_params = CPDParams(beta=4.0)
-    cdcpd_params = CDCPDParams()
-    optimizer = DistanceConstrainedOptimizer(template=template_verts, edges=template_edges)
     prior = ThresholdVisibilityPrior(kinect_intrinsics, threshold=2.0)
+    optimizer = DistanceConstrainedOptimizer(template=template_verts, edges=template_edges)
 
+    cpd_params = CPDParams(beta=4.0)
+    cdcpd_params = CDCPDParams(prior=prior, optimizer=optimizer)
     cdcpd = ConstrainedDeformableCPD(template=template_verts,
                                      cdcpd_params=cdcpd_params)
 
@@ -39,9 +40,7 @@ def main():
 
         tracking_result = cdcpd.step(point_cloud=point_cloud_img,
                                      mask=mask_img,
-                                     cpd_param=cpd_params,
-                                     optimizer=optimizer,
-                                     prior=prior)
+                                     cpd_param=cpd_params)
 
         tracking_result_history.append(tracking_result)
 

@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 from cdcpd.cdcpd import CDCPDParams, ConstrainedDeformableCPD
 from cdcpd.cpd import CPDParams
+from cdcpd.prior import UniformPrior
 from cdcpd.optimizer import PriorConstrainedOptimizer
 from cdcpd.geometry_utils import build_line
 from cdcpd.cv_utils import chroma_key_rope
@@ -20,15 +21,17 @@ class InputPack:
 
 
 def main():
-    # file_path = "/media/chicheng/OSM/data/old_pk/robot_rope_touch_2018-11-20-16-38-13.bag.pk"
-    file_path = "data/gripper_touch.pk"
+    file_path = "/media/chicheng/OSM/data/old_pk/robot_rope_touch_2018-11-20-16-38-13.bag.pk"
+    # file_path = "data/gripper_touch.pk"
     input_arr = pickle.load(open(file_path, 'rb'), encoding='bytes')
     template_verts, template_edges = build_line(1.0, 50)
     key_func = chroma_key_rope
 
     cpd_params = CPDParams()
-    cdcpd_params = CDCPDParams()
+
+    prior = UniformPrior()
     optimizer = PriorConstrainedOptimizer(template=template_verts, edges=template_edges)
+    cdcpd_params = CDCPDParams(prior=prior, optimizer=optimizer)
 
     cdcpd = ConstrainedDeformableCPD(template=template_verts,
                                      cdcpd_params=cdcpd_params)
@@ -44,8 +47,7 @@ def main():
 
         tracking_result = cdcpd.step(point_cloud=point_cloud_img,
                                      mask=mask_img,
-                                     cpd_param=cpd_params,
-                                     optimizer=optimizer)
+                                     cpd_param=cpd_params)
 
         tracking_result_history.append(tracking_result)
 

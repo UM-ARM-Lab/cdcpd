@@ -43,3 +43,11 @@ def chroma_key_mflag_lab(points, colors):
     # plt.imshow(mask)
     # plt.show()
     return mask
+
+
+def project_image_space(points, intrinsic_mat):
+    projected = points @ intrinsic_mat.T
+    # projected = points @ np.linalg.inv(intrinsic_mat)
+    projected[:, 0] /= projected[:, 2]
+    projected[:, 1] /= projected[:, 2]
+    return projected
