@@ -2,7 +2,7 @@ from ctypes import *
 import numpy as np
 import os
 
-PCL_LIB_PATH = os.path.join(os.path.dirname(__file__), 'build', 'libfeatures.so')
+PCL_LIB_PATH = os.path.join(os.path.dirname(__file__), 'libfeatures.so')
 PCL_DLL = cdll.LoadLibrary(PCL_LIB_PATH)
 
 

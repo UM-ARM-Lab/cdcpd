@@ -89,7 +89,9 @@ rm -r build
 If you need the ROS node, ROS related installation are needed:
 ```
 pip install rosdep
-pip install ros_numpy
+git clone git@github.com:eric-wieser/ros_numpy.git
+cd ros_numpy
+pip install .
 ```
 Note that ROS related code are only tested with ROS Melodic on Ubuntu 18.04.
 
