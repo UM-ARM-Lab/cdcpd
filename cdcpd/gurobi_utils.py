@@ -7,6 +7,8 @@ import gurobipy
 def _gen_obj_arr(vars, shape):
     arr = np.empty(shape, dtype=np.object)
     for index in np.ndindex(shape):
+        if len(index) == 1:
+            index = index[0]
         arr[index] = vars[index]
     return arr
 
