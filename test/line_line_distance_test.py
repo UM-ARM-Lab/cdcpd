@@ -1,5 +1,4 @@
 import numpy as np
-from cdcpd.geometry_utils import build_line
 from cdcpd import gurobi_utils as grb_utils
 import gurobipy
 
