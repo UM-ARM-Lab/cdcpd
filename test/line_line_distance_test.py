@@ -87,12 +87,13 @@ def test_gurobi():
     model = gurobipy.Model()
     model.setParam('OutputFlag', False)
     g_A = grb_utils.create_gurobi_arr(model, A.shape, name="A")
-    g_B = grb_utils.create_gurobi_arr(model, B.shape, name="B")
-    g_C = grb_utils.create_gurobi_arr(model, C.shape, name="C")
-    g_D = grb_utils.create_gurobi_arr(model, D.shape, name="D")
+    # g_B = grb_utils.create_gurobi_arr(model, B.shape, name="B")
+    # g_C = grb_utils.create_gurobi_arr(model, C.shape, name="C")
+    # g_D = grb_utils.create_gurobi_arr(model, D.shape, name="D")
     model.update()
 
-    v_star, sigma = dist_vec_seg_to_seg_n(g_A, g_B, g_C, g_D)
+    # v_star, sigma = dist_vec_seg_to_seg_n(g_A, g_B, g_C, g_D)
+    v_star, sigma = dist_vec_seg_to_seg_n(g_A, B, C, D)
     v_n = v_star / sigma
 
 
