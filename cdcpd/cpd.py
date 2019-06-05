@@ -105,7 +105,7 @@ class CPD:
         YY = np.tile(YY, (1, M, 1))
         diff = XX - YY
         diff = np.multiply(diff, diff)
-        diff = np.sum(diff, 2)
+        diff = np.sum(diff, 2)      #sums the three values in one point
         return np.exp(-diff / (2 * self.params.beta))
 
     def _initialize_sigma2(self, X, Y):
@@ -139,7 +139,7 @@ class CPD:
 
         den = np.sum(P, axis=0)
         den = np.tile(den, (M, 1))
-        den[den == 0] = np.finfo(float).eps
+        den[den == 0] = np.finfo(float).eps 
         den += c
 
         self.P = np.divide(P, den)

@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 from .cv_utils import project_image_space
-
+import matplotlib.pyplot as plt
 
 class Prior:
     """
@@ -77,10 +77,20 @@ class ThresholdVisibilityPrior(Prior):
         dist_img = cv2.distanceTransform(
             np.logical_not(self.mask).astype(np.uint8), distanceType=cv2.DIST_L2, maskSize=5)
         dist_to_mask = dist_img[coords[:, 1], coords[:, 0]]
-
+        #plt.imshow(dist_img)
+        #plt.pause(0.1)
         score = dist_to_mask * depth_diff
         prob = np.exp(-self.k * score)
-
+        #np.clip()
         if prob.sum() < self.saturation_threshold:
             prob[:] = 1
+        plt.subplot(2,1,1)
+        plt.plot(prob)
+
+        plt.subplot(2,1,2)
+        plt.imshow(self.mask)
+
+        plt.draw()
+        plt.pause(0.01)
+        plt.clf()
         return prob

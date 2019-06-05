@@ -46,7 +46,7 @@ def chroma_key_mflag_lab(points, colors):
 
 
 def project_image_space(points, intrinsic_mat):
-    projected = points @ intrinsic_mat.T
+    projected = points @ intrinsic_mat.T #@ is equivalent to matmul
     # projected = points @ np.linalg.inv(intrinsic_mat)
     projected[:, 0] /= projected[:, 2]
     projected[:, 1] /= projected[:, 2]

@@ -56,6 +56,7 @@ def callback(msg: PointCloud2):
 def main():
     rospy.init_node('cdcpd_tracker_node')
     rospy.Subscriber("/kinect2_victor_head/qhd/points", PointCloud2, callback, queue_size=2)
+    #rospy.Subscriber("/kinect2/qhd/points", PointCloud2, callback, queue_size=2) #for rope_fast.bag
     rospy.spin()
 
 

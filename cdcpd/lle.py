@@ -33,7 +33,6 @@ def barycenter_weights(X, Z, reg=1e-3):
     """
     X = check_array(X, dtype=FLOAT_DTYPES)
     Z = check_array(Z, dtype=FLOAT_DTYPES, allow_nd=True)
-
     n_samples, n_neighbors = X.shape[0], Z.shape[1]
     B = np.empty((n_samples, n_neighbors), dtype=X.dtype)
     v = np.ones(n_neighbors, dtype=X.dtype)
@@ -183,7 +182,6 @@ def locally_linear_embedding(
 
     W = barycenter_kneighbors_graph(
         nbrs, n_neighbors=n_neighbors, reg=reg, n_jobs=n_jobs)
-
     # we'll compute M = (I-W)'(I-W)
     # depending on the solver, we'll do this differently
     if M_sparse:

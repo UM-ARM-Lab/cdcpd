@@ -5,7 +5,11 @@ from .prior import Prior
 from .lle import locally_linear_embedding
 from .failure_recovery import KnnLibrary
 import copy
-
+"""
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+"""
 
 class CDCPDParams:
     def __init__(self,
@@ -78,6 +82,19 @@ class ConstrainedDeformableCPD:
         :return: (M, 3) tracking result. Same shape as template.
         """
         filtered_points = point_cloud[mask]
+        """
+        temp=1
+        if(temp==1):
+            X = self.template[:,0]
+            Y = self.template[:,1]
+            Z = self.template[:,2]
+        
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(X,Y,Z)
+            plt.show()
+            plt.savefig("demo.png")
+        """
         if len(filtered_points) <= len(self.template):
             raise ValueError("Not enough point in masked point cloud.")
 
@@ -107,7 +124,7 @@ class ConstrainedDeformableCPD:
 
         # skipping recovery if not enabled
         if not self.cdcpd_params.use_recovery:
-            # set template for next step
+            # set template  for next step
             self.template = tracking_result
             return tracking_result
 

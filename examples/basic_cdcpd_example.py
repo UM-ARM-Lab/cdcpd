@@ -32,6 +32,7 @@ def main():
 
     tracking_result_history = []
     for i in range(len(input_arr)):
+        print(len(input_arr[i]))
         point_cloud_img, color_img = input_arr[i]
         mask_img = key_func(point_cloud_img, color_img)
 

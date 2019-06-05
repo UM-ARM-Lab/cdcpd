@@ -2,7 +2,8 @@
 .vscode
 *.pyc
 *.log
-data/*
+examples/data/*
+examples/result/*
 */build
 *.so
 *.pstat

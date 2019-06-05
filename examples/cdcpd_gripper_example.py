@@ -34,12 +34,18 @@ def main():
 
     cdcpd = ConstrainedDeformableCPD(template=template_verts,
                                      cdcpd_params=cdcpd_params)
-
+    print(input_arr[0])
     tracking_result_history = []
     for i in range(len(input_arr)):
         point_cloud_img, color_img, left_gripper, right_gripper = input_arr[i]
         mask_img = key_func(point_cloud_img, color_img)
-
+        # print(len(point_cloud_img))
+        # print("hi")
+        # print(len(color_img))
+        # print(left_gripper)
+        # print("br")
+        # print(right_gripper)
+        # print("end")
         prior_pos = np.array([left_gripper[:3, 3], right_gripper[:3, 3]])
         prior_idx = [0, 49]
         optimizer.set_prior(prior_pos=prior_pos, prior_idx=prior_idx)
