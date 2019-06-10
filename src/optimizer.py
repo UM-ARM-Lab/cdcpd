@@ -1,6 +1,6 @@
 import numpy as np
 import gurobipy
-import cdcpd.gurobi_utils as grb_utils
+import gurobi_utils as grb_utils
 
 
 class Optimizer:

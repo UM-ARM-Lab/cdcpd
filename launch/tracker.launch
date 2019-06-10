@@ -1,0 +1,14 @@
+<launch>
+	
+    <group ns="cdcpd_node">
+    	<param name="PointCloud_topic" value="/kinect2_victor_head/qhd/points" type="string" />
+    	<param name="use_gripper_prior" value="True" type="bool" />
+    	<param name="use_failure_recovery" value="True" type="bool" />
+    </group>
+
+    <node name="cdcpd_node" pkg="cdcpd" type="cdcpd_env.sh"/>
+
+    <node name="gripper_node" pkg="cdcpd" type="gripper_tf_node.py">
+    	<param name="kinect_frame" value="kinect2_victor_head_link" type="string" />
+    </node>
+</launch>

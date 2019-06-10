@@ -1,78 +1,33 @@
+#!/usr/bin/env python3
 import rospy
 from sensor_msgs.msg import PointCloud2
 import numpy as np
 from numpy.lib.recfunctions import structured_to_unstructured, unstructured_to_structured
 import ros_numpy
-from cdcpd.cdcpd import CDCPDParams, ConstrainedDeformableCPD
-from cdcpd.cpd import CPDParams
-from cdcpd.optimizer import PriorConstrainedOptimizer
-from cdcpd.geometry_utils import build_line
-from cdcpd.geometry_utils import build_rectangle
-from cdcpd.cv_utils import chroma_key_rope
-from cdcpd.cv_utils import chroma_key_mflag_lab
-from cdcpd.prior import UniformPrior
-from cdcpd.failure_recovery import SmoothFreeSpaceCost
+from cdcpd import CDCPDParams, ConstrainedDeformableCPD
+from cpd import CPDParams
+from optimizer import PriorConstrainedOptimizer
+from geometry_utils import build_line
+from geometry_utils import build_rectangle
+from cv_utils import chroma_key_rope
+from cv_utils import chroma_key_mflag_lab
+from prior import UniformPrior
+from failure_recovery import SmoothFreeSpaceCost
 from geometry_msgs.msg import TransformStamped
 from copy import deepcopy
 import time
 from threading import Lock
-
-class Listener:
-    def __init__(self, topic_name, topic_type, wait_for_data=False):
-        """
-        Listener is a wrapper around a subscriber where the callback simply records the latest msg.
-        Listener does not consume the message
-            (for consuming behavior, use the standard ros callback pattern)
-        Listener does not check timestamps of message headers
-        Parameters:
-            topic_name (str):      name of topic to subscribe to
-            topic_type (msg_type): type of message received on topic
-            wait_for_data (bool):  block constructor until a message has been received
-        """
-
-        self.data = None
-        self.lock = Lock()
-
-        self.subscriber = rospy.Subscriber(topic_name, topic_type, self.callback)
-        self.get(wait_for_data)
-
-    def callback(self, msg):
-        with self.lock:
-            self.data = msg
-
-    def get(self, block_until_data=True):
-        """
-        Returns the latest msg from the subscribed topic
-        Parameters:
-            block_until_data (bool): block if no message has been received yet.
-                                     Guarantees a msg is returned (not None)
-        """
-        wait_for(lambda: not (block_until_data and self.data is None))
-
-        with self.lock:
-            return deepcopy(self.data)
-
-
-def wait_for(func):
-    """
-    Waits for function evaluation to be true. Exits cleanly from ros.
-    Introduces sleep delay, not recommended for time critical operations
-    """
-
-    while not func() and not rospy.is_shutdown():
-        time.sleep(0.01)
+from ros_wrappers import Listener
+from ros_wrappers import get_ros_param
 
 class Tracker:
-    def __init__(self, object_name, use_gripper_prior=True, use_failure_recovery=True):
+    def __init__(self, object_name):
         """
         Tracker is a node which combines CDCPD tracking with the information from 
         grippers and also uses failure recovery for rope or cloth.
         Parameters:
             object_name(str):       "rope" or "cloth" depending on the object you need to detect
-            use_gripper_prior:      Whether use the information from the grippers for optimization
-            use_failure_recovery:   Whether use the code for failure recovery or not
         """
-        self.use_gripper_prior = use_gripper_prior
         self.kinect_intrinsics = np.array([1068.842896477257, 0.0, 950.2974736758024, 0.0, 1066.0150152835104, 537.097974092338, 0.0, 0.0, 1.0],
             dtype=np.float32).reshape((3, 3))
         self.kinect_intrinsics[:2] /= 2.0
@@ -80,13 +35,15 @@ class Tracker:
         self.listener_right = None
         self.cost_estimator = None
         if(object_name=="rope"):
-            self.template_verts, self.template_edges = build_line(1.0, 50)
+            self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
         elif(object_name=="cloth"):
-            self.template_verts, self.template_edges = build_rectangle(width=0.45, height=0.32, grid_size=0.03)
+            self.template_verts, self.template_edges = build_rectangle(width=get_ros_param(param_name="cloth_y_size", default=0.45), 
+                height=get_ros_param(param_name="cloth_x_size", default=0.32), width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=23), 
+                height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=17))
             self.key_func = chroma_key_mflag_lab
 
-        if(use_gripper_prior==True):
+        if(get_ros_param(param_name="use_gripper_prior", default=True)):
             self.prior = UniformPrior()
             self.optimizer = PriorConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
             self.listener_left = Listener(topic_name="/left_gripper/prior", topic_type=TransformStamped)
@@ -94,11 +51,19 @@ class Tracker:
         else:
             self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
             self.optimizer = DistanceConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
-        if(use_failure_recovery==True):
-            self.cost_estimator = SmoothFreeSpaceCost(self.kinect_intrinsics)
-
+        
         self.cpd_params = CPDParams()
-        self.cdcpd_params = CDCPDParams(prior=self.prior, optimizer=self.optimizer)
+
+        if(get_ros_param(param_name="use_failure_recovery", default=True)):
+            self.cost_estimator = SmoothFreeSpaceCost(self.kinect_intrinsics)
+            self.cdcpd_params = CDCPDParams(prior=self.prior,
+                               optimizer=self.optimizer,
+                               use_recovery=True,
+                               recovery_cost_estimator=self.cost_estimator,
+                               recovery_cost_threshold=0.1)
+        else:
+            self.cdcpd_params = CDCPDParams(prior=self.prior, optimizer=self.optimizer,down_sample_size=150)
+
         self.cdcpd = ConstrainedDeformableCPD(template=self.template_verts,
                                          cdcpd_params=self.cdcpd_params)
         # initialize ROS publisher
@@ -106,23 +71,23 @@ class Tracker:
         self.listen()
     
     def listen(self):
-        self.sub = rospy.Subscriber("/kinect2_victor_head/qhd/points", PointCloud2, self.callback, queue_size=2)
+        self.sub = rospy.Subscriber(get_ros_param(param_name="PointCloud_topic", default="/kinect2_victor_head/qhd/points"), PointCloud2, self.callback, queue_size=2)
     
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
         data = ros_numpy.numpify(msg)
-        if(self.use_gripper_prior==True):
+        if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
             left_data = self.listener_left.get()
             right_data = self.listener_right.get()
         arr = ros_numpy.point_cloud2.split_rgb_field(data)
         point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
         color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
         mask_img = self.key_func(point_cloud_img, color_img)
-        if(self.use_gripper_prior==True):
+        if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
             left_gripper = [left_data.transform.translation.x,left_data.transform.translation.y,left_data.transform.translation.z]
             right_gripper = [right_data.transform.translation.x,right_data.transform.translation.y,right_data.transform.translation.z]    
             prior_pos = np.array([left_gripper, right_gripper])
-            prior_idx = [0, 49]
+            prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0),get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=prior_idx)
 
         # invoke tracker
@@ -140,7 +105,7 @@ class Tracker:
 
 def main():
     rospy.init_node('cdcpd_node')
-    tracker = Tracker(object_name = "rope", use_failure_recovery=True)
+    tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="rope"))
     rospy.spin()
 
 main()

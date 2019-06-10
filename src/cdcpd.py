@@ -1,9 +1,9 @@
 import numpy as np
-from .cpd import CPDParams, CPD
-from .optimizer import Optimizer
-from .prior import Prior
-from .lle import locally_linear_embedding
-from .failure_recovery import KnnLibrary
+from cpd import CPDParams, CPD
+from optimizer import Optimizer
+from prior import Prior
+from lle import locally_linear_embedding
+from failure_recovery import KnnLibrary
 import copy
 """
 import matplotlib.pyplot as plt

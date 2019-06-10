@@ -2,6 +2,7 @@ import rospy
 import numpy as np
 import time
 import tf2_ros
+from ros_wrappers import get_ros_param
 
 class TF2Wrapper:
     def __init__(self):
@@ -9,11 +10,11 @@ class TF2Wrapper:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.tf_static_broadcasters = []
 
-    def GripperTFName(self, arm_name, robot_name):
-    	if(robot_name=="victor"):
+    def GripperTFName(self, arm_name):
+    	if(get_ros_param(param_name="use_victor", default=True)):
     		return "victor_" + arm_name + "_gripper"
-    	elif(robot_name=="val"):
-    		return name + "gripper_tip"
+    	elif(get_ros_param(param_name="use_val", default=False)):
+    		return arm_name + "gripper_tip"
 
 
     def get_transform_ros(self, parent, child, verbose=True,

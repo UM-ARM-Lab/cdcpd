@@ -10,15 +10,15 @@ def build_line(length=1.0, num_nodes=50):
     return verts, edges
 
 
-def build_rectangle(width=0.45, height=0.32, grid_size=0.02):
+def build_rectangle(width=0.45, height=0.32, width_num_node=23, height_num_node=17):
     """
     Row major, row corresponds to width
     """
-    width_num_node = int(np.round(width / grid_size)) + 1
-    height_num_node = int(np.round(height / grid_size)) + 1
+    #width_num_node = int(np.round(width / grid_size)) + 1
+    #height_num_node = int(np.round(height / grid_size)) + 1
 
     def xy_to_index(x, y):
-        return y * width_num_node + x
+        return x * height_num_node + y
 
     verts = np.zeros((width_num_node * height_num_node, 3), dtype=np.float32)
     edges_temp = []

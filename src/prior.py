@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from .cv_utils import project_image_space
+from cv_utils import project_image_space
 import matplotlib.pyplot as plt
 
 class Prior:
