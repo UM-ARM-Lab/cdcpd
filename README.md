@@ -49,8 +49,7 @@ git clone git@github.com:UM-ARM-Lab/cdcpd.git
 
 install pip package:
 ```
-cd cdcpd
-pip install -e .
+pip install -r requirements.txt 
 ```
 
 -e installs the library in edit mode, thus changes made in the repository will be affected globally
