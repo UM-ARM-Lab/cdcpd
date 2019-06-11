@@ -6,7 +6,7 @@ from numpy.lib.recfunctions import structured_to_unstructured, unstructured_to_s
 import ros_numpy
 from cdcpd import CDCPDParams, ConstrainedDeformableCPD
 from cpd import CPDParams
-from optimizer import PriorConstrainedOptimizer
+from optimizer import EdgeConstrainedOptimizer
 from geometry_utils import build_line
 from geometry_utils import build_rectangle
 from cv_utils import chroma_key_rope
@@ -45,7 +45,7 @@ class Tracker:
 
         if(get_ros_param(param_name="use_gripper_prior", default=True)):
             self.prior = UniformPrior()
-            self.optimizer = PriorConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
+            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
             self.listener_left = Listener(topic_name="/left_gripper/prior", topic_type=TransformStamped)
             self.listener_right = Listener(topic_name="/right_gripper/prior", topic_type=TransformStamped)
         else:

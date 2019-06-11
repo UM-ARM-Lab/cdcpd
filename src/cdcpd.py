@@ -60,6 +60,7 @@ class ConstrainedDeformableCPD:
         :param cdcpd_params: Type of CDCPDParams
         """
         self.template = template
+        #self.prev_template = None
         self.cdcpd_params = cdcpd_params
         self.M_LLE = None
         if self.cdcpd_params.use_lle:
@@ -119,12 +120,13 @@ class ConstrainedDeformableCPD:
         # Optimization
         if self.cdcpd_params.optimizer is not None:
             optimizer = self.cdcpd_params.optimizer
-            optimization_result = optimizer.run(tracking_result)
+            optimization_result = optimizer.run(tracking_result, self.template)
             tracking_result = optimization_result.astype(self.template.dtype)
 
         # skipping recovery if not enabled
         if not self.cdcpd_params.use_recovery:
             # set template  for next step
+            #self.prev_template = template
             self.template = tracking_result
             return tracking_result
 
@@ -147,7 +149,7 @@ class ConstrainedDeformableCPD:
                 # optimization
                 if self.cdcpd_params.optimizer is not None:
                     optimizer = self.cdcpd_params.optimizer
-                    optimization_result = optimizer.run(tracking_result)
+                    optimization_result = optimizer.run(tracking_result, self.template)
                     tracking_result = optimization_result
 
                 tracking_failure_index = cost_estimator.run(tracking_result)
@@ -159,5 +161,6 @@ class ConstrainedDeformableCPD:
         else:
             self.knn_library.add_template(down_sampled_points, tracking_result)
 
+        #self.prev_template = template
         self.template = tracking_result
         return tracking_result
