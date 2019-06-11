@@ -1,4 +1,4 @@
 #!/bin/bash
-source /home/deformtrack/miniconda3/bin/activate /home/deformtrack/miniconda3/envs/catkin_cdcpd
+source ~/miniconda3/bin/activate ~/miniconda3/envs/catkin_cdcpd
 rosrun cdcpd cdcpd_node.py
 exec "$@"
