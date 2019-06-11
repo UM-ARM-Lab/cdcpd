@@ -49,13 +49,8 @@ git clone git@github.com:UM-ARM-Lab/cdcpd.git
 
 install pip package:
 ```
-cd cdcpd
-pip install -e .
+pip install -r requirements.txt 
 ```
-
--e installs the library in edit mode, thus changes made in the repository will be affected globally
-. means install package (defined by setup.py) in current directory.
-
 You may noticed that a package named [glplotlib](https://github.com/cheng-chi/glplotlib) is installed by pip. glplotlib is another opensource library developed by Cheng Chi for virualizing 3D point cloud with better performance (comparing to matplotlib).
 
 install opencv:
