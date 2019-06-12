@@ -7,11 +7,13 @@ import ros_numpy
 from cdcpd import CDCPDParams, ConstrainedDeformableCPD
 from cpd import CPDParams
 from optimizer import EdgeConstrainedOptimizer
+from optimizer import DistanceConstrainedOptimizer
 from geometry_utils import build_line
 from geometry_utils import build_rectangle
 from cv_utils import chroma_key_rope
 from cv_utils import chroma_key_mflag_lab
 from prior import UniformPrior
+from prior import ThresholdVisibilityPrior
 from failure_recovery import SmoothFreeSpaceCost
 from geometry_msgs.msg import TransformStamped
 from copy import deepcopy
