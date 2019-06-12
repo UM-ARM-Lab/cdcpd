@@ -97,6 +97,94 @@ def DistBetween2Segment(p1, p2, p3, p4):
     # print(dP)
     return distance
 
+def DistBetween2Segment_simple(p1, p2,p1_old, p2_old, p3, p4):
+    u = p1 - p2
+    u_old = p1_old - p2_old
+    v = p3 - p4
+    w = p2_old - p4
+    print(v)
+    a_old = np.dot(u_old,u_old)
+    a = np.dot(u,u)
+    b = np.dot(u,v)
+    b_old = np.dot(u_old,v)
+    c = np.dot(v,v)
+    d_old = np.dot(u_old,w)
+    d = np.dot(u,w)
+    e = np.dot(v,w)
+    D = a*c - b*b
+    D_old = a_old*c - b_old*b_old
+    sD = D
+    sD_old = D_old
+    tD = D
+    tD = D_old
+    comp1 = (u_old[0]*v[1]-u_old[1]*v[0])
+    comp2 = abs(u_old[2]*v[1]-u_old[1]*v[2])
+    comp3 = abs(u_old[0]*v[2]-u_old[2]*v[0])
+    SMALL_NUM = 0.00000001
+    
+    # compute the line parameters of the two closest points
+    #if (D < SMALL_NUM): # the lines are almost parallel
+    if(comp1<SMALL_NUM and comp2<SMALL_NUM and comp3<SMALL_NUM and comp1>-SMALL_NUM and comp2>-SMALL_NUM and comp3>-SMALL_NUM):
+        sN = 0.0       #force using point P0 on segment S1
+        sD = 1.0       #to prevent possible division by 0.0 later
+        tN = e
+        tD = c
+    else:                # get the closest points on the infinite lines
+        sN = (b*e - c*d)
+        sN_old = (b_old*e - c*d_old)
+        tN = (a*e - b*d)
+        tN_old = (a_old*e - b_old*d_old)
+        if (sN_old < 0.0):   # sc < 0 => the s=0 edge is visible       
+            sN = 0.0
+            tN = e
+            tD = c
+        elif (sN_old > sD_old):# sc > 1 => the s=1 edge is visible
+            sN = sD
+            tN = e + b
+            tD = c
+
+    if (tN_old < 0.0):            #tc < 0 => the t=0 edge is visible
+        tN = 0.0
+        # recompute sc for this edge
+        if (-d_old < 0.0):
+            sN = 0.0
+        elif (-d_old > a):
+            sN = sD
+        else:
+            sN = -d
+            sD = a
+
+    elif (tN_old > tD_old):       # tc > 1 => the t=1 edge is visible
+        tN = tD
+        # recompute sc for this edge
+        if ((-d_old + b_old) < 0.0):
+            sN = 0
+        elif ((-d_old + b_old) > a):
+            sN = sD
+        else:
+            sN = (-d + b)
+            sD = a
+    
+    # finally do the division to get sc and tc
+    if(np.absolute(sN) < SMALL_NUM):
+        sc = 0.0
+    else:
+        sc = sN / sD
+    
+    if(np.absolute(tN) < SMALL_NUM):
+        tc = 0.0
+    else:
+        tc = tN / tD
+    
+    # get the difference of the two closest points
+    dP = w + (sc * u) - (tc * v)  # = S1(sc) - S2(tc)
+    distance = squared_norm(dP)
+    # print(distance)
+    # print(np.sqrt(distance))
+    # print(np.linalg.norm(dP))
+    # print(dP)
+    return distance
+
 def edge_squared_distances(points, edges):
     diff = points[edges[:, 0]] - points[edges[:, 1]]
     sqr_dist = np.sum(np.square(diff), axis=1)
@@ -275,3 +363,4 @@ class EdgeConstrainedOptimizer(Optimizer):
         # print(verts_result)
         # print("end")
         return verts_result
+
