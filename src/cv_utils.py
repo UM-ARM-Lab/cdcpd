@@ -32,7 +32,8 @@ def chroma_key_mflag_lab(points, colors):
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
     points_z = points[:, :, 2]
     box = np.zeros_like(h, dtype=np.bool)
-    box[110:450, 340:590] = True
+    #box[110:450, 340:590] = True
+    box[ 200:470,210:600] = True
     mask = ne.evaluate(
         """box & ((((0.43 < h) & (h < 0.63)) | ((0.2 < h) & (h < 0.35))) & \
          (0.22 < s) & (s < 0.7) & (((0.03 < v) & (v < 0.3)) | ((0.36 < v) & (v < 0.65))) \

@@ -21,6 +21,9 @@ import time
 from threading import Lock
 from ros_wrappers import Listener
 from ros_wrappers import get_ros_param
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
+# from matplotlib import cm
 
 class Tracker:
     def __init__(self, object_name):
@@ -73,7 +76,7 @@ class Tracker:
         self.listen()
     
     def listen(self):
-        self.sub = rospy.Subscriber(get_ros_param(param_name="PointCloud_topic", default="/kinect2_victor_head/qhd/points"), PointCloud2, self.callback, queue_size=2)
+        self.sub = rospy.Subscriber(get_ros_param(param_name="PointCloud_topic", default="/kinect2_tripodA/qhd/points"), PointCloud2, self.callback, queue_size=2)
     
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
@@ -100,6 +103,11 @@ class Tracker:
         # converting tracking result to ROS message
         if tracking_result.dtype is not np.float32:
             tracking_result = tracking_result.astype(np.float32)
+        # plt.imshow(mask_img)
+
+        # plt.draw()
+        # plt.pause(0.01)
+        # plt.clf()
         out_struct_arr = unstructured_to_structured(tracking_result, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
@@ -107,7 +115,7 @@ class Tracker:
 
 def main():
     rospy.init_node('cdcpd_node')
-    tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="rope"))
+    tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="cloth"))
     rospy.spin()
 
 main()

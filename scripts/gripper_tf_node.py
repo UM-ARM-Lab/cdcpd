@@ -37,8 +37,8 @@ def getGripperTransform(gripper_name, target_frame, stamp):
 def main():
     rate = rospy.Rate(10)
     while not rospy.is_shutdown():
-    	left_gripper = getGripperTransform(gripper_name=tf_wrapper.GripperTFName(arm_name=get_ros_param(param_name="gripper0_name", default='left')),target_frame=get_ros_param(param_name="kinect_frame", default='kinect2_victor_head_link'), stamp=rospy.get_rostime())
-    	right_gripper = getGripperTransform(gripper_name=tf_wrapper.GripperTFName(arm_name=get_ros_param(param_name="gripper0_name", default='right')),target_frame=get_ros_param(param_name="kinect_frame", default='kinect2_victor_head_link'), stamp=rospy.get_rostime())
+    	left_gripper = getGripperTransform(gripper_name=tf_wrapper.GripperTFName(arm_name=get_ros_param(param_name="gripper0_name", default='left')),target_frame=get_ros_param(param_name="kinect_frame", default='kinect2_tripodA_rgb_optical_frame'), stamp=rospy.get_rostime())
+    	right_gripper = getGripperTransform(gripper_name=tf_wrapper.GripperTFName(arm_name=get_ros_param(param_name="gripper0_name", default='right')),target_frame=get_ros_param(param_name="kinect_frame", default='kinect2_tripodA_rgb_optical_frame'), stamp=rospy.get_rostime())
     	pub_left.publish(left_gripper)
     	pub_right.publish(right_gripper)
     	rate.sleep()
