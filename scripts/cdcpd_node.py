@@ -73,7 +73,7 @@ class Tracker:
                                          cdcpd_params=self.cdcpd_params)
         self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=True)
         if(self.use_gripper_prior):
-            self.gripper_prior_idx = [get_ros_param(param_name="~right_gripper_attached_node_idx", default=0), get_ros_param(param_name="~left_gripper_attached_node_idx", default=49)]
+            self.gripper_prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0), get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
 
         # initialize ROS publisher
         self.pub = rospy.Publisher("/cdcpd_tracker/points", PointCloud2, queue_size=10)
