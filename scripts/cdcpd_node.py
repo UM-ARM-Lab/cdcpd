@@ -28,7 +28,7 @@ from ros_wrappers import get_ros_param
 class Tracker:
     def __init__(self, object_name):
         """
-        Tracker is a node which combines CDCPD tracking with the information from 
+        Tracker is a node which combines CDCPD tracking with the information from
         grippers and also uses failure recovery for rope or cloth.
         Parameters:
             object_name(str):       "rope" or "cloth" depending on the object you need to detect
@@ -43,12 +43,12 @@ class Tracker:
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
         elif(object_name=="cloth"):
-            self.template_verts, self.template_edges = build_rectangle(width=get_ros_param(param_name="cloth_y_size", default=0.45), 
-                height=get_ros_param(param_name="cloth_x_size", default=0.32), width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=23), 
+            self.template_verts, self.template_edges = build_rectangle(width=get_ros_param(param_name="cloth_y_size", default=0.45),
+                height=get_ros_param(param_name="cloth_x_size", default=0.32), width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=23),
                 height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=17))
             self.key_func = chroma_key_mflag_lab
 
-        if(get_ros_param(param_name="use_gripper_prior", default=True)):
+        if(get_ros_param(param_name="~use_gripper_prior", default=True)):
             self.prior = UniformPrior()
             self.optimizer = PriorConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
             self.listener_left = Listener(topic_name="/left_gripper/prior", topic_type=TransformStamped)
@@ -56,10 +56,10 @@ class Tracker:
         else:
             self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
             self.optimizer = DistanceConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
-        
+
         self.cpd_params = CPDParams()
 
-        if(get_ros_param(param_name="use_failure_recovery", default=True)):
+        if(get_ros_param(param_name="~use_failure_recovery", default=True)):
             self.cost_estimator = SmoothFreeSpaceCost(self.kinect_intrinsics)
             self.cdcpd_params = CDCPDParams(prior=self.prior,
                                optimizer=self.optimizer,
@@ -71,29 +71,32 @@ class Tracker:
 
         self.cdcpd = ConstrainedDeformableCPD(template=self.template_verts,
                                          cdcpd_params=self.cdcpd_params)
+        self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=True)
+        if(self.use_gripper_prior):
+            self.gripper_prior_idx = [get_ros_param(param_name="~right_gripper_attached_node_idx", default=0), get_ros_param(param_name="~left_gripper_attached_node_idx", default=49)]
+
         # initialize ROS publisher
         self.pub = rospy.Publisher("/cdcpd_tracker/points", PointCloud2, queue_size=10)
         self.listen()
-    
+
     def listen(self):
-        self.sub = rospy.Subscriber(get_ros_param(param_name="PointCloud_topic", default="/kinect2_tripodA/qhd/points"), PointCloud2, self.callback, queue_size=2)
-    
+        self.sub = rospy.Subscriber(get_ros_param(param_name="~PointCloud_topic", default="/kinect2_tripodA/qhd/points"), PointCloud2, self.callback, queue_size=1)
+
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
         data = ros_numpy.numpify(msg)
-        if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
+        if(self.use_gripper_prior):
             left_data = self.listener_left.get()
             right_data = self.listener_right.get()
         arr = ros_numpy.point_cloud2.split_rgb_field(data)
         point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
         color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
         mask_img = self.key_func(point_cloud_img, color_img)
-        if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
+        if(self.use_gripper_prior):
             left_gripper = [left_data.transform.translation.x,left_data.transform.translation.y,left_data.transform.translation.z]
-            right_gripper = [right_data.transform.translation.x,right_data.transform.translation.y,right_data.transform.translation.z]    
+            right_gripper = [right_data.transform.translation.x,right_data.transform.translation.y,right_data.transform.translation.z]
             prior_pos = np.array([left_gripper, right_gripper])
-            prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0),get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
-            self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=prior_idx)
+            self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=self.gripper_prior_idx)
 
         # invoke tracker
         tracking_result = self.cdcpd.step(point_cloud=point_cloud_img,
