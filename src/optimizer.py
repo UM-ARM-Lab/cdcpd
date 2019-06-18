@@ -87,7 +87,6 @@ class PriorConstrainedOptimizer(Optimizer):
         :return:
         """
         assert(len(prior_pos) == len(prior_idx))
-        print(prior_pos)
         self.prior_pos = prior_pos
         self.prior_idx = prior_idx
 

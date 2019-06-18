@@ -84,13 +84,13 @@ class ThresholdVisibilityPrior(Prior):
         #np.clip()
         if prob.sum() < self.saturation_threshold:
             prob[:] = 1
-        plt.subplot(2,1,1)
-        plt.plot(prob)
+        #plt.subplot(2,1,1)
+        #plt.plot(prob)
 
-        plt.subplot(2,1,2)
-        plt.imshow(self.mask)
+        #plt.subplot(2,1,2)
+        #plt.imshow(self.mask)
 
-        plt.draw()
-        plt.pause(0.01)
-        plt.clf()
+        #plt.draw()
+        #plt.pause(0.01)
+        #plt.clf()
         return prob
