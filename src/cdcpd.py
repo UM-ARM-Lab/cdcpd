@@ -99,14 +99,14 @@ class ConstrainedDeformableCPD:
         rand_idx = np.random.randint(0, filtered_points.shape[0],
                                      size=self.cdcpd_params.down_sample_size, dtype=np.uint32)
         down_sampled_points = filtered_points[rand_idx]
-        X = down_sampled_points[:,0]
-        Y = down_sampled_points[:,1]
-        Z = down_sampled_points[:,2]
+        #X = down_sampled_points[:,0]
+        #Y = down_sampled_points[:,1]
+        #Z = down_sampled_points[:,2]
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(X,Y,Z)
-        plt.show()
+        #fig = plt.figure()
+        #ax = fig.add_subplot(111, projection='3d')
+        #ax.scatter(X,Y,Z)
+        #plt.show()
         curr_cpd_param = copy.deepcopy(cpd_param)
         if self.cdcpd_params.use_lle is True:
             curr_cpd_param.M_LLE = self.M_LLE
