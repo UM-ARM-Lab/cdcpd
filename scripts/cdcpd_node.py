@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import time
+start_time = time.time()
 import rospy
 from sensor_msgs.msg import PointCloud2
 import numpy as np
@@ -73,6 +75,7 @@ class Tracker:
                                          cdcpd_params=self.cdcpd_params)
         # initialize ROS publisher
         self.pub = rospy.Publisher("/cdcpd_tracker/points", PointCloud2, queue_size=10)
+        # print("--- %s seconds ---" % (time.time() - start_time))
         self.listen()
     
     def listen(self):
@@ -80,6 +83,7 @@ class Tracker:
     
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
+        # print("1"+"--- %s seconds ---" % (time.time() - start_time))
         data = ros_numpy.numpify(msg)
         if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
             left_data = self.listener_left.get()
@@ -88,18 +92,19 @@ class Tracker:
         point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
         color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
         mask_img = self.key_func(point_cloud_img, color_img)
+        # print("2"+"--- %s seconds ---" % (time.time()- start_time))
         if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
             left_gripper = [left_data.transform.translation.x,left_data.transform.translation.y,left_data.transform.translation.z]
             right_gripper = [right_data.transform.translation.x,right_data.transform.translation.y,right_data.transform.translation.z]    
             prior_pos = np.array([left_gripper, right_gripper])
             prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0),get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=prior_idx)
-
+        # print("3"+"--- %s seconds ---" % (time.time()))
         # invoke tracker
         tracking_result = self.cdcpd.step(point_cloud=point_cloud_img,
                                      mask=mask_img,
                                      cpd_param=self.cpd_params)
-
+        # print("4"+"--- %s seconds ---" % (time.time() - start_time))
         # converting tracking result to ROS message
         if tracking_result.dtype is not np.float32:
             tracking_result = tracking_result.astype(np.float32)
@@ -111,10 +116,13 @@ class Tracker:
         out_struct_arr = unstructured_to_structured(tracking_result, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
+        # print("5"+"--- %s seconds ---" % (time.time() - start_time))
         self.pub.publish(pub_msg)
+        # print("6"+"--- %s seconds ---" % (time.time() - start_time))
 
 def main():
     rospy.init_node('cdcpd_node')
+    # print("--- %s seconds ---" % (start_time))
     tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="cloth"))
     rospy.spin()
 
