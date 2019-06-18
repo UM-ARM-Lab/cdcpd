@@ -12,6 +12,7 @@ Requirements
   * Numpy
   * Scipy
   * Numexpr
+  * scikit-learn
   * OpenCV
   * [Gurobi](https://www.gurobi.com/)
   * matplotlib\*
