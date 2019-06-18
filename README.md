@@ -32,7 +32,7 @@ Install miniconda https://docs.conda.io/en/latest/miniconda.html; use the python
 Create conda virtual enviornment with the packages that conda knows about, you must name it as shown for the roslaunch/scripts to run correctly. This environment is used to isolate python3 code from the default python2 code on Ubuntu 18.04 + ROS Melodic
 ```
 conda create -c gurobi --name catkin_cdcpd python opencv gurobi numpy scipy numexpr scikit-learn matplotlib
-conda activate catkin_cdcpdgit 
+conda activate catkin_cdcpd
 ```
 
 Gurobi as a proprietary optimization package that we use. Please obtain a [free academic license](https://user.gurobi.com/download/licenses/free-academic)
