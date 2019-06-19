@@ -83,7 +83,7 @@ class Tracker:
         self.listen()
 
     def listen(self):
-        self.sub = rospy.Subscriber(get_ros_param(param_name="~PointCloud_topic", default="/kinect2_tripodA/qhd/points"), PointCloud2, self.callback, queue_size=1)
+        self.sub = rospy.Subscriber(get_ros_param(param_name="~PointCloud_topic", default="/kinect2_victor_head/qhd/points"), PointCloud2, self.callback, queue_size=1)
 
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
@@ -125,7 +125,7 @@ class Tracker:
 def main():
     rospy.init_node('cdcpd_node')
     # print("--- %s seconds ---" % (start_time))
-    tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="cloth"))
+    tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="rope"))
     rospy.spin()
 
 main()

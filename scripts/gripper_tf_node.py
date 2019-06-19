@@ -16,7 +16,7 @@ use_victor = get_ros_param(param_name="use_victor", default=True)
 use_val = get_ros_param(param_name="use_val", default=False)
 assert(use_victor ^ use_val)
 
-target_frame = get_ros_param(param_name="~kinect_frame", default='kinect2_tripodA_rgb_optical_frame')
+target_frame = get_ros_param(param_name="~kinect_frame", default='kinect2_victor_head_rgb_optical_frame')
 gripper0_name = get_ros_param(param_name="gripper0_name", default='left')
 gripper1_name = get_ros_param(param_name="gripper1_name", default='right')
 
@@ -43,8 +43,8 @@ def getGripperTransform(gripper_name, target_frame, stamp):
         fingertip_transform = tf_wrapper.get_transform_ros(parent=target_frame, child=gripper_name)
         return fingertip_transform
 
-        else:
-            assert(False)
+    else:
+    	assert(False)
 
 def main():
     rate = rospy.Rate(100.0)
