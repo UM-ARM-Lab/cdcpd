@@ -45,14 +45,14 @@ class Tracker:
                 height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=17))
             self.key_func = chroma_key_mflag_lab
 
-        if(get_ros_param(param_name="use_gripper_prior", default=True)):
+        if(get_ros_param(param_name="use_gripper_prior", default=False)):
             self.prior = UniformPrior()
             self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
             self.listener_left = Listener(topic_name="/left_gripper/prior", topic_type=TransformStamped)
             self.listener_right = Listener(topic_name="/right_gripper/prior", topic_type=TransformStamped)
         else:
             self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
-            self.optimizer = DistanceConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
+            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
         
         self.cpd_params = CPDParams()
 
@@ -78,14 +78,14 @@ class Tracker:
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
         data = ros_numpy.numpify(msg)
-        if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
+        if(get_ros_param(param_name="use_gripper_prior", default=False)):
             left_data = self.listener_left.get()
             right_data = self.listener_right.get()
         arr = ros_numpy.point_cloud2.split_rgb_field(data)
         point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
         color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
         mask_img = self.key_func(point_cloud_img, color_img)
-        if(get_ros_param(param_name="use_gripper_prior", default=True)==True):
+        if(get_ros_param(param_name="use_gripper_prior", default=False)):
             left_gripper = [left_data.transform.translation.x,left_data.transform.translation.y,left_data.transform.translation.z]
             right_gripper = [right_data.transform.translation.x,right_data.transform.translation.y,right_data.transform.translation.z]    
             prior_pos = np.array([left_gripper, right_gripper])
@@ -94,7 +94,7 @@ class Tracker:
 
         # invoke tracker
         tracking_result = self.cdcpd.step(point_cloud=point_cloud_img,
-                                     mask=mask_img,
+                                     mask=mask_img, 
                                      cpd_param=self.cpd_params)
 
         # converting tracking result to ROS message

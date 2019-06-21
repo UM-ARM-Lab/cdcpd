@@ -5,11 +5,11 @@ from prior import Prior
 from lle import locally_linear_embedding
 from failure_recovery import KnnLibrary
 import copy
-"""
+
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
-"""
+
 
 class CDCPDParams:
     def __init__(self,
@@ -60,6 +60,7 @@ class ConstrainedDeformableCPD:
         :param cdcpd_params: Type of CDCPDParams
         """
         self.template = template
+        self.iteration = 0
         #self.prev_template = None
         self.cdcpd_params = cdcpd_params
         self.M_LLE = None
@@ -72,7 +73,7 @@ class ConstrainedDeformableCPD:
 
     def step(self,
              point_cloud,
-             mask,
+             mask, 
              cpd_param: CPDParams):
         """
         Performs one time-step of ConstrainedDeformableCPD.
@@ -83,19 +84,16 @@ class ConstrainedDeformableCPD:
         :return: (M, 3) tracking result. Same shape as template.
         """
         filtered_points = point_cloud[mask]
-        """
-        temp=1
-        if(temp==1):
-            X = self.template[:,0]
-            Y = self.template[:,1]
-            Z = self.template[:,2]
         
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(X,Y,Z)
-            plt.show()
-            plt.savefig("demo.png")
-        """
+        # X = self.template[:,0]
+        # Y = self.template[:,1]
+        # Z = self.template[:,2]
+    
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.scatter(X,Y,Z)
+        # plt.show()
+
         if len(filtered_points) <= len(self.template):
             raise ValueError("Not enough point in masked point cloud.")
 
@@ -120,7 +118,7 @@ class ConstrainedDeformableCPD:
         # Optimization
         if self.cdcpd_params.optimizer is not None:
             optimizer = self.cdcpd_params.optimizer
-            optimization_result = optimizer.run(tracking_result, self.template)
+            optimization_result = optimizer.run(tracking_result, self.template, self.iteration)
             tracking_result = optimization_result.astype(self.template.dtype)
 
         # skipping recovery if not enabled
@@ -128,6 +126,7 @@ class ConstrainedDeformableCPD:
             # set template  for next step
             #self.prev_template = template
             self.template = tracking_result
+            self.iteration+=1
             return tracking_result
 
         # Failure recovery
@@ -149,7 +148,7 @@ class ConstrainedDeformableCPD:
                 # optimization
                 if self.cdcpd_params.optimizer is not None:
                     optimizer = self.cdcpd_params.optimizer
-                    optimization_result = optimizer.run(tracking_result, self.template)
+                    optimization_result = optimizer.run(tracking_result, self.template, self.iteration)
                     tracking_result = optimization_result
 
                 tracking_failure_index = cost_estimator.run(tracking_result)
@@ -162,5 +161,6 @@ class ConstrainedDeformableCPD:
             self.knn_library.add_template(down_sampled_points, tracking_result)
 
         #self.prev_template = template
+        self.iteration+=1
         self.template = tracking_result
         return tracking_result
