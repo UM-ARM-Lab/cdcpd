@@ -48,6 +48,8 @@ clone repositories into your catkin workspace:
 ```
 git clone git@github.com:UM-ARM-Lab/cdcpd.git
 git clone git@github.com:eric-wieser/ros_numpy.git
+cd ros_numpy
+pip install .
 ```
 
 install the rest of the requirements via pip:
