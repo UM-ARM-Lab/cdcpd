@@ -1,5 +1,6 @@
+import time
+start_time = time.time()
 import numpy as np
-
 
 class CPDParams:
     def __init__(self,
@@ -70,12 +71,12 @@ class CPD:
         Run CPD until convergence.
         :return: (M, 3) Resulting vertices.
         """
-
+        # print("111"+"--- %s seconds ---" % (time.time() ))
         err = self.params.tolerance + 1
         for iter_num in range(self.params.max_iter):
             if err <= self.params.tolerance:
                 break
-
+            # print("11"+str(iter_num)+"--- %s seconds ---" % (time.time() - start_time))
             qprev = self.sigma2
 
             self._expectation_iter(iter_num)

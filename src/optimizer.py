@@ -181,6 +181,8 @@ class PriorConstrainedOptimizer(Optimizer):
         # distance constraint
         rhs = (self.stretch_coefficient ** 2) * edge_squared_distances(self.template, self.edges)
         lhs = edge_squared_distances(g_verts, self.edges)
+        # print("lhs",lhs[0])
+        # print("rhs",rhs[0])
         grb_utils.add_constraints(model, lhs, "<=", rhs, name="edge")
 
         # prior pos constraint

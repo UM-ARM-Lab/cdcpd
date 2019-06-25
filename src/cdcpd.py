@@ -1,3 +1,5 @@
+import time
+start_time = time.time()
 import numpy as np
 from cpd import CPDParams, CPD
 from optimizer import Optimizer
@@ -9,7 +11,10 @@ import copy
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+<<<<<<< HEAD
 
+=======
+>>>>>>> master
 
 class CDCPDParams:
     def __init__(self,
@@ -83,8 +88,8 @@ class ConstrainedDeformableCPD:
         in a tracking sequence should have less regularization (lower beta and lambd) than others.
         :return: (M, 3) tracking result. Same shape as template.
         """
-        filtered_points = point_cloud[mask]
-        
+        # print("11"+"--- %s seconds ---" % (time.time() ))
+        filtered_points = point_cloud[mask]   
         # X = self.template[:,0]
         # Y = self.template[:,1]
         # Z = self.template[:,2]
@@ -101,7 +106,16 @@ class ConstrainedDeformableCPD:
                                      size=self.cdcpd_params.down_sample_size, dtype=np.uint32)
         down_sampled_points = filtered_points[rand_idx]
 
+        # X = down_sampled_points[:,0]
+        # Y = down_sampled_points[:,1]
+        # Z = down_sampled_points[:,2]
+
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.scatter(X,Y,Z)
+        # plt.show()
         curr_cpd_param = copy.deepcopy(cpd_param)
+        # print("12"+"--- %s seconds ---" % (time.time() - start_time))
         if self.cdcpd_params.use_lle is True:
             curr_cpd_param.M_LLE = self.M_LLE
 
@@ -109,18 +123,18 @@ class ConstrainedDeformableCPD:
             prior = self.cdcpd_params.prior
             prior.set_point_cloud(point_cloud, mask)
             curr_cpd_param.Y_emit_prior = prior.run(self.template)
-
+        # print("13"+"--- %s seconds ---" % (time.time() ))
         # CPD
         cpd = CPD(down_sampled_points, self.template, curr_cpd_param)
         cpd_result = cpd.run()
         tracking_result = cpd_result
-
+        # print("14"+"--- %s seconds ---" % (time.time() - start_time))
         # Optimization
         if self.cdcpd_params.optimizer is not None:
             optimizer = self.cdcpd_params.optimizer
             optimization_result = optimizer.run(tracking_result, self.template, self.iteration)
             tracking_result = optimization_result.astype(self.template.dtype)
-
+        # print("15"+"--- %s seconds ---" % (time.time() - start_time))
         # skipping recovery if not enabled
         if not self.cdcpd_params.use_recovery:
             # set template  for next step
