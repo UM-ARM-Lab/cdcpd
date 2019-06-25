@@ -233,7 +233,7 @@ class EdgeConstrainedOptimizer(Optimizer):
     def run(self, verts, prev_verts, iteration):
         # print(verts.shape)
         model = gurobipy.Model()
-        #model.setParam('OutputFlag', False)
+        # model.setParam('OutputFlag', False)
         model.setParam('ScaleFlag', 2)
         g_verts = grb_utils.create_gurobi_arr(model, verts.shape, name="verts")
         # distance constraint
@@ -248,13 +248,11 @@ class EdgeConstrainedOptimizer(Optimizer):
 
         #object passing through itself constraint
         d_max = 0.2 # change
-        d_min = 0.01 # change
+        d_min = 0.0001 # change
         if(iteration != 0):
             lhs = []
             rhs = []
             dist = np.empty((g_verts.shape[0], g_verts.shape[0]))
-            print((verts))
-            print(prev_verts)
             for i in range(g_verts.shape[0]-1):
                 for j in range(i+1,g_verts.shape[0]-1):
                     Sc,Tc,diff = DistBetween2Segment(prev_verts[self.edges[i, 0]], prev_verts[self.edges[i, 1]], prev_verts[self.edges[j, 0]], prev_verts[self.edges[j, 1]])
@@ -282,11 +280,9 @@ class EdgeConstrainedOptimizer(Optimizer):
                     # lhs[i,j]= derivative * delta
                     # diff = DistBetween2Segment(prev_verts[self.edges[i, 0]],prev_verts[self.edges[i, 1]],prev_verts[self.edges[j, 0]],prev_verts[self.edges[j, 1]])
                     # rhs[i,j] = d_min - diff
-            #print(lhs)
-            #print(rhs)
+            
             if(len(rhs) != 0):
                 grb_utils.add_constraints(model, np.asarray(lhs), ">=" , np.asarray(rhs) , name="collision")
-            #print(dist)
 
         # objective function
         g_objective = np.sum(np.square(g_verts - verts))
@@ -294,8 +290,11 @@ class EdgeConstrainedOptimizer(Optimizer):
         model.update()
         model.optimize()
         # print(grb_utils.get_value(g_objective))
-        print(iteration )
         verts_result = grb_utils.get_value(g_verts)
+        # stretch = edge_squared_distances(self.template, self.edges)/edge_squared_distances(verts_result, self.edges)
+        # print("#"+str(iteration))
+        # print(max(stretch))
+        # print(edge_squared_distances(verts_result, self.edges))        
         # print(verts_result)
         # print("end")
         return verts_result
@@ -369,16 +368,12 @@ class EdgeConstrainedOptimizer(Optimizer):
 #                         rhs.append(d_min - diff)
     
 #             if(len(rhs) != 0):
-#                 grb_utils.add_constraints(model, np.asarray(lhs), ">=" , np.asarray(rhs) , name="collision")
+#                 grb_utils.add_constraint_picos(model, np.asarray(lhs), ">=" , np.asarray(rhs) , name="collision")
 
 #         # objective function
 #         g_objective = np.sum(np.square(g_verts - verts))
-#         model.setObjective(g_objective, gurobipy.GRB.MINIMIZE)
-#         model.update()
-#         model.optimize()
-#         # print(grb_utils.get_value(g_objective))
+#         model.setObjective("min", g_objective)
+#         solution = model.solve(verbose = 1, solver='gurobi')
 #         print(iteration )
-#         verts_result = grb_utils.get_value(g_verts)
-#         # print(verts_result)
-#         # print("end")
+#         verts_result = g_verts.value
 #         return verts_result

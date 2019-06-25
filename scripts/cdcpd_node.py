@@ -44,7 +44,6 @@ class Tracker:
                 height=get_ros_param(param_name="cloth_x_size", default=0.32), width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=23), 
                 height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=17))
             self.key_func = chroma_key_mflag_lab
-
         if(get_ros_param(param_name="use_gripper_prior", default=False)):
             self.prior = UniformPrior()
             self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)

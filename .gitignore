@@ -2,8 +2,7 @@
 .vscode
 *.pyc
 *.log
-examples/data/*
-examples/result/*
+src/ros-numpy/*
 */build
 *.so
 *.pstat
