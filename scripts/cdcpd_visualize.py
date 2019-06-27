@@ -13,7 +13,6 @@ import ros_numpy
 from cdcpd import CDCPDParams, ConstrainedDeformableCPD
 from cpd import CPDParams
 from optimizer import EdgeConstrainedOptimizer
-from optimizer import DistanceConstrainedOptimizer
 from geometry_utils import build_line
 from geometry_utils import build_rectangle
 from cv_utils import chroma_key_rope
@@ -27,7 +26,7 @@ import time
 from threading import Lock
 from ros_wrappers import Listener
 from ros_wrappers import get_ros_param
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3D
 # from matplotlib import cm
 
@@ -48,6 +47,7 @@ class Tracker:
         self.count = 0
         self.use_pickle = get_ros_param(param_name="~use_pickle", default=True)
         self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=False)
+        self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=True)
         self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
         if(self.use_pickle):
             self.input_data = pickle.load(open("/home/deformtrack/examples/data/2019-06-27 13-13-10.pk", "rb"))
@@ -63,13 +63,15 @@ class Tracker:
         if(self.use_gripper_prior):
             self.prior = UniformPrior()
             self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges,
-             use_gripper_prior = self.use_gripper_prior, visualize_violations = self.visualize_violations)
+             use_gripper_prior = self.use_gripper_prior, use_passingthru_constraint = self.use_passingthru_constraint,
+             visualize_violations = self.visualize_violations)
             self.listener_left = Listener(topic_name="/left_gripper/prior", topic_type=TransformStamped)
             self.listener_right = Listener(topic_name="/right_gripper/prior", topic_type=TransformStamped)
         else:
             self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
             self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges, 
-                use_gripper_prior = self.use_gripper_prior, visualize_violations = self.visualize_violations)
+                use_gripper_prior = self.use_gripper_prior, use_passingthru_constraint = self.use_passingthru_constraint,
+                visualize_violations = self.visualize_violations)
 
         self.cpd_params = CPDParams()
 
@@ -175,6 +177,11 @@ class Tracker:
             try:
                 color_img = self.input_data['colour_img'][self.count]
                 point_cloud_img = self.input_data['point_cloud'][self.count]
+                plt.imshow(color_img)
+
+                plt.draw()
+                plt.pause(0.001)
+                plt.clf()
             except IndexError:
                 sys.exit()
 
