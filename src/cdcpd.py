@@ -7,14 +7,9 @@ from prior import Prior
 from lle import locally_linear_embedding
 from failure_recovery import KnnLibrary
 import copy
-
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
-<<<<<<< HEAD
-
-=======
->>>>>>> master
 
 class CDCPDParams:
     def __init__(self,
@@ -24,6 +19,7 @@ class CDCPDParams:
                  use_lle=True,
                  lle_neighbors=8,
                  use_recovery=False,
+                 visualize_violations = False,
                  recovery_cost_estimator=None,
                  recovery_knn_k=12,
                  recovery_featrue_sample_size=1500,
@@ -50,6 +46,7 @@ class CDCPDParams:
         self.use_lle = use_lle
         self.lle_neighbors = lle_neighbors
         self.use_recovery = use_recovery
+        self.visualize_violations = visualize_violations
         self.recovery_cost_estimator = recovery_cost_estimator
         self.recovery_knn_k = recovery_knn_k
         self.recovery_featrue_sample_size = recovery_featrue_sample_size
@@ -132,8 +129,11 @@ class ConstrainedDeformableCPD:
         # Optimization
         if self.cdcpd_params.optimizer is not None:
             optimizer = self.cdcpd_params.optimizer
-            optimization_result = optimizer.run(tracking_result, self.template, self.iteration)
+            optimization_result, violate_points_1, violate_points_2 = optimizer.run(tracking_result, self.template, self.iteration)
             tracking_result = optimization_result.astype(self.template.dtype)
+            if(self.cdcpd_params.visualize_violations):
+                violate_points_1 = violate_points_1.astype(self.template.dtype)
+                violate_points_2 = violate_points_2.astype(self.template.dtype)
         # print("15"+"--- %s seconds ---" % (time.time() - start_time))
         # skipping recovery if not enabled
         if not self.cdcpd_params.use_recovery:
@@ -141,7 +141,7 @@ class ConstrainedDeformableCPD:
             #self.prev_template = template
             self.template = tracking_result
             self.iteration+=1
-            return tracking_result
+            return tracking_result, violate_points_1, violate_points_2
 
         # Failure recovery
         cost_estimator = self.cdcpd_params.recovery_cost_estimator
@@ -162,7 +162,7 @@ class ConstrainedDeformableCPD:
                 # optimization
                 if self.cdcpd_params.optimizer is not None:
                     optimizer = self.cdcpd_params.optimizer
-                    optimization_result = optimizer.run(tracking_result, self.template, self.iteration)
+                    optimization_result, violate_points_1, violate_points_2 = optimizer.run(tracking_result, self.template, self.iteration)
                     tracking_result = optimization_result
 
                 tracking_failure_index = cost_estimator.run(tracking_result)
@@ -177,4 +177,4 @@ class ConstrainedDeformableCPD:
         #self.prev_template = template
         self.iteration+=1
         self.template = tracking_result
-        return tracking_result
+        return tracking_result, violate_points_1, violate_points_2

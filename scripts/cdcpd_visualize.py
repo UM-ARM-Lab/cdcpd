@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 import time
 start_time = time.time()
+import sys
 import rospy
+import pickle
 from sensor_msgs.msg import PointCloud2
+from geometry_msgs.msg import Point
+from visualization_msgs.msg import *
 import numpy as np
 from numpy.lib.recfunctions import structured_to_unstructured, unstructured_to_structured
 import ros_numpy
@@ -41,6 +45,12 @@ class Tracker:
         self.listener_left = None
         self.listener_right = None
         self.cost_estimator = None
+        self.count = 0
+        self.use_pickle = get_ros_param(param_name="~use_pickle", default=True)
+        self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=False)
+        self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
+        if(self.use_pickle):
+            self.input_data = pickle.load(open("/home/deformtrack/examples/data/2019-06-27 13-13-10.pk", "rb"))
         if(object_name=="rope"):
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
@@ -50,14 +60,16 @@ class Tracker:
                 height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=17))
             self.key_func = chroma_key_mflag_lab
 
-        if(get_ros_param(param_name="~use_gripper_prior", default=False)):
+        if(self.use_gripper_prior):
             self.prior = UniformPrior()
-            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
+            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges,
+             use_gripper_prior = self.use_gripper_prior, visualize_violations = self.visualize_violations)
             self.listener_left = Listener(topic_name="/left_gripper/prior", topic_type=TransformStamped)
             self.listener_right = Listener(topic_name="/right_gripper/prior", topic_type=TransformStamped)
         else:
             self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
-            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges)
+            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges, 
+                use_gripper_prior = self.use_gripper_prior, visualize_violations = self.visualize_violations)
 
         self.cpd_params = CPDParams()
 
@@ -66,7 +78,7 @@ class Tracker:
             self.cdcpd_params = CDCPDParams(prior=self.prior,
                                optimizer=self.optimizer,
                                use_recovery=True,
-                               use_gripper_prior = self.use_gripper_prior,
+                               visualize_violations = self.visualize_violations,
                                recovery_cost_estimator=self.cost_estimator,
                                recovery_cost_threshold=0.1)
         else:
@@ -74,18 +86,83 @@ class Tracker:
 
         self.cdcpd = ConstrainedDeformableCPD(template=self.template_verts,
                                          cdcpd_params=self.cdcpd_params)
-        self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=True)
+        
         if(self.use_gripper_prior):
             self.gripper_prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0), get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
 
         # initialize ROS publisher
         self.pub = rospy.Publisher("/cdcpd_tracker/points", PointCloud2, queue_size=10)
+        self.vis_pub = rospy.Publisher("visualization_marker", Marker, queue_size=10)
         # print("--- %s seconds ---" % (time.time() - start_time))
         self.listen()
 
     def listen(self):
         self.sub = rospy.Subscriber(get_ros_param(param_name="~PointCloud_topic", default="/kinect2_victor_head/qhd/points"), PointCloud2, self.callback, queue_size=1)
     
+    def display_violations_1(self, points, msg):
+        #visualize violations
+        # marker_msg = MarkerArray()
+        marker_temp = Marker()
+        marker_temp.header = msg.header
+        # marker_temp.header.stamp = rospy.Time.now()
+        # marker_temp.header.frame_id = "kinect2_victor_head_rgb_optical_frame"
+        marker_temp.ns = "stretch"
+        marker_temp.id = 0
+        marker_temp.type = Marker.LINE_LIST
+        marker_temp.action = Marker.ADD
+        marker_temp.pose.position.x = 0
+        marker_temp.pose.position.y = 0
+        marker_temp.pose.position.z = 0
+        marker_temp.pose.orientation.x = 0.0
+        marker_temp.pose.orientation.y = 0.0
+        marker_temp.pose.orientation.z = 0.0
+        marker_temp.pose.orientation.w = 1.0
+        marker_temp.scale.x = 0.01
+        marker_temp.scale.y = 0.01
+        marker_temp.scale.z = 0.01
+        marker_temp.color.a = 1.0 # Don't forget to set the alpha!
+        marker_temp.color.r = 0.0
+        marker_temp.color.g = 1.0
+        marker_temp.color.b = 0.0
+        marker_temp.points = []
+        for i in range(points.shape[1]):
+            # print(i) 
+            marker_temp.points.append(ros_numpy.msgify(Point, points[0][i]))
+            marker_temp.points.append(ros_numpy.msgify(Point, points[1][i]))
+            # marker_msg.markers.append(marker_temp) 
+        
+        self.vis_pub.publish( marker_temp )
+
+    def display_violations_2(self, points, msg):
+        marker_temp = Marker()
+        marker_temp.header = msg.header
+        # marker_temp.header.stamp = rospy.Time.now()
+        # marker_temp.header.frame_id = "kinect2_victor_head_rgb_optical_frame"
+        marker_temp.ns = "crossing"
+        marker_temp.id = 0
+        marker_temp.type = Marker.LINE_LIST
+        marker_temp.action = Marker.ADD
+        marker_temp.pose.position.x = 0
+        marker_temp.pose.position.y = 0
+        marker_temp.pose.position.z = 0
+        marker_temp.pose.orientation.x = 0.0
+        marker_temp.pose.orientation.y = 0.0
+        marker_temp.pose.orientation.z = 0.0
+        marker_temp.pose.orientation.w = 1.0
+        marker_temp.scale.x = 0.01
+        marker_temp.scale.y = 0.01
+        marker_temp.scale.z = 0.01
+        marker_temp.color.a = 1.0 # Don't forget to set the alpha!
+        marker_temp.color.r = 1.0
+        marker_temp.color.g = 0.0
+        marker_temp.color.b = 0.0
+        marker_temp.points = []
+        for i in range(points.shape[0]):
+            marker_temp.points.append(ros_numpy.msgify(Point, points[i][0]))
+            marker_temp.points.append(ros_numpy.msgify(Point, points[i][1]))
+        
+        self.vis_pub.publish( marker_temp )
+
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
         # print("1"+"--- %s seconds ---" % (time.time() - start_time))
@@ -94,9 +171,18 @@ class Tracker:
         if(self.use_gripper_prior):
             left_data = self.listener_left.get()
             right_data = self.listener_right.get()
-        arr = ros_numpy.point_cloud2.split_rgb_field(data)
-        point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
-        color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
+        if(self.use_pickle):
+            try:
+                color_img = self.input_data['colour_img'][self.count]
+                point_cloud_img = self.input_data['point_cloud'][self.count]
+            except IndexError:
+                sys.exit()
+
+        else:
+            arr = ros_numpy.point_cloud2.split_rgb_field(data)
+            point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
+            color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
+
         mask_img = self.key_func(point_cloud_img, color_img)
 
         if(self.use_gripper_prior):
@@ -106,29 +192,34 @@ class Tracker:
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=self.gripper_prior_idx)
 
         # invoke tracker
-        tracking_result, violate_points = self.cdcpd.step(point_cloud=point_cloud_img,
+        tracking_result, violate_points_1, violate_points_2 = self.cdcpd.step(point_cloud=point_cloud_img,
                                      mask=mask_img, 
                                      cpd_param=self.cpd_params)
+    
         # print("4"+"--- %s seconds ---" % (time.time() - start_time))
         # converting tracking result to ROS message
         if tracking_result.dtype is not np.float32:
             tracking_result = tracking_result.astype(np.float32)
+        if(self.visualize_violations):
+            if violate_points_1.dtype is not np.float32:
+                violate_points_1 = violate_points_1.astype(np.float32)
+            if violate_points_2.dtype is not np.float32:
+                violate_points_2 = violate_points_2.astype(np.float32)
         
-        # plt.imshow(mask_img)
-
-        # plt.draw()
-        # plt.pause(0.01)
-        # plt.clf()
         out_struct_arr = unstructured_to_structured(tracking_result, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
         # print("5"+"--- %s seconds ---" % (time.time() - start_time))
         self.pub.publish(pub_msg)
         # print("6"+"--- %s seconds ---" % (time.time() - start_time))
-        
+        if(self.visualize_violations):
+            self.display_violations_1(violate_points_1, msg)
+            self.display_violations_2(violate_points_2, msg)
+        self.count+=1
+
+
 def main():
     rospy.init_node('cdcpd_node')
-    # print("--- %s seconds ---" % (start_time))
     tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="rope"))
     rospy.spin()
 
