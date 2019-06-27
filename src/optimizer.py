@@ -181,7 +181,7 @@ class EdgeConstrainedOptimizer(Optimizer):
         #object passing through itself constraint
         if(self.use_passingthru_constraint):
             d_max = 0.01 # change
-            d_min = 0.0000005 # change
+            d_min = 0.000001 # change
             if(iteration != 0):
                 lhs = []
                 rhs = []

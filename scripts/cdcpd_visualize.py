@@ -45,7 +45,7 @@ class Tracker:
         self.listener_right = None
         self.cost_estimator = None
         self.count = 0
-        self.use_pickle = get_ros_param(param_name="~use_pickle", default=True)
+        self.use_pickle = get_ros_param(param_name="~use_pickle", default=False)
         self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=False)
         self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=True)
         self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
@@ -96,11 +96,8 @@ class Tracker:
         self.pub = rospy.Publisher("/cdcpd_tracker/points", PointCloud2, queue_size=10)
         self.vis_pub = rospy.Publisher("visualization_marker", Marker, queue_size=10)
         # print("--- %s seconds ---" % (time.time() - start_time))
-        self.listen()
+        self.sub = Listener(topic_name=get_ros_param(param_name="~PointCloud_topic", default="/kinect2_victor_head/qhd/points"), topic_type=PointCloud2)
 
-    def listen(self):
-        self.sub = rospy.Subscriber(get_ros_param(param_name="~PointCloud_topic", default="/kinect2_victor_head/qhd/points"), PointCloud2, self.callback, queue_size=1)
-    
     def display_violations_1(self, points, msg):
         #visualize violations
         # marker_msg = MarkerArray()
@@ -165,9 +162,10 @@ class Tracker:
         
         self.vis_pub.publish( marker_temp )
 
-    def callback(self, msg: PointCloud2):
+    def cdcpd_main(self):
         # converting ROS message to dense numpy array
         # print("1"+"--- %s seconds ---" % (time.time() - start_time))
+        msg = self.sub.get()
         data = ros_numpy.numpify(msg)
 
         if(self.use_gripper_prior):
@@ -177,13 +175,13 @@ class Tracker:
             try:
                 color_img = self.input_data['colour_img'][self.count]
                 point_cloud_img = self.input_data['point_cloud'][self.count]
-                plt.imshow(color_img)
+                # plt.imshow(color_img)
 
-                plt.draw()
-                plt.pause(0.001)
-                plt.clf()
+                # plt.draw()
+                # plt.pause(0.001)
+                # plt.clf()
             except IndexError:
-                sys.exit()
+                rospy.signal_shutdown('Reached the end of file')
 
         else:
             arr = ros_numpy.point_cloud2.split_rgb_field(data)
@@ -228,6 +226,8 @@ class Tracker:
 def main():
     rospy.init_node('cdcpd_node')
     tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="rope"))
+    while not rospy.is_shutdown():
+        tracker.cdcpd_main()
     rospy.spin()
 
 main()
