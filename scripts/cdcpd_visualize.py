@@ -50,7 +50,7 @@ class Tracker:
         self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=True)
         self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
         if(self.use_pickle):
-            self.input_data = pickle.load(open("/home/deformtrack/examples/data/2019-06-27 13-13-10.pk", "rb"))
+            self.input_data = pickle.load(open("/home/deformtrack/examples/data/rope_tie_2019-02-19-12-50-37.pk", "rb"))
         if(object_name=="rope"):
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
@@ -175,11 +175,11 @@ class Tracker:
             try:
                 color_img = self.input_data['colour_img'][self.count]
                 point_cloud_img = self.input_data['point_cloud'][self.count]
-                # plt.imshow(color_img)
+                plt.imshow(color_img)
 
-                # plt.draw()
-                # plt.pause(0.001)
-                # plt.clf()
+                plt.draw()
+                plt.pause(0.0001)
+                plt.clf()
             except IndexError:
                 rospy.signal_shutdown('Reached the end of file')
 

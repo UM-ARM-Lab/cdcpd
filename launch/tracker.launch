@@ -4,12 +4,13 @@
     <arg name="use_failure_recovery"   default="False"/>
     <arg name="use_passingthru_constraint"   default="True"/>
     <arg name="visualize_violations"   default="False"/>
+    <arg name="use_pickle"   default="False"/>
     <arg name="kinect"              default="victor_head"/>
 	
     <group ns="cdcpd_node">
     	<param name="PointCloud_topic" value="/kinect2_$(arg kinect)/qhd/points" type="string" />
     	<param name="use_gripper_prior" value="$(arg use_gripper_prior)" type="bool" />
-        <param name="use_pickle" value="False" type="bool" />
+        <param name="use_pickle" value="$(arg use_pickle)" type="bool" />
     	<param name="use_failure_recovery" value="$(arg use_failure_recovery)" type="bool" />
         <param name="use_failure_recovery" value="$(arg use_passingthru_constraint)" type="bool" />
         <param name="visualize_violations" value="$(arg visualize_violations)" type="bool" />
@@ -17,7 +18,9 @@
 
     <node name="cdcpd_node" pkg="cdcpd" type="cdcpd_env.sh"/>
 
-    <node name="gripper_node" pkg="cdcpd" type="gripper_tf_node.py">
-    	<param name="kinect_frame" value="kinect2_$(arg kinect)_rgb_optical_frame" type="string" />
-    </node>
+    <group if="$(arg use_gripper_prior)">
+        <node name="gripper_node" pkg="cdcpd" type="gripper_tf_node.py">
+        	<param name="kinect_frame" value="kinect2_$(arg kinect)_rgb_optical_frame" type="string" />
+        </node>
+    </group>
 </launch>

@@ -115,8 +115,8 @@ def detect_violation(verts,prev_verts, template, edges, stretch_coefficient = 1)
 	points_1 = [verts[points[:,0]], verts[points[:,1]]]
 	# print(points)
 
-	d_max = 0.01 # change
-	d_min = 0.000001 # change
+	d_max = 0.1 # change
+	d_min = 0.005 # change
 	lhs = []
 	rhs = []
 	points = []
