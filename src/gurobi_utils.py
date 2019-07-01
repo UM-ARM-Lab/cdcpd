@@ -1,6 +1,7 @@
 import operator
 import numpy as np
 import gurobipy
+# import picos
 
 
 # generate object array from dictionary with tuple key
@@ -56,6 +57,38 @@ def add_constraints(model, lhs, operation_type="<=", rhs=None, name=''):
 
     constr_arr = _gen_obj_arr(constr_dict, lhs.shape)
     return constr_arr
+
+# def add_constraint_picos(model, lhs, operation_type="<=", rhs=None, name=''):
+#     """
+#     Create element-wise constraint between gurobi variables and numpy array
+#     :param model: instance of gurobipy.Model
+#     :param lhs: A numpy object array of gurobi expressions
+#     :param operation_type: Comparison type, one of ["<=", "==", ">="]
+#     :param rhs: A numpy array of real values, same shape as lhs
+#     :param name: gurobi name for constraint objects
+#     :return: numpy array of gurobi constraints
+#     """
+#     python_operator = None
+#     if operation_type == "<=":
+#         python_operator = operator.le
+#     elif operation_type == "==":
+#         python_operator = operator.eq
+#     elif operation_type == ">=":
+#         python_operator = operator.ge
+#     else:
+#         raise RuntimeError("Unsupported operator {}".format(operation_type))
+
+#     if type(rhs) is not np.ndarray:
+#         raise RuntimeError("rhs is not numpy.ndarray!")
+
+#     if lhs.shape != rhs.shape:
+#         raise RuntimeError("lhs and rhs have different shape!")
+
+#     gen_temp_constrs = (python_operator(lhs[index], rhs[index]) for index in np.ndindex(lhs.shape))
+#     constr_dict = model.add_constraint(gen_temp_constrs)
+
+#     # constr_arr = _gen_obj_arr(constr_dict, lhs.shape)
+#     return constr_dict
 
 
 # generates numpy element-wise function

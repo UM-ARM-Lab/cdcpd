@@ -35,9 +35,11 @@ class Listener:
                                      Guarantees a msg is returned (not None)
         """
         wait_for(lambda: not (block_until_data and self.data is None))
+        temp = deepcopy(self.data)
+        self.data = None
 
         with self.lock:
-            return deepcopy(self.data)
+            return temp
 
 
 def wait_for(func):
