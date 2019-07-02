@@ -94,6 +94,8 @@ class Tracker:
 
         # initialize ROS publisher
         self.pub = rospy.Publisher("/cdcpd_tracker/points", PointCloud2, queue_size=10)
+        self.pub_filter = rospy.Publisher("/cdcpd_mask/filtered_points", PointCloud2, queue_size=10)
+        self.pub_sample = rospy.Publisher("/cdcpd_mask/down_sampled_points", PointCloud2, queue_size=10)
         self.vis_pub = rospy.Publisher("visualization_marker", Marker, queue_size=10)
         # print("--- %s seconds ---" % (time.time() - start_time))
         self.sub = Listener(topic_name=get_ros_param(param_name="~PointCloud_topic", default="/kinect2_victor_head/qhd/points"), topic_type=PointCloud2)
@@ -197,7 +199,7 @@ class Tracker:
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=self.gripper_prior_idx)
 
         # invoke tracker
-        tracking_result, violate_points_1, violate_points_2 = self.cdcpd.step(point_cloud=point_cloud_img,
+        tracking_result, violate_points_1, violate_points_2, filtered_points, down_sampled_points = self.cdcpd.step(point_cloud=point_cloud_img,
                                      mask=mask_img, 
                                      cpd_param=self.cpd_params)
     
@@ -214,8 +216,16 @@ class Tracker:
         out_struct_arr = unstructured_to_structured(tracking_result, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
+        out_struct_arr = unstructured_to_structured(filtered_points, names=['x', 'y', 'z'])
+        pub_filter_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
+        pub_filter_msg.header = msg.header
+        out_struct_arr = unstructured_to_structured(down_sampled_points, names=['x', 'y', 'z'])
+        pub_sample_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
+        pub_sample_msg.header = msg.header
         # print("5"+"--- %s seconds ---" % (time.time() - start_time))
         self.pub.publish(pub_msg)
+        self.pub_filter.publish(pub_filter_msg)
+        self.pub_sample.publish(pub_sample_msg)
         # print("6"+"--- %s seconds ---" % (time.time() - start_time))
         if(self.visualize_violations):
             self.display_violations_1(violate_points_1, msg)
