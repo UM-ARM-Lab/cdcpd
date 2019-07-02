@@ -141,7 +141,7 @@ class ConstrainedDeformableCPD:
             #self.prev_template = template
             self.template = tracking_result
             self.iteration+=1
-            return tracking_result, violate_points_1, violate_points_2
+            return tracking_result, violate_points_1, violate_points_2, filtered_points, down_sampled_points
 
         # Failure recovery
         cost_estimator = self.cdcpd_params.recovery_cost_estimator
@@ -177,4 +177,4 @@ class ConstrainedDeformableCPD:
         #self.prev_template = template
         self.iteration+=1
         self.template = tracking_result
-        return tracking_result, violate_points_1, violate_points_2
+        return tracking_result, violate_points_1, violate_points_2, filtered_points, down_sampled_points
