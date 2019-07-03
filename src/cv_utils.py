@@ -2,33 +2,17 @@ import cv2
 import numpy as np
 import numexpr as ne
 
-def chroma_key_rope(points, colors, table):
+
+def chroma_key_rope(points, colors, table, offset):
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
     points_z = points[:, :, 0]
     mask = ne.evaluate("(h > 0.85) & (s > 0.5) & ~(points_z != points_z)")
-    return mask
+    return mask, points
 
-
-def chroma_key_mflag_home(points, colors, table):
-    hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
-    hsv_img[:, :, 0] /= 360.0
-    h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
-    points_z = points[:, :, 0]
-    mask = ne.evaluate(
-        """(((0.14 < h) & (h < 0.18) & (0.02 < s) & (s < 0.6) & (0.8 < v)) \
-        | ((0.57 < h) & (h < 0.63) & (0.4 < s) & (s < 0.85) & (v < 0.9))) \
-        & ~(points_z != points_z)""")
-    mask[:, :300] = False
-    mask[:100, :] = False
-    return mask
-
-
-def chroma_key_mflag_lab(points, colors, table):
+def chroma_key_mflag_lab(points, colors, table, offset):
     table = np.reshape(table, (4,4))
-    # print("table", table)
-    # print("points",points[0])
     sh = points.shape
     points = points.transpose(2,0,1).reshape(points.shape[2], -1)
     temp = np.ones((1,points.shape[1]))
@@ -37,11 +21,13 @@ def chroma_key_mflag_lab(points, colors, table):
     point_cloud = point_cloud[:3, :]
     point_cloud = point_cloud.transpose(1,0)
     point_cloud = point_cloud.reshape(sh)
-    # print(point_cloud[0])
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
     x, y, z = np.transpose(point_cloud, axes=[2, 0, 1])
+    x = x - offset[0]
+    y = y - offset[1]
+    z = z - offset[2]
     points_z = point_cloud[:,:,2]
     box = np.zeros_like(h, dtype=np.bool)
     #box[110:450, 340:590] = True

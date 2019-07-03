@@ -46,23 +46,26 @@ class Tracker:
         self.listener_left = None
         self.listener_right = None
         self.cost_estimator = None
+        self.object_name = object_name
+        self.tracking_result = None
         self.count = 0
-        self.use_pickle = get_ros_param(param_name="~use_pickle", default=False)
+        self.use_pickle = get_ros_param(param_name="~use_pickle", default=True)
         self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=False)
         self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=True)
         self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
         if(self.use_pickle):
-            self.input_data = pickle.load(open("/home/deformtrack/examples/data/rope_tie_2019-02-19-12-50-37.pk", "rb"))
-        if(object_name=="rope"):
+            self.input_data = pickle.load(open("/home/deformtrack/examples/data/mask_threshold_2.pk", "rb"))
+        if(self.object_name=="rope"):
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
-        elif(object_name=="cloth"):
-            self.template_verts, self.template_edges = build_rectangle(width=get_ros_param(param_name="cloth_y_size", default=0.45),
-                height=get_ros_param(param_name="cloth_x_size", default=0.32), width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=23),
-                height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=17))
+        elif(self.object_name=="cloth"):
+            self.template_verts, self.template_edges = build_rectangle(width=get_ros_param(param_name="cloth_y_size", default=0.32),
+                height=get_ros_param(param_name="cloth_x_size", default=0.45), width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=17),
+                height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=23))
             self.key_func = chroma_key_mflag_lab
         self.listener_table = Listener(topic_name="/cdcpd/table_tf_matrix", topic_type=Float32MultiArray)
         if(self.use_gripper_prior):
+            print("true")
             self.prior = UniformPrior()
             self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges,
              use_gripper_prior = self.use_gripper_prior, use_passingthru_constraint = self.use_passingthru_constraint,
@@ -200,7 +203,6 @@ class Tracker:
         msg = self.sub.get()
         data = ros_numpy.numpify(msg)
         table_data = self.listener_table.get()
-        # print("start")
         if(self.use_gripper_prior):
             left_data = self.listener_left.get()
             right_data = self.listener_right.get()
@@ -221,7 +223,10 @@ class Tracker:
             point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
             color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
         
-        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data))
+        offset = np.zeros((3,))
+        if(self.object_name=="cloth" and self.count!=0):
+            offset = (self.tracking_result[0] + self.tracking_result[self.tracking_result.shape[0] - 1])/3
+        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), offset)
         filtered_points = point_cloud_img[mask_img]   
 
         if point_cloud_img.dtype is not np.float32:
@@ -273,21 +278,21 @@ class Tracker:
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=self.gripper_prior_idx)
 
         # invoke tracker
-        tracking_result, violate_points_1, violate_points_2 = self.cdcpd.step(point_cloud=point_cloud_img, down_sampled_points = down_sampled_points,
+        self.tracking_result, violate_points_1, violate_points_2 = self.cdcpd.step(point_cloud=point_cloud_img, down_sampled_points = down_sampled_points,
                                      mask=mask_img, 
                                      cpd_param=self.cpd_params)
     
         # print("4"+"--- %s seconds ---" % (time.time() - start_time))
         # converting tracking result to ROS message
-        if tracking_result.dtype is not np.float32:
-            tracking_result = tracking_result.astype(np.float32)
+        if self.tracking_result.dtype is not np.float32:
+            self.tracking_result = self.tracking_result.astype(np.float32)
         if(self.visualize_violations):
             if violate_points_1.dtype is not np.float32:
                 violate_points_1 = violate_points_1.astype(np.float32)
             if violate_points_2.dtype is not np.float32:
                 violate_points_2 = violate_points_2.astype(np.float32)
         
-        out_struct_arr = unstructured_to_structured(tracking_result, names=['x', 'y', 'z'])
+        out_struct_arr = unstructured_to_structured(self.tracking_result, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
         
@@ -306,7 +311,9 @@ def main():
     rospy.init_node('cdcpd_node')
     tracker = Tracker(object_name = get_ros_param(param_name="deformable_type", default="cloth"))
     while not rospy.is_shutdown():
-        tracker.cdcpd_main()
-    rospy.spin()
+        try:
+            tracker.cdcpd_main()
+        except ValueError as ve:
+            rospy.log_warn("ValueError: {0}".format(ve))
 
 main()

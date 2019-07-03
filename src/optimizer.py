@@ -212,7 +212,7 @@ class EdgeConstrainedOptimizer(Optimizer):
         model.optimize()
         try:
             verts_result = grb_utils.get_value(g_verts)
-        except:
+        except ValueError:
             import IPython
             IPython.embed()
             raise KeyboardInterrupt

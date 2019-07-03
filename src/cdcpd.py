@@ -98,6 +98,7 @@ class ConstrainedDeformableCPD:
             curr_cpd_param.Y_emit_prior = prior.run(self.template)
         # print("13"+"--- %s seconds ---" % (time.time() ))
         # CPD
+
         cpd = CPD(down_sampled_points, self.template, curr_cpd_param)
         cpd_result = cpd.run()
         tracking_result = cpd_result
@@ -110,11 +111,11 @@ class ConstrainedDeformableCPD:
             if(self.cdcpd_params.visualize_violations):
                 violate_points_1 = violate_points_1.astype(self.template.dtype)
                 violate_points_2 = violate_points_2.astype(self.template.dtype)
+
         # print("15"+"--- %s seconds ---" % (time.time() - start_time))
         # skipping recovery if not enabled
         if not self.cdcpd_params.use_recovery:
             # set template  for next step
-            #self.prev_template = template
             self.template = tracking_result
             self.iteration+=1
             return tracking_result, violate_points_1, violate_points_2
