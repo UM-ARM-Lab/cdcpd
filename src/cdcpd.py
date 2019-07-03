@@ -75,6 +75,7 @@ class ConstrainedDeformableCPD:
 
     def step(self,
              point_cloud,
+             down_sampled_points,
              mask, 
              cpd_param: CPDParams):
         """
@@ -86,31 +87,6 @@ class ConstrainedDeformableCPD:
         :return: (M, 3) tracking result. Same shape as template.
         """
         # print("11"+"--- %s seconds ---" % (time.time() ))
-        filtered_points = point_cloud[mask]   
-        # X = self.template[:,0]
-        # Y = self.template[:,1]
-        # Z = self.template[:,2]
-    
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111, projection='3d')
-        # ax.scatter(X,Y,Z)
-        # plt.show()
-
-        if len(filtered_points) <= len(self.template):
-            raise ValueError("Not enough point in masked point cloud.")
-
-        rand_idx = np.random.randint(0, filtered_points.shape[0],
-                                     size=self.cdcpd_params.down_sample_size, dtype=np.uint32)
-        down_sampled_points = filtered_points[rand_idx]
-
-        # X = down_sampled_points[:,0]
-        # Y = down_sampled_points[:,1]
-        # Z = down_sampled_points[:,2]
-
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111, projection='3d')
-        # ax.scatter(X,Y,Z)
-        # plt.show()
         curr_cpd_param = copy.deepcopy(cpd_param)
         # print("12"+"--- %s seconds ---" % (time.time() - start_time))
         if self.cdcpd_params.use_lle is True:
@@ -141,7 +117,7 @@ class ConstrainedDeformableCPD:
             #self.prev_template = template
             self.template = tracking_result
             self.iteration+=1
-            return tracking_result, violate_points_1, violate_points_2, filtered_points, down_sampled_points
+            return tracking_result, violate_points_1, violate_points_2
 
         # Failure recovery
         cost_estimator = self.cdcpd_params.recovery_cost_estimator
@@ -177,4 +153,4 @@ class ConstrainedDeformableCPD:
         #self.prev_template = template
         self.iteration+=1
         self.template = tracking_result
-        return tracking_result, violate_points_1, violate_points_2, filtered_points, down_sampled_points
+        return tracking_result, violate_points_1, violate_points_2
