@@ -219,15 +219,9 @@ class Tracker:
             point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
             color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
         
-        # points_list = []
-
-        # for data in pc2.read_points(point_cloud_img, skip_nans=True):
-        #     points_list.append([data[0], data[1], data[2], data[3]])
-
-        # pcl_data = pcl.PointCloud_PointXYZRGB()
-        # pcl_data.from_list(points_list)
-
         mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data))
+        filtered_points = point_cloud_img[mask_img]   
+
         if point_cloud_img.dtype is not np.float32:
             point_cloud_img = point_cloud_img.astype(np.float32)
         out_struct_arr = unstructured_to_structured(point_cloud_img, names=['x', 'y', 'z'])
@@ -235,6 +229,31 @@ class Tracker:
         pub_points_msg.header = msg.header
         pub_points_msg.header.frame_id ='table_surface'
         self.pub_points.publish(pub_points_msg)
+
+        out_struct_arr = unstructured_to_structured(filtered_points, names=['x', 'y', 'z'])
+        pub_filter_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
+        pub_filter_msg.header = msg.header
+        self.pub_filter.publish(pub_filter_msg)
+        # X = self.template[:,0]
+        # Y = self.template[:,1]
+        # Z = self.template[:,2]
+        
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.scatter(X,Y,Z)
+        # plt.show()
+
+        if len(filtered_points) <= len(self.template_verts):
+            raise ValueError("Not enough point in masked point cloud.")
+
+        rand_idx = np.random.randint(0, filtered_points.shape[0],
+                                     size=self.cdcpd_params.down_sample_size, dtype=np.uint32)
+        down_sampled_points = filtered_points[rand_idx]
+
+        out_struct_arr = unstructured_to_structured(down_sampled_points, names=['x', 'y', 'z'])
+        pub_sample_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
+        pub_sample_msg.header = msg.header
+        self.pub_sample.publish(pub_sample_msg)
         # """
         # remove at the end
         # """
@@ -248,7 +267,7 @@ class Tracker:
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=self.gripper_prior_idx)
 
         # invoke tracker
-        tracking_result, violate_points_1, violate_points_2, filtered_points, down_sampled_points = self.cdcpd.step(point_cloud=point_cloud_img,
+        tracking_result, violate_points_1, violate_points_2 = self.cdcpd.step(point_cloud=point_cloud_img, down_sampled_points = down_sampled_points,
                                      mask=mask_img, 
                                      cpd_param=self.cpd_params)
     
@@ -265,17 +284,10 @@ class Tracker:
         out_struct_arr = unstructured_to_structured(tracking_result, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
-        out_struct_arr = unstructured_to_structured(filtered_points, names=['x', 'y', 'z'])
-        pub_filter_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
-        pub_filter_msg.header = msg.header
-        out_struct_arr = unstructured_to_structured(down_sampled_points, names=['x', 'y', 'z'])
-        pub_sample_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
-        pub_sample_msg.header = msg.header
+        
         
         # print("5"+"--- %s seconds ---" % (time.time() - start_time))
         self.pub.publish(pub_msg)
-        self.pub_filter.publish(pub_filter_msg)
-        self.pub_sample.publish(pub_sample_msg)
         
         # print("6"+"--- %s seconds ---" % (time.time() - start_time))
         if(self.visualize_violations):
