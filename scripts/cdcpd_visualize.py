@@ -196,9 +196,11 @@ class Tracker:
     def cdcpd_main(self):
         # converting ROS message to dense numpy array
         # print("1"+"--- %s seconds ---" % (time.time() - start_time))
+
         msg = self.sub.get()
         data = ros_numpy.numpify(msg)
         table_data = self.listener_table.get()
+        # print("start")
         if(self.use_gripper_prior):
             left_data = self.listener_left.get()
             right_data = self.listener_right.get()
@@ -230,6 +232,8 @@ class Tracker:
         pub_points_msg.header.frame_id ='table_surface'
         self.pub_points.publish(pub_points_msg)
 
+        if filtered_points.dtype is not np.float32:
+            filtered_points = filtered_points.astype(np.float32)
         out_struct_arr = unstructured_to_structured(filtered_points, names=['x', 'y', 'z'])
         pub_filter_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_filter_msg.header = msg.header
@@ -250,6 +254,8 @@ class Tracker:
                                      size=self.cdcpd_params.down_sample_size, dtype=np.uint32)
         down_sampled_points = filtered_points[rand_idx]
 
+        if down_sampled_points.dtype is not np.float32:
+            down_sampled_points = down_sampled_points.astype(np.float32)
         out_struct_arr = unstructured_to_structured(down_sampled_points, names=['x', 'y', 'z'])
         pub_sample_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_sample_msg.header = msg.header
