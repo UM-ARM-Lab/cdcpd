@@ -3,6 +3,7 @@ import numpy as np
 import time
 import tf2_ros
 from ros_wrappers import get_ros_param
+from tf.transformations import *
 
 class TF2Wrapper:
     def __init__(self):
@@ -48,4 +49,21 @@ class TF2Wrapper:
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
             rospy.logerr("No transform available: %s to %s", parent, child)
             return None
+
+    def TransformToMatrix(self, old_transform):
+        [translation, quaternion] = self.ComponentsFromTransform(old_transform)
+        tfmatrix = self.BuildMatrix(translation, quaternion)
+        return tfmatrix
+
+    def ComponentsFromTransform(self, old_transform):
+        translation = [old_transform.transform.translation.x, old_transform.transform.translation.y, old_transform.transform.translation.z]
+        quaternion = [old_transform.transform.rotation.x, old_transform.transform.rotation.y, old_transform.transform.rotation.z, old_transform.transform.rotation.w]
+        return [translation, quaternion]
+
+    def BuildMatrix(self, translation, quaternion):
+        tfmatrix = quaternion_matrix(quaternion)
+        tfmatrix[0][3] = translation[0]
+        tfmatrix[1][3] = translation[1]
+        tfmatrix[2][3] = translation[2]
+        return tfmatrix
 

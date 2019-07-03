@@ -205,8 +205,6 @@ class EdgeConstrainedOptimizer(Optimizer):
                 
                 if(len(rhs) != 0):
                     grb_utils.add_constraints(model, np.asarray(lhs), ">=" , np.asarray(rhs) , name="collision")
-        
-
         # objective function
         g_objective = np.sum(np.square(g_verts - verts))
         model.setObjective(g_objective, gurobipy.GRB.MINIMIZE)

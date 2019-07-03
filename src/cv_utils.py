@@ -2,8 +2,7 @@ import cv2
 import numpy as np
 import numexpr as ne
 
-
-def chroma_key_rope(points, colors):
+def chroma_key_rope(points, colors, table):
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
@@ -12,7 +11,7 @@ def chroma_key_rope(points, colors):
     return mask
 
 
-def chroma_key_mflag_home(points, colors):
+def chroma_key_mflag_home(points, colors, table):
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
@@ -26,11 +25,24 @@ def chroma_key_mflag_home(points, colors):
     return mask
 
 
-def chroma_key_mflag_lab(points, colors):
+def chroma_key_mflag_lab(points, colors, table):
+    table = np.reshape(table, (4,4))
+    # print("table", table)
+    # print("points",points[0])
+    sh = points.shape
+    points = points.transpose(2,0,1).reshape(points.shape[2], -1)
+    temp = np.ones((1,points.shape[1]))
+    points = np.append(points, temp, axis=0)
+    point_cloud = np.matmul(table, points)
+    point_cloud = point_cloud[:3, :]
+    point_cloud = point_cloud.transpose(1,0)
+    point_cloud = point_cloud.reshape(sh)
+    # print(point_cloud[0])
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
-    points_z = points[:, :, 2]
+    x, y, z = np.transpose(point_cloud, axes=[2, 0, 1])
+    points_z = point_cloud[:,:,2]
     box = np.zeros_like(h, dtype=np.bool)
     #box[110:450, 340:590] = True
     box[50:570, 150:700] = True
@@ -39,11 +51,11 @@ def chroma_key_mflag_lab(points, colors):
          (0.22 < s) & (s < 0.7) & (((0.03 < v) & (v < 0.3)) | ((0.36 < v) & (v < 0.65))) \
          | ((0.13 < h) & (h < 0.19) & (0.2 < s) & (s < 0.9))) \
          & ~(points_z != points_z) &\
-          ~((0.115 < v) & (v < 0.16))""")
+          ~((0.115 < v) & (v < 0.16)) & ((x < 0.3) & (x > -0.3) & (y < 0.5) & (y > -0.5) & ((z - 0.15) < 0.15) & ((z - 0.15) > -0.15)) """)
 
     # plt.imshow(mask)
     # plt.show()
-    return mask
+    return mask, point_cloud
 
 
 def project_image_space(points, intrinsic_mat):
