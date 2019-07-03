@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import numexpr as ne
+import matplotlib.pyplot as plt
 
 
 def chroma_key_rope(points, colors, table, offset):
@@ -29,15 +30,12 @@ def chroma_key_mflag_lab(points, colors, table, offset):
     y = y - offset[1]
     z = z - offset[2]
     points_z = point_cloud[:,:,2]
-    box = np.zeros_like(h, dtype=np.bool)
-    #box[110:450, 340:590] = True
-    box[50:570, 150:700] = True
     mask = ne.evaluate(
-        """box & ((((0.43 < h) & (h < 0.63)) | ((0.2 < h) & (h < 0.35))) & \
-         (0.22 < s) & (s < 0.7) & (((0.03 < v) & (v < 0.3)) | ((0.36 < v) & (v < 0.65))) \
+        """((((0.43 < h) & (h < 0.63)) | ((0.2 < h) & (h < 0.35))) & \
+         (0.22 < s) & (s < 0.7) & (((0.03 < v) & (v < 0.3)) | ((0.5 < v) & (v < 0.9))) \
          | ((0.13 < h) & (h < 0.19) & (0.2 < s) & (s < 0.9))) \
          & ~(points_z != points_z) &\
-          ~((0.115 < v) & (v < 0.16)) & ((x < 0.3) & (x > -0.3) & (y < 0.5) & (y > -0.5) & ((z - 0.15) < 0.15) & ((z - 0.15) > -0.15)) """)
+          ~((0.115 < v) & (v < 0.16)) & ((x < 0.3) & (x > -0.3) & (y < 0.5) & (y > -0.5) & ((z - 0.15) < 0.15) & ((z - 0.15) > -0.2)) """)
 
     # plt.imshow(mask)
     # plt.show()

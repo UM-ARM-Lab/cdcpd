@@ -314,6 +314,6 @@ def main():
         try:
             tracker.cdcpd_main()
         except ValueError as ve:
-            rospy.log_warn("ValueError: {0}".format(ve))
+            rospy.logwarn("ValueError: {0}".format(ve))
 
 main()
