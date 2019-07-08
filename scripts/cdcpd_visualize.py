@@ -223,10 +223,12 @@ class Tracker:
             point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
             color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
 
-        offset = np.zeros((3,))
+        upper_bound = np.zeros((3,))
+        lower_bound = np.zeros((3,))
         if(self.object_name=="cloth" and self.count!=0):
-            offset = (self.tracking_result[0] + self.tracking_result[self.tracking_result.shape[0] - 1])/3
-        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), offset)
+            upper_bound = self.tracking_result.max(axis=0)
+            lower_bound = self.tracking_result.min(axis=0)
+        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), lower_bound, upper_bound)
         filtered_points = point_cloud_img[mask_img]
 
         if point_cloud_img.dtype is not np.float32:

@@ -4,7 +4,7 @@ import numexpr as ne
 import matplotlib.pyplot as plt
 
 
-def chroma_key_rope(points, colors, table, offset):
+def chroma_key_rope(points, colors, table, lower_bound, upper_bound):
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
@@ -12,7 +12,7 @@ def chroma_key_rope(points, colors, table, offset):
     mask = ne.evaluate("(h > 0.85) & (s > 0.5) & ~(points_z != points_z)")
     return mask, points
 
-def chroma_key_mflag_lab(points, colors, table, offset):
+def chroma_key_mflag_lab(points, colors, table, lower_bound, upper_bound):
     table = np.reshape(table, (4,4))
     sh = points.shape
     points = points.transpose(2,0,1).reshape(points.shape[2], -1)
@@ -26,9 +26,12 @@ def chroma_key_mflag_lab(points, colors, table, offset):
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
     x, y, z = np.transpose(point_cloud, axes=[2, 0, 1])
-    x = x - offset[0]
-    y = y - offset[1]
-    z = z - offset[2]
+    x_lower = lower_bound[0] - x 
+    y_lower = lower_bound[1] - y 
+    z_lower = lower_bound[2] - z 
+    x_upper = x - upper_bound[0] 
+    y_upper = y - upper_bound[1] 
+    z_upper = z - upper_bound[2] 
     points_z = point_cloud[:,:,2]
     #mask = ne.evaluate(
     #    """((((0.43 < h) & (h < 0.63)) | ((0.2 < h) & (h < 0.35))) & \
@@ -39,7 +42,7 @@ def chroma_key_mflag_lab(points, colors, table, offset):
 
     # NaN filter, and box filter around current estimate of deformable object position
     xyz_mask = ne.evaluate("""~(points_z != points_z) \
-            & ((x < 0.25) & (x > -0.25) & (y < 0.3) & (y > -0.3) & (z < 0.05) & (z > -0.05))""")
+            & ((x_lower < 0.1) & (x_upper < 0.1) & (y_lower < 0.1) & (y_upper < 0.1) & (z_lower < 0.1) & (z_upper < 0.1))""")
 
     # Filter out the yellow M, while avoiding the white table
     m_logo_mask = ne.evaluate("""(v > 0.5) & (v < 0.65)""")
