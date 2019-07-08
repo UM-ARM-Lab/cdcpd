@@ -47,10 +47,13 @@ def chroma_key_mflag_lab(points, colors, table, offset):
     # Filter out the blue background, while avoiding????
     m_background_mask = ne.evaluate("""(v < 0.3)""")
 
+    #Filter red hue from green background
+    m_hue_mask = ne.evaluate("""(h < 1.0) & (h > 0.9) """)
+
     # plt.imshow(mask)
     # plt.show()
 
-    mask = ne.evaluate("""xyz_mask & (m_logo_mask | m_background_mask)""")
+    mask = ne.evaluate("""xyz_mask & m_hue_mask""")
     return mask, point_cloud
 
 
