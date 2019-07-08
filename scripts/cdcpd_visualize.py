@@ -59,9 +59,11 @@ class Tracker:
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
         elif(self.object_name=="cloth"):
-            self.template_verts, self.template_edges = build_rectangle(width=get_ros_param(param_name="cloth_y_size", default=0.32),
-                height=get_ros_param(param_name="cloth_x_size", default=0.45), width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=17),
-                height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=23))
+            self.template_verts, self.template_edges = build_rectangle(
+                    width=get_ros_param(param_name="cloth_y_size", default=0.32),
+                    height=get_ros_param(param_name="cloth_x_size", default=0.45),
+                    width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=17),
+                    height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=23))
             self.key_func = chroma_key_mflag_lab
         self.listener_table = Listener(topic_name="/cdcpd/table_tf_matrix", topic_type=Float32MultiArray)
         if(self.use_gripper_prior):
