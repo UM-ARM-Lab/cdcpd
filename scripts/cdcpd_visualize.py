@@ -205,6 +205,8 @@ class Tracker:
         msg = self.sub.get()
         data = ros_numpy.numpify(msg)
         table_data = self.listener_table.get()
+        # Used to disable the transform if we are so inclined
+        # table_data.data = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
         if(self.use_gripper_prior):
             left_data = self.listener_left.get()
             right_data = self.listener_right.get()
@@ -225,8 +227,8 @@ class Tracker:
             point_cloud_img = structured_to_unstructured(arr[['x', 'y', 'z']])
             color_img = structured_to_unstructured(arr[['r', 'g', 'b']])
 
-        upper_bound = np.zeros((3,))
-        lower_bound = np.zeros((3,))
+        upper_bound = 5 * np.ones((3,))
+        lower_bound = -5 * np.ones((3,))
         if(self.object_name=="cloth" and self.count!=0):
             upper_bound = self.tracking_result.max(axis=0)
             lower_bound = self.tracking_result.min(axis=0)
@@ -282,7 +284,9 @@ class Tracker:
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=self.gripper_prior_idx)
 
         # invoke tracker
-        self.tracking_result, violate_points_1, violate_points_2 = self.cdcpd.step(point_cloud=point_cloud_img, down_sampled_points = down_sampled_points,
+        self.tracking_result, violate_points_1, violate_points_2 = self.cdcpd.step(
+                                     point_cloud=point_cloud_img,
+                                     down_sampled_points=down_sampled_points,
                                      mask=mask_img,
                                      cpd_param=self.cpd_params)
 

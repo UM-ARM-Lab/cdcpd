@@ -62,6 +62,18 @@ class ConstrainedDeformableCPD:
         :param cdcpd_params: Type of CDCPDParams
         """
         self.template = template
+        #X = self.template[:,0]
+        #Y = self.template[:,1]
+        #Z = self.template[:,2]
+
+        #fig = plt.figure()
+        #ax = fig.add_subplot(111)
+        #ax.scatter(X,Y)
+        #ax.axis('equal')
+        #plt.xlabel('X')
+        #plt.ylabel('Y')
+        #plt.show()
+
         self.iteration = 0
         #self.prev_template = None
         self.cdcpd_params = cdcpd_params
@@ -76,7 +88,7 @@ class ConstrainedDeformableCPD:
     def step(self,
              point_cloud,
              down_sampled_points,
-             mask, 
+             mask,
              cpd_param: CPDParams):
         """
         Performs one time-step of ConstrainedDeformableCPD.
