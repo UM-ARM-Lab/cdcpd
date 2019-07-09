@@ -15,7 +15,7 @@ class Generator:
     def __init__(self):
         self.point_cloud_img = []
         self.color_img = []
-        self.sub = rospy.Subscriber(get_ros_param(param_name="~PointCloud_topic", default="/kinect2_victor_head/qhd/points"), PointCloud2, self.callback, queue_size=1)
+        self.sub = rospy.Subscriber("/kinect2_victor_head/qhd/points", PointCloud2, self.callback, queue_size=1)
     
     def callback(self, msg: PointCloud2):
         # converting ROS message to dense numpy array
