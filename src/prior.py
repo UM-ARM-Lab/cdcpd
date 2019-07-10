@@ -59,6 +59,9 @@ class ThresholdVisibilityPrior(Prior):
     def run(self, verts):
         """
         :return: The probability that a point in verts generated *any* point in self.mask
+                 Note that this probability is not normalized, as CDCPD does not need it
+                 normalized in order to reach the correct result (minimization does not
+                 care about scale factors)
         """
         projected = project_image_space(verts, self.intrinsic_mat)
         projected[:, 0] = np.clip(projected[:, 0], 0, self.point_cloud.shape[1])
