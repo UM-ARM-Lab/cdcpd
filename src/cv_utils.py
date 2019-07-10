@@ -13,26 +13,26 @@ def chroma_key_rope(points, colors, table, lower_bound, upper_bound):
     return mask, points
 
 def chroma_key_mflag_lab(points, colors, table, lower_bound, upper_bound):
-    table = np.reshape(table, (4,4))
-    sh = points.shape
-    points = points.transpose(2,0,1).reshape(points.shape[2], -1)
-    temp = np.ones((1,points.shape[1]))
-    points = np.append(points, temp, axis=0)
-    point_cloud = np.matmul(table, points)
-    point_cloud = point_cloud[:3, :]
-    point_cloud = point_cloud.transpose(1,0)
-    point_cloud = point_cloud.reshape(sh)
+    # table = np.reshape(table, (4,4))
+    # sh = points.shape
+    # points = points.transpose(2,0,1).reshape(points.shape[2], -1)
+    # temp = np.ones((1,points.shape[1]))
+    # points = np.append(points, temp, axis=0)
+    # point_cloud = np.matmul(table, points)
+    # point_cloud = point_cloud[:3, :]
+    # point_cloud = point_cloud.transpose(1,0)
+    # point_cloud = point_cloud.reshape(sh)
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
-    x, y, z = np.transpose(point_cloud, axes=[2, 0, 1])
+    x, y, z = np.transpose(points, axes=[2, 0, 1])
     x_lower = lower_bound[0] - x 
     y_lower = lower_bound[1] - y 
     z_lower = lower_bound[2] - z 
     x_upper = x - upper_bound[0] 
     y_upper = y - upper_bound[1] 
     z_upper = z - upper_bound[2] 
-    points_z = point_cloud[:,:,2]
+    points_z = points[:,:,2]
     #mask = ne.evaluate(
     #    """((((0.43 < h) & (h < 0.63)) | ((0.2 < h) & (h < 0.35))) & \
     #     (0.22 < s) & (s < 0.7) & (((0.03 < v) & (v < 0.3)) | ((0.22 < v) & (v < 0.65))) \
@@ -57,7 +57,7 @@ def chroma_key_mflag_lab(points, colors, table, lower_bound, upper_bound):
     # plt.show()
 
     mask = ne.evaluate("""xyz_mask & m_hue_mask""")
-    return mask, point_cloud
+    return mask, points
 
 
 def project_image_space(points, intrinsic_mat):

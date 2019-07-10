@@ -81,9 +81,19 @@ class ThresholdVisibilityPrior(Prior):
 
         dist_img = cv2.distanceTransform(
             np.logical_not(self.mask).astype(np.uint8), distanceType=cv2.DIST_L2, maskSize=5)
+        cv2.normalize(dist_img, dist_img, 0, 1.0, cv2.NORM_MINMAX)
         dist_to_mask = dist_img[coords[:, 1], coords[:, 0]]
 
         score = dist_to_mask * depth_factor
         prob = np.exp(-self.k * score)
+        plt.subplot(3,1,1)
+        plt.plot(prob)
 
+        plt.subplot(3,1,2)
+        plt.plot(depth_factor)
+        plt.subplot(3,1,3)
+        plt.plot(dist_to_mask)
+        plt.draw()
+        plt.pause(0.01)
+        plt.clf()
         return prob

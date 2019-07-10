@@ -49,21 +49,21 @@ class Tracker:
         self.object_name = object_name
         self.tracking_result = None
         self.count = 0
-        self.use_pickle = get_ros_param(param_name="~use_pickle", default=True)
+        self.use_pickle = get_ros_param(param_name="~use_pickle", default=False)
         self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=False)
-        self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=True)
+        self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=False)
         self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
         if(self.use_pickle):
-            self.input_data = pickle.load(open("/home/deformtrack/examples/data/mask_threshold_2.pk", "rb"))
+            self.input_data = pickle.load(open("/home/deformtrack/examples/data/flickertest_cloth2.pk", "rb"))
         if(self.object_name=="rope"):
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
         elif(self.object_name=="cloth"):
             self.template_verts, self.template_edges = build_rectangle(
-                    width=get_ros_param(param_name="cloth_y_size", default=0.32),
-                    height=get_ros_param(param_name="cloth_x_size", default=0.45),
-                    width_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=17),
-                    height_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=23))
+                    width=get_ros_param(param_name="cloth_x_size", default=0.32),
+                    height=get_ros_param(param_name="cloth_y_size", default=0.45),
+                    width_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=20),
+                    height_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=27))
             self.key_func = chroma_key_mflag_lab
         self.listener_table = Listener(topic_name="/cdcpd/table_tf_matrix", topic_type=Float32MultiArray)
         if(self.use_gripper_prior):
@@ -155,9 +155,9 @@ class Tracker:
         marker_temp.pose.position.x = 0
         marker_temp.pose.position.y = 0
         marker_temp.pose.position.z = 0
-        marker_temp.pose.orientation.x = 0.0
-        marker_temp.pose.orientation.y = 0.0
-        marker_temp.pose.orientation.z = 0.0
+        marker_temp.pose.orientation.x = 0
+        marker_temp.pose.orientation.y = 0
+        marker_temp.pose.orientation.z = 0
         marker_temp.pose.orientation.w = 1.0
         marker_temp.scale.x = 0.01
         marker_temp.scale.y = 0.01
@@ -173,24 +173,24 @@ class Tracker:
 
         self.vis_pub.publish( marker_temp )
 
-    def display_cube(self, msg):
+    def display_cube(self, msg, lower_bound, upper_bound):
         markers = Marker()
         markers.type = Marker.CUBE
         markers.ns = "table_offset"
         markers.id = 2
         markers.action = Marker.ADD
-        markers.header.stamp = msg.header.stamp
-        markers.header.frame_id = "table_surface"
-        markers.scale.x = 0.6
-        markers.scale.y = 1
-        markers.scale.z = 0.3
+        markers.header = msg.header
+        # markers.header.frame_id = "table_surface"
+        markers.scale.x = 0.2 + upper_bound[0] - lower_bound[0]
+        markers.scale.y = 0.2 + upper_bound[1] - lower_bound[1]
+        markers.scale.z = 0.2 + upper_bound[2] - lower_bound[2]
         markers.color.a = 1.0
         markers.color.r = 1.0
         markers.color.g = 0.0
         markers.color.b = 0.0
-        markers.pose.position.x = 0
-        markers.pose.position.y = 0
-        markers.pose.position.z = 0.15
+        markers.pose.position.x = (lower_bound[0] + upper_bound[0])/2
+        markers.pose.position.y = (lower_bound[1] + upper_bound[1])/2
+        markers.pose.position.z = (lower_bound[2] + upper_bound[2])/2
         markers.pose.orientation.x = 0.0
         markers.pose.orientation.y = 0.0
         markers.pose.orientation.z = 0.0
@@ -232,16 +232,23 @@ class Tracker:
         if(self.object_name=="cloth" and self.count!=0):
             upper_bound = self.tracking_result.max(axis=0)
             lower_bound = self.tracking_result.min(axis=0)
-        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), lower_bound, upper_bound)
+        # mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), lower_bound, upper_bound)
+        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), np.asarray([-5,-5,-5]), np.asarray([5,5,5]))
         filtered_points = point_cloud_img[mask_img]
 
-        if point_cloud_img.dtype is not np.float32:
-            point_cloud_img = point_cloud_img.astype(np.float32)
-        out_struct_arr = unstructured_to_structured(point_cloud_img, names=['x', 'y', 'z'])
-        pub_points_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
-        pub_points_msg.header = msg.header
-        pub_points_msg.header.frame_id ='table_surface'
-        self.pub_points.publish(pub_points_msg)
+        # if point_cloud_img.dtype is not np.float32:
+        #     point_cloud_img = point_cloud_img.astype(np.float32)
+        # out_struct_arr = unstructured_to_structured(point_cloud_img, names=['x', 'y', 'z'])
+        # pub_points_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
+        # pub_points_msg.header = msg.header
+        # # pub_points_msg.header.frame_id ='table_surface'
+        # self.pub_points.publish(pub_points_msg)
+        # self.pub_points.publish(pub_points_msg)
+        # self.pub_points.publish(pub_points_msg)
+        # self.pub_points.publish(pub_points_msg)
+        # self.pub_points.publish(pub_points_msg)
+        # self.pub_points.publish(pub_points_msg)
+        # self.pub_points.publish(pub_points_msg)
 
         if filtered_points.dtype is not np.float32:
             filtered_points = filtered_points.astype(np.float32)
@@ -271,10 +278,11 @@ class Tracker:
         pub_sample_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_sample_msg.header = msg.header
         self.pub_sample.publish(pub_sample_msg)
+
         # """
         # remove at the end
         # """
-        # self.display_cube(msg)
+        self.display_cube(msg, lower_bound, upper_bound)
         # filtered_points = point_cloud_img[mask_img]
 
         if(self.use_gripper_prior):
@@ -313,6 +321,7 @@ class Tracker:
             self.display_violations_1(violate_points_1, msg)
             self.display_violations_2(violate_points_2, msg)
         self.count+=1
+        # temp = input("Prompt: ")
 
 
 def main():
