@@ -40,17 +40,15 @@ class ThresholdVisibilityPrior(Prior):
     Generates visibility of nodes based on how far away it is from point cloud
     and how far away it is from object mask.
     """
-    def __init__(self, intrinsic_mat, k=1e1, saturation_threshold=0.01):
+    def __init__(self, intrinsic_mat, k=1e1):
         """
         Constructor
         :param intrinsic_mat: (3, 3) numpy array for camera intrinsics matrix
         :param k: controls flatness of exp(-k*x). The larger the more tolerant.
-        :param saturation_threshold: Above this threshold, probability will be filled as 1.
         """
 
         self.intrinsic_mat = intrinsic_mat
         self.k = k
-        self.saturation_threshold = saturation_threshold
         self.point_cloud = None
         self.mask = None
 
@@ -59,6 +57,9 @@ class ThresholdVisibilityPrior(Prior):
         self.mask = mask
 
     def run(self, verts):
+        """
+        :return: The probability that a point in verts generated *any* point in self.mask
+        """
         projected = project_image_space(verts, self.intrinsic_mat)
         projected[:, 0] = np.clip(projected[:, 0], 0, self.point_cloud.shape[1])
         projected[:, 1] = np.clip(projected[:, 1], 0, self.point_cloud.shape[0])
@@ -73,23 +74,13 @@ class ThresholdVisibilityPrior(Prior):
         depth_diff = np.clip(depth - image_depth, 0, np.inf)
         # fill nan with positive value to prevent numerical problem
         depth_diff[np.isnan(depth_diff)] = 0.02
+        depth_factor = np.maximum(depth_diff, 0.0)
 
         dist_img = cv2.distanceTransform(
             np.logical_not(self.mask).astype(np.uint8), distanceType=cv2.DIST_L2, maskSize=5)
         dist_to_mask = dist_img[coords[:, 1], coords[:, 0]]
-        #plt.imshow(dist_img)
-        #plt.pause(0.1)
-        score = dist_to_mask * depth_diff
+
+        score = dist_to_mask * depth_factor
         prob = np.exp(-self.k * score)
-        #np.clip()
-        prob[prob<self.saturation_threshold] = 1.0
-        #plt.subplot(2,1,1)
-        #plt.plot(prob)
 
-        #plt.subplot(2,1,2)
-        #plt.imshow(self.mask)
-
-        #plt.draw()
-        #plt.pause(0.01)
-        #plt.clf()
         return prob
