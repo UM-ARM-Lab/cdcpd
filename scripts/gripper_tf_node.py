@@ -17,7 +17,7 @@ if(use_gripper_prior):
     pub_left = rospy.Publisher("/cdcpd/left_gripper_prior", TransformStamped, queue_size=10)
     pub_right = rospy.Publisher("/cdcpd/right_gripper_prior", TransformStamped, queue_size=10)
 
-pub_table = rospy.Publisher("/cdcpd/table_tf_matrix", Float32MultiArray, queue_size=10)
+# pub_table = rospy.Publisher("/cdcpd/table_tf_matrix", Float32MultiArray, queue_size=10)
 
 use_victor = get_ros_param(param_name="use_victor", default=True)
 use_val = get_ros_param(param_name="use_val", default=False)
@@ -59,7 +59,7 @@ def main():
     if(use_gripper_prior):
         left_gripper_tf_name = tf_wrapper.GripperTFName(arm_name=gripper0_name)
         right_gripper_tf_name = tf_wrapper.GripperTFName(arm_name=gripper1_name)
-    table_frame_tf_name = 'table_surface'
+    # table_frame_tf_name = 'table_surface'
     while not rospy.is_shutdown():
         stamp = rospy.get_rostime()
         if(use_gripper_prior):
@@ -67,12 +67,12 @@ def main():
             right_gripper = getGripperTransform(gripper_name=right_gripper_tf_name, target_frame=target_frame, stamp=stamp)
             pub_left.publish(left_gripper)
             pub_right.publish(right_gripper)
-        table_frame = tf_wrapper.get_transform_ros(parent=table_frame_tf_name, child=target_frame)
-        table_tf_matrix = tf_wrapper.TransformToMatrix(table_frame)
-        table_tf_matrix = table_tf_matrix.flatten()
-        table_msg = Float32MultiArray()
-        table_msg.data = table_tf_matrix
-        pub_table.publish(table_msg)
+        # table_frame = tf_wrapper.get_transform_ros(parent=table_frame_tf_name, child=target_frame)
+        # table_tf_matrix = tf_wrapper.TransformToMatrix(table_frame)
+        # table_tf_matrix = table_tf_matrix.flatten()
+        # table_msg = Float32MultiArray()
+        # table_msg.data = table_tf_matrix
+        # pub_table.publish(table_msg)
         rate.sleep()
 
 main()

@@ -7,12 +7,21 @@ project(cdcpd)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
+set(CATKIN_PACKAGES 
   geometry_msgs
   rospy
   sensor_msgs
   tf2
+  pcl_ros
+  pcl_conversions)
+find_package(catkin REQUIRED COMPONENTS
+  ${CATKIN_PACKAGES}
 )
+#find_package(PCL REQUIRED)
+
+#include_directories(${PCL_INCLUDE_DIRS})
+
+#link_directories(${PCL_LIBRARY_DIRS})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -106,7 +115,7 @@ catkin_python_setup()
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES cdcpd
-#  CATKIN_DEPENDS geometry_msgs rospy sensor_msgs tf2
+  CATKIN_DEPENDS ${CATKIN_PACKAGES}
 #  DEPENDS system_lib
 )
 
@@ -116,11 +125,16 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
 )
 
+
+add_executable(bag_pcl src/rosbag_pcl.cpp)
+target_link_libraries(bag_pcl ${catkin_LIBRARIES}
+)
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/cdcpd.cpp

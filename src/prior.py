@@ -86,14 +86,14 @@ class ThresholdVisibilityPrior(Prior):
 
         score = dist_to_mask * depth_factor
         prob = np.exp(-self.k * score)
-        plt.subplot(3,1,1)
-        plt.plot(prob)
+        # plt.subplot(3,1,1)
+        # plt.plot(prob)
 
-        plt.subplot(3,1,2)
-        plt.plot(depth_factor)
-        plt.subplot(3,1,3)
-        plt.plot(dist_to_mask)
-        plt.draw()
-        plt.pause(0.01)
-        plt.clf()
+        # plt.subplot(3,1,2)
+        # plt.plot(depth_factor)
+        # plt.subplot(3,1,3)
+        # plt.plot(dist_to_mask)
+        # plt.draw()
+        # plt.pause(0.01)
+        # plt.clf()
         return prob

@@ -4,7 +4,7 @@ import numexpr as ne
 import matplotlib.pyplot as plt
 
 
-def chroma_key_rope(points, colors, table, lower_bound, upper_bound):
+def chroma_key_rope(points, colors, lower_bound, upper_bound):
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
@@ -12,7 +12,7 @@ def chroma_key_rope(points, colors, table, lower_bound, upper_bound):
     mask = ne.evaluate("(h > 0.85) & (s > 0.5) & ~(points_z != points_z)")
     return mask, points
 
-def chroma_key_mflag_lab(points, colors, table, lower_bound, upper_bound):
+def chroma_key_mflag_lab(points, colors, lower_bound, upper_bound):
     # table = np.reshape(table, (4,4))
     # sh = points.shape
     # points = points.transpose(2,0,1).reshape(points.shape[2], -1)
