@@ -60,11 +60,13 @@ class Tracker:
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
         elif(self.object_name=="cloth"):
+            self.width_num_node = get_ros_param(param_name="cloth_num_control_points_x", default=20)
+            self.height_num_node = get_ros_param(param_name="cloth_num_control_points_y", default=27)
             self.template_verts, self.template_edges = build_rectangle(
                     width=get_ros_param(param_name="cloth_x_size", default=0.32),
                     height=get_ros_param(param_name="cloth_y_size", default=0.45),
-                    width_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=20),
-                    height_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=27))
+                    width_num_node=self.width_num_node,
+                    height_num_node=self.height_num_node)
             self.key_func = chroma_key_mflag_lab
         # self.listener_table = Listener(topic_name="/cdcpd/table_tf_matrix", topic_type=Float32MultiArray)
         if(self.use_gripper_prior):
@@ -313,7 +315,19 @@ class Tracker:
             if violate_points_2.dtype is not np.float32:
                 violate_points_2 = violate_points_2.astype(np.float32)
 
-        out_struct_arr = unstructured_to_structured(self.tracking_result, names=['x', 'y', 'z'])
+        # import IPython
+        # IPython.embed()
+
+        # print(self.tracking_result[0:265:19])
+
+        reshaped1 = np.reshape(self.tracking_result, (self.width_num_node, self.height_num_node, 3))
+        transposed1 = reshaped1.transpose(1,0,2)
+        reshaped2 = np.reshape(transposed1, np.shape(self.template_verts))
+
+        # print(reshaped2[:14, :])
+
+
+        out_struct_arr = unstructured_to_structured(reshaped2, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
 
@@ -325,7 +339,7 @@ class Tracker:
         if(self.visualize_violations):
             self.display_violations_1(violate_points_1, msg)
             self.display_violations_2(violate_points_2, msg)
-        self.count+=1
+        self.count += 1
         # temp = input("Prompt: ")
 
 
