@@ -18,6 +18,8 @@
     </group>
     <node name="cdcpd_node" pkg="cdcpd" type="cdcpd_env.sh"/>
 
+    <node name="downsampling" pkg="cdcpd" type="bag_pcl"/>
+
     <group if="$(arg use_gripper_prior)">
         <node name="gripper_node" pkg="cdcpd" type="gripper_tf_node.py">
             <param name="kinect_frame" value="kinect2_$(arg kinect)_rgb_optical_frame" type="string" />
