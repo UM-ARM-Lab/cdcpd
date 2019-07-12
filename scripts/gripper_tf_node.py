@@ -11,7 +11,7 @@ from std_msgs.msg import *
 
 rospy.init_node('gripper_tf_node')
 
-use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=False)
+use_gripper_prior = get_ros_param(param_name="cdcpd_node/use_gripper_prior", default=False)
 
 if(use_gripper_prior):
     pub_left = rospy.Publisher("/cdcpd/left_gripper_prior", TransformStamped, queue_size=10)
@@ -55,7 +55,7 @@ def getGripperTransform(gripper_name, target_frame, stamp):
 
 def main():
     rate = rospy.Rate(100.0)
-    
+
     if(use_gripper_prior):
         left_gripper_tf_name = tf_wrapper.GripperTFName(arm_name=gripper0_name)
         right_gripper_tf_name = tf_wrapper.GripperTFName(arm_name=gripper1_name)

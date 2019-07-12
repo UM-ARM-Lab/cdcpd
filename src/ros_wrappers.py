@@ -53,8 +53,10 @@ def wait_for(func):
 
 def get_ros_param(param_name, default):
     try:
-        return rospy.get_param(param_name)
+        param = rospy.get_param(param_name)
+        rospy.loginfo("Using " + param_name + " from server: " + str(param))
+        return param
         
     except KeyError:
-        print("Default value of "+param_name+" used")
+        rospy.loginfo("Default value of " + param_name + " used: " + str(default))
         return default
