@@ -249,7 +249,7 @@ class Tracker:
 
         upper_bound = 5 * np.ones((3,))
         lower_bound = -5 * np.ones((3,))
-        if(self.object_name=="cloth" and self.count!=0):
+        if(self.count!=0):
             upper_bound = self.tracking_result.max(axis=0)
             lower_bound = self.tracking_result.min(axis=0)
         mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, lower_bound, upper_bound)
