@@ -6,6 +6,7 @@ import rospy
 import pickle
 from sensor_msgs import point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import *
 import numpy as np
@@ -49,60 +50,80 @@ class Tracker:
         self.object_name = object_name
         self.tracking_result = None
         self.count = 0
+
         self.use_pickle = get_ros_param(param_name="~use_pickle", default=False)
         self.use_gripper_prior = get_ros_param(param_name="~use_gripper_prior", default=False)
         self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=False)
         self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
+
         if(self.use_pickle):
             self.input_data = pickle.load(open("/home/deformtrack/examples/data/flickertest_cloth2.pk", "rb"))
         if(self.object_name=="rope"):
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
         elif(self.object_name=="cloth"):
+            self.template_rows = get_ros_param(param_name="cloth_num_control_points_x", default=20)
+            self.template_cols = get_ros_param(param_name="cloth_num_control_points_y", default=27)
             self.template_verts, self.template_edges = build_rectangle(
                     width=get_ros_param(param_name="cloth_x_size", default=0.32),
                     height=get_ros_param(param_name="cloth_y_size", default=0.45),
-                    width_num_node=get_ros_param(param_name="cloth_num_control_points_x", default=20),
-                    height_num_node=get_ros_param(param_name="cloth_num_control_points_y", default=27))
+                    width_num_node=self.template_rows,
+                    height_num_node=self.template_cols)
             self.key_func = chroma_key_mflag_lab
-        self.listener_table = Listener(topic_name="/cdcpd/table_tf_matrix", topic_type=Float32MultiArray)
+
+        self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
         if(self.use_gripper_prior):
-            print("true")
-            self.prior = UniformPrior()
-            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges,
-             use_gripper_prior = self.use_gripper_prior, use_passingthru_constraint = self.use_passingthru_constraint,
-             visualize_violations = self.visualize_violations)
+            print("Using gripperer prior")
+            self.optimizer = EdgeConstrainedOptimizer(
+                template=self.template_verts,
+                edges=self.template_edges,
+                use_gripper_prior = self.use_gripper_prior,
+                use_passingthru_constraint = self.use_passingthru_constraint,
+                visualize_violations = self.visualize_violations)
             self.listener_left = Listener(topic_name="/cdcpd/left_gripper_prior", topic_type=TransformStamped)
             self.listener_right = Listener(topic_name="/cdcpd/right_gripper_prior", topic_type=TransformStamped)
         else:
-            self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
-            self.optimizer = EdgeConstrainedOptimizer(template=self.template_verts, edges=self.template_edges,
-                use_gripper_prior = self.use_gripper_prior, use_passingthru_constraint = self.use_passingthru_constraint,
+            self.optimizer = EdgeConstrainedOptimizer(
+                template=self.template_verts,
+                edges=self.template_edges,
+                use_gripper_prior = self.use_gripper_prior,
+                use_passingthru_constraint = self.use_passingthru_constraint,
                 visualize_violations = self.visualize_violations)
 
         self.cpd_params = CPDParams()
 
         if(get_ros_param(param_name="~use_failure_recovery", default=False)):
             self.cost_estimator = SmoothFreeSpaceCost(self.kinect_intrinsics)
-            self.cdcpd_params = CDCPDParams(prior=self.prior,
-                               optimizer=self.optimizer,
-                               use_recovery=True,
-                               visualize_violations = self.visualize_violations,
-                               recovery_cost_estimator=self.cost_estimator,
-                               recovery_cost_threshold=0.1)
+            self.cdcpd_params = CDCPDParams(
+                prior=self.prior,
+                optimizer=self.optimizer,
+                template_rows=self.template_rows,
+                template_cols=self.template_cols,
+                down_sample_size=300,
+                visualize_violations = self.visualize_violations,
+                use_recovery=True,
+                recovery_cost_estimator=self.cost_estimator,
+                recovery_cost_threshold=0.1)
         else:
-            self.cdcpd_params = CDCPDParams(prior=self.prior, optimizer=self.optimizer,down_sample_size=500)
+            self.cdcpd_params = CDCPDParams(
+                prior=self.prior,
+                optimizer=self.optimizer,
+                template_rows=self.template_rows,
+                template_cols=self.template_cols,
+                down_sample_size=300,
+                visualize_violations=self.visualize_violations)
 
         self.cdcpd = ConstrainedDeformableCPD(template=self.template_verts,
-                                         cdcpd_params=self.cdcpd_params)
+                                              cdcpd_params=self.cdcpd_params)
 
         if(self.use_gripper_prior):
-            self.gripper_prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0), get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
+            self.gripper_prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0),
+                                      get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
 
         # initialize ROS publisher
         self.pub = rospy.Publisher("/cdcpd/tracker_points", PointCloud2, queue_size=10)
         self.pub_filter = rospy.Publisher("/cdcpd/mask_filtered_points", PointCloud2, queue_size=10)
-        self.pub_sample = rospy.Publisher("/cdcpd/mask_down_sampled_points", PointCloud2, queue_size=10)
+        self.sub_sample = Listener(topic_name="/cdcpd/mask_down_sampled_points", topic_type=PointCloud2)
         self.pub_points = rospy.Publisher("/cdcpd/new_point_cloud", PointCloud2, queue_size=10)
         # if(self.visualize_violations):
         self.vis_pub = rospy.Publisher("/cdcpd/visualization_marker", Marker, queue_size=10)
@@ -197,14 +218,13 @@ class Tracker:
         markers.pose.orientation.w = 1.0
         self.vis_pub.publish(markers)
 
-
     def cdcpd_main(self):
         # converting ROS message to dense numpy array
         # print("1"+"--- %s seconds ---" % (time.time() - start_time))
 
         msg = self.sub.get()
         data = ros_numpy.numpify(msg)
-        table_data = self.listener_table.get()
+        # table_data = self.listener_table.get()
         # Used to disable the transform if we are so inclined
         # table_data.data = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
         if(self.use_gripper_prior):
@@ -232,8 +252,7 @@ class Tracker:
         if(self.object_name=="cloth" and self.count!=0):
             upper_bound = self.tracking_result.max(axis=0)
             lower_bound = self.tracking_result.min(axis=0)
-        # mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), lower_bound, upper_bound)
-        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, np.asarray(table_data.data), np.asarray([-5,-5,-5]), np.asarray([5,5,5]))
+        mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, lower_bound, upper_bound)
         filtered_points = point_cloud_img[mask_img]
 
         # if point_cloud_img.dtype is not np.float32:
@@ -267,17 +286,21 @@ class Tracker:
 
         if len(filtered_points) <= len(self.template_verts):
             raise ValueError("Not enough point in masked point cloud.")
+        msg_sample = self.sub_sample.get()
+        data_sample = ros_numpy.numpify(msg_sample)
+        # arr = ros_numpy.point_cloud2.split_rgb_field(data_sample)
+        down_sampled_points = structured_to_unstructured(data_sample[['x', 'y', 'z']])
+        self.down_sample_size = down_sampled_points.shape[0]
+        # rand_idx = np.random.randint(0, filtered_points.shape[0],
+        #                              size=self.cdcpd_params.down_sample_size, dtype=np.uint32)
+        # down_sampled_points = filtered_points[rand_idx]
 
-        rand_idx = np.random.randint(0, filtered_points.shape[0],
-                                     size=self.cdcpd_params.down_sample_size, dtype=np.uint32)
-        down_sampled_points = filtered_points[rand_idx]
-
-        if down_sampled_points.dtype is not np.float32:
-            down_sampled_points = down_sampled_points.astype(np.float32)
-        out_struct_arr = unstructured_to_structured(down_sampled_points, names=['x', 'y', 'z'])
-        pub_sample_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
-        pub_sample_msg.header = msg.header
-        self.pub_sample.publish(pub_sample_msg)
+        # if down_sampled_points.dtype is not np.float32:
+        #     down_sampled_points = down_sampled_points.astype(np.float32)
+        # out_struct_arr = unstructured_to_structured(down_sampled_points, names=['x', 'y', 'z'])
+        # pub_sample_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
+        # pub_sample_msg.header = msg.header
+        # self.pub_sample.publish(pub_sample_msg)
 
         # """
         # remove at the end
@@ -308,6 +331,11 @@ class Tracker:
             if violate_points_2.dtype is not np.float32:
                 violate_points_2 = violate_points_2.astype(np.float32)
 
+        # Ensure that the result is in the same data order as expected by SMMAP
+        reshaped1 = np.reshape(self.tracking_result, (self.template_rows, self.template_cols, 3))
+        transposed1 = reshaped1.transpose(1,0,2)
+        self.tracking_result = np.reshape(transposed1, np.shape(self.template_verts))
+
         out_struct_arr = unstructured_to_structured(self.tracking_result, names=['x', 'y', 'z'])
         pub_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_msg.header = msg.header
@@ -320,7 +348,7 @@ class Tracker:
         if(self.visualize_violations):
             self.display_violations_1(violate_points_1, msg)
             self.display_violations_2(violate_points_2, msg)
-        self.count+=1
+        self.count += 1
         # temp = input("Prompt: ")
 
 

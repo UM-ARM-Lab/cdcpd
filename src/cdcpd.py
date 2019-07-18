@@ -15,6 +15,8 @@ class CDCPDParams:
     def __init__(self,
                  prior: Prior,
                  optimizer: Optimizer,
+                 template_rows,
+                 template_cols,
                  down_sample_size=300,
                  use_lle=True,
                  lle_neighbors=8,
@@ -40,9 +42,13 @@ class CDCPDParams:
         :param recovery_cost_threshold: Threshold for recovery_cost to be deemed as tracking failure.
         """
 
-        self.down_sample_size = down_sample_size
         self.prior = prior
         self.optimizer = optimizer
+        self.template_rows = template_rows
+        self.template_cols = template_cols
+        self.template_nodes = template_rows * template_cols
+        # Note: as implemented, down_sample_size is only used by the rope tracker
+        self.down_sample_size = down_sample_size
         self.use_lle = use_lle
         self.lle_neighbors = lle_neighbors
         self.use_recovery = use_recovery
@@ -54,7 +60,8 @@ class CDCPDParams:
 
 
 class ConstrainedDeformableCPD:
-    def __init__(self, template,
+    def __init__(self,
+                 template,
                  cdcpd_params: CDCPDParams):
         """
         Constructor.
@@ -114,6 +121,11 @@ class ConstrainedDeformableCPD:
         cpd = CPD(down_sampled_points, self.template, curr_cpd_param)
         cpd_result = cpd.run()
         tracking_result = cpd_result
+
+        # reshaped1 = np.reshape(tracking_result, (self.cdcpd_params.template_rows, self.cdcpd_params.template_cols, 3))
+        # transposed1 = reshaped1.transpose(1, 0, 2)
+        # tracking_result = np.reshape(transposed1, np.shape(tracking_result))
+
         # print("14"+"--- %s seconds ---" % (time.time() - start_time))
         # Optimization
         if self.cdcpd_params.optimizer is not None:
