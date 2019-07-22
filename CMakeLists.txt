@@ -132,8 +132,8 @@ include_directories(
 )
 
 
-add_executable(bag_pcl src/rosbag_pcl.cpp)
-target_link_libraries(bag_pcl ${catkin_LIBRARIES}
+add_executable(pcl_filtering src/rospcl_filtering.cpp)
+target_link_libraries(pcl_filtering ${catkin_LIBRARIES}
 )
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
