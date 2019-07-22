@@ -28,8 +28,8 @@ class Generator:
         self.color_img.append(color)
 
     def store(self):
-    	input_data = {"colour_img" : self.color_img, "point_cloud" : self.point_cloud_img}
-    	pickle.dump(input_data, open("/home/deformtrack/examples/data/"+file_name_suffix+".pk", "wb"))
+        input_data = {"colour_img" : self.color_img, "point_cloud" : self.point_cloud_img}
+        pickle.dump(input_data, open("/home/deformtrack/examples/data/"+file_name_suffix+".pk", "wb"))
         
         
 def main():
