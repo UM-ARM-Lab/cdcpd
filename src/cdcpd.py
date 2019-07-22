@@ -1,5 +1,4 @@
 import time
-start_time = time.time()
 import numpy as np
 from cpd import CPDParams, CPD
 from optimizer import Optimizer
@@ -10,6 +9,8 @@ import copy
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+
+start_time = time.time()
 
 class CDCPDParams:
     def __init__(self,
@@ -36,7 +37,7 @@ class CDCPDParams:
         :param lle_neighbors: k for k-nearest-neighbors number for LLE
         :param use_recovery: Whether uses tracking failure recovery or not.
         :param recovery_cost_estimator: Reference to a cost estimator, estimates likelihood of current tracking
-        result to be correct. The higher the cost, the lower the likelihood.
+         result to be correct. The higher the cost, the lower the likelihood.
         :param recovery_knn_k: k for k-nearest-neighbors of feature library query
         :param recovery_featrue_sample_size: Target size for point cloud random down-sample for feature extractor
         :param recovery_cost_threshold: Threshold for recovery_cost to be deemed as tracking failure.

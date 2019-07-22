@@ -140,7 +140,7 @@ class CPD:
 
         den = np.sum(P, axis=0)
         den = np.tile(den, (M, 1))
-        den[den == 0] = np.finfo(float).eps 
+        den[den == 0] = np.finfo(float).eps
         den += c
 
         self.P = np.divide(P, den)

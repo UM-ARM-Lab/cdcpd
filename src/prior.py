@@ -88,11 +88,6 @@ class ThresholdVisibilityPrior(Prior):
         prob = np.exp(-self.k * score)
         # plt.subplot(3,1,1)
         # plt.plot(prob)
-<<<<<<< HEAD
-        #
-=======
-
->>>>>>> convex_optimization
         # plt.subplot(3,1,2)
         # plt.plot(depth_factor)
         # plt.subplot(3,1,3)

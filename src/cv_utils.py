@@ -9,11 +9,11 @@ def chroma_key_rope(points, colors, lower_bound, upper_bound):
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
     x, y, z = np.transpose(points, axes=[2, 0, 1])
-    x_lower = lower_bound[0] - x 
-    y_lower = lower_bound[1] - y 
-    z_lower = lower_bound[2] - z 
-    x_upper = x - upper_bound[0] 
-    y_upper = y - upper_bound[1] 
+    x_lower = lower_bound[0] - x
+    y_lower = lower_bound[1] - y
+    z_lower = lower_bound[2] - z
+    x_upper = x - upper_bound[0]
+    y_upper = y - upper_bound[1]
     z_upper = z - upper_bound[2]
     points_z = points[:, :, 0]
      # NaN filter, and box filter around current estimate of deformable object position
@@ -29,12 +29,12 @@ def chroma_key_mflag_lab(points, colors, lower_bound, upper_bound):
     hsv_img[:, :, 0] /= 360.0
     h, s, v = np.transpose(hsv_img, axes=[2, 0, 1])
     x, y, z = np.transpose(points, axes=[2, 0, 1])
-    x_lower = lower_bound[0] - x 
-    y_lower = lower_bound[1] - y 
-    z_lower = lower_bound[2] - z 
-    x_upper = x - upper_bound[0] 
-    y_upper = y - upper_bound[1] 
-    z_upper = z - upper_bound[2] 
+    x_lower = lower_bound[0] - x
+    y_lower = lower_bound[1] - y
+    z_lower = lower_bound[2] - z
+    x_upper = x - upper_bound[0]
+    y_upper = y - upper_bound[1]
+    z_upper = z - upper_bound[2]
     points_z = points[:,:,2]
 
     # NaN filter, and box filter around current estimate of deformable object position

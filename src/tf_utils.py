@@ -12,14 +12,22 @@ class TF2Wrapper:
         self.tf_static_broadcasters = []
 
     def GripperTFName(self, arm_name):
-    	if(get_ros_param(param_name="use_victor", default=True)):
-    		return "victor_" + arm_name + "_gripper"
-    	elif(get_ros_param(param_name="use_val", default=False)):
-    		return arm_name + "gripper_tip"
+        use_victor = get_ros_param(param_name="use_victor", default=True)
+        use_val = get_ros_param(param_name="use_val", default=False)
+
+        if not (use_victor ^ use_val):
+            raise ValueError("One (and only one) of use_victor or use_val must be set on the parameter server")
+
+        if use_victor:
+            return "victor_" + arm_name + "_gripper"
+        if use_val:
+            return arm_name + "gripper_tip"
+
+        raise TypeError("Logic error: this code should be unreachable")
 
 
     def get_transform_ros(self, parent, child, verbose=True,
-                      spin_delay=rospy.Duration(secs=0, nsecs=500 * 1000 * 1000), time=rospy.Time()):
+            spin_delay=rospy.Duration(secs=0, nsecs=500 * 1000 * 1000), time=rospy.Time()):
         """
         Waits for a transform to become available. Blocks until a transform is available or an exception is raised.
         :param parent: frame name for the parent (see below)
