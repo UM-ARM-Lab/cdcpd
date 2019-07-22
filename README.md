@@ -42,7 +42,7 @@ Note that gurobi installation requires university network. If you are not on cam
 If you use a IDE such as pycharm or vscode, remember to set project interpretor to this virtual enviornment.
 
 For all following oprations, make sure the newly crearted virtual enviornment is activated. The command line should show the name of virtual enviornment in brackets:
-`(cpdenv) username@hostname:`
+`(catkin_cdcpd) username@hostname:`
 
 clone repositories into your catkin workspace:
 ```
@@ -52,7 +52,7 @@ git clone git@github.com:eric-wieser/ros_numpy.git
 
 install the rest of the requirements via pip:
 ```
-pip install -r requirements.txt 
+(catkin_cdcpd) username@hostname: pip install -r cdcpd/requirements.txt 
 ```
 You may noticed that a package named [glplotlib](https://github.com/cheng-chi/glplotlib) is installed by pip. glplotlib is another opensource library developed by Cheng Chi for virualizing 3D point cloud with better performance (comparing to matplotlib).
 
