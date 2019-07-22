@@ -16,7 +16,6 @@ class Listener:
             topic_type (msg_type): type of message received on topic
             wait_for_data (bool):  block constructor until a message has been received
         """
-
         self.data = None
         self.lock = Lock()
 
@@ -56,7 +55,8 @@ def get_ros_param(param_name, default):
         param = rospy.get_param(param_name)
         rospy.loginfo("Using " + param_name + " from server: " + str(param))
         return param
-        
+
     except KeyError:
         rospy.loginfo("Default value of " + param_name + " used: " + str(default))
         return default
+
