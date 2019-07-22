@@ -13,15 +13,9 @@ set(CATKIN_PACKAGES
   sensor_msgs
   tf2
   pcl_ros
-  pcl_conversions)
-find_package(catkin REQUIRED COMPONENTS
-  ${CATKIN_PACKAGES}
+  pcl_conversions
 )
-#find_package(PCL REQUIRED)
-
-#include_directories(${PCL_INCLUDE_DIRS})
-
-#link_directories(${PCL_LIBRARY_DIRS})
+find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
