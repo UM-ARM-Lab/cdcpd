@@ -44,7 +44,7 @@ For all following oprations, make sure the newly crearted virtual enviornment is
 
 clone repository:
 ```
-git clone git@github.com:UM-ARM-Lab/cdcpd.git
+git clone git@github.com:UM-ARM-Lab/cdcpd.git --branch v0.1.0 --single-branch
 ```
 
 install pip package:
