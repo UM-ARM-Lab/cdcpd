@@ -80,7 +80,4 @@ class ThresholdVisibilityPrior(Prior):
 
         score = dist_to_mask * depth_diff
         prob = np.exp(-self.k * score)
-
-        if prob.sum() < self.saturation_threshold:
-            prob[:] = 1
         return prob
