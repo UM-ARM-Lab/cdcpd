@@ -56,12 +56,15 @@ class Tracker:
         self.use_passingthru_constraint = get_ros_param(param_name="~use_passingthru_constraint", default=False)
         self.visualize_violations = get_ros_param(param_name="~visualize_violations", default=False)
 
-        if(self.use_pickle):
+        if self.use_pickle:
             self.input_data = pickle.load(open("/home/deformtrack/examples/data/flickertest_cloth2.pk", "rb"))
-        if(self.object_name=="rope"):
+
+        if self.object_name=="rope":
+            self.template_rows = get_ros_param(param_name="rope_num_links", default=20)
+            self.template_cols = 1
             self.template_verts, self.template_edges = build_line(1.0, get_ros_param(param_name="rope_num_links", default=50))
             self.key_func = chroma_key_rope
-        elif(self.object_name=="cloth"):
+        elif self.object_name=="cloth":
             self.template_rows = get_ros_param(param_name="cloth_num_control_points_x", default=20)
             self.template_cols = get_ros_param(param_name="cloth_num_control_points_y", default=27)
             self.template_verts, self.template_edges = build_rectangle(
@@ -72,7 +75,7 @@ class Tracker:
             self.key_func = chroma_key_mflag_lab
 
         self.prior = ThresholdVisibilityPrior(self.kinect_intrinsics)
-        if(self.use_gripper_prior):
+        if self.use_gripper_prior:
             print("Using gripperer prior")
             self.optimizer = EdgeConstrainedOptimizer(
                 template=self.template_verts,
@@ -92,7 +95,7 @@ class Tracker:
 
         self.cpd_params = CPDParams()
 
-        if(get_ros_param(param_name="~use_failure_recovery", default=False)):
+        if get_ros_param(param_name="~use_failure_recovery", default=False):
             self.cost_estimator = SmoothFreeSpaceCost(self.kinect_intrinsics)
             self.cdcpd_params = CDCPDParams(
                 prior=self.prior,
@@ -116,7 +119,7 @@ class Tracker:
         self.cdcpd = ConstrainedDeformableCPD(template=self.template_verts,
                                               cdcpd_params=self.cdcpd_params)
 
-        if(self.use_gripper_prior):
+        if self.use_gripper_prior:
             self.gripper_prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0),
                                       get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
 
@@ -252,6 +255,7 @@ class Tracker:
         if(self.count!=0):
             upper_bound = self.tracking_result.max(axis=0)
             lower_bound = self.tracking_result.min(axis=0)
+
         mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, lower_bound, upper_bound)
         filtered_points = point_cloud_img[mask_img]
 

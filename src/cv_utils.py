@@ -22,7 +22,7 @@ def chroma_key_rope(points, colors, lower_bound, upper_bound):
     #Filter red rope
     red_rope_mask = ne.evaluate("(h > 0.85) & (s > 0.5)")
     mask = ne.evaluate("""xyz_mask & red_rope_mask""")
-    return mask
+    return mask, points
 
 def chroma_key_mflag_lab(points, colors, lower_bound, upper_bound):
     hsv_img = cv2.cvtColor(colors.astype(np.float32) / 255.0, code=cv2.COLOR_RGB2HSV)
