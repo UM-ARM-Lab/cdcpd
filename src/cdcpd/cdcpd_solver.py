@@ -1,16 +1,13 @@
 import time
-import numpy as np
-from cpd import CPDParams, CPD
-from optimizer import Optimizer
-from prior import Prior
-from lle import locally_linear_embedding
-from failure_recovery import KnnLibrary
+from cdcpd.cpd import CPDParams, CPD
+from cdcpd.optimizer import Optimizer
+from cdcpd.prior import Prior
+from cdcpd.lle import locally_linear_embedding
+from cdcpd.failure_recovery import KnnLibrary
 import copy
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
 
 start_time = time.time()
+
 
 class CDCPDParams:
     def __init__(self,
@@ -22,7 +19,7 @@ class CDCPDParams:
                  use_lle=True,
                  lle_neighbors=8,
                  use_recovery=False,
-                 visualize_violations = False,
+                 visualize_violations=False,
                  recovery_cost_estimator=None,
                  recovery_knn_k=12,
                  recovery_featrue_sample_size=1500,
@@ -70,20 +67,15 @@ class ConstrainedDeformableCPD:
         :param cdcpd_params: Type of CDCPDParams
         """
         self.template = template
-        #X = self.template[:,0]
-        #Y = self.template[:,1]
-        #Z = self.template[:,2]
-
-        #fig = plt.figure()
-        #ax = fig.add_subplot(111)
-        #ax.scatter(X,Y)
-        #ax.axis('equal')
-        #plt.xlabel('X')
-        #plt.ylabel('Y')
-        #plt.show()
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
+        # ax.scatter(self.template[:,0], self.template[:,1])
+        # ax.axis('equal')
+        # plt.xlabel('X')
+        # plt.ylabel('Y')
+        # plt.show()
 
         self.iteration = 0
-        #self.prev_template = None
         self.cdcpd_params = cdcpd_params
         self.M_LLE = None
         if self.cdcpd_params.use_lle:
@@ -101,9 +93,10 @@ class ConstrainedDeformableCPD:
         """
         Performs one time-step of ConstrainedDeformableCPD.
         :param point_cloud: (H,W,3) point cloud image in camera frame.
+        :param down_sampled_points: a down sampled and filtered version of point_cloud
         :param mask: (H, W) binary mask for object of interest in point cloud.
         :param cpd_param: CPD parameters used in current time step. Generally, the first time step
-        in a tracking sequence should have less regularization (lower beta and lambd) than others.
+        in a tracking sequence should have less regularization (lower beta and lambda) than others.
         :return: (M, 3) tracking result. Same shape as template.
         """
         # print("11"+"--- %s seconds ---" % (time.time() ))
@@ -131,9 +124,10 @@ class ConstrainedDeformableCPD:
         # Optimization
         if self.cdcpd_params.optimizer is not None:
             optimizer = self.cdcpd_params.optimizer
-            optimization_result, violate_points_1, violate_points_2 = optimizer.run(tracking_result, self.template, self.iteration)
+            optimization_result, violate_points_1, violate_points_2 = \
+                optimizer.run(tracking_result, self.template, self.iteration)
             tracking_result = optimization_result.astype(self.template.dtype)
-            if(self.cdcpd_params.visualize_violations):
+            if self.cdcpd_params.visualize_violations:
                 violate_points_1 = violate_points_1.astype(self.template.dtype)
                 violate_points_2 = violate_points_2.astype(self.template.dtype)
 
@@ -142,7 +136,7 @@ class ConstrainedDeformableCPD:
         if not self.cdcpd_params.use_recovery:
             # set template  for next step
             self.template = tracking_result
-            self.iteration+=1
+            self.iteration += 1
             return tracking_result, violate_points_1, violate_points_2
 
         # Failure recovery
@@ -150,8 +144,8 @@ class ConstrainedDeformableCPD:
         cost_estimator.set_point_cloud(point_cloud, mask)
         tracking_failure_index = cost_estimator.run(tracking_result)
 
-        if tracking_failure_index > self.cdcpd_params.recovery_cost_threshold\
-            and self.knn_library.num_features() > self.cdcpd_params.recovery_knn_k:
+        if tracking_failure_index > self.cdcpd_params.recovery_cost_threshold \
+                and self.knn_library.num_features() > self.cdcpd_params.recovery_knn_k:
             min_index = tracking_failure_index
             final_tracking_result = tracking_result
             matched_templates = self.knn_library.query_template(down_sampled_points, k=self.cdcpd_params.recovery_knn_k)
@@ -164,7 +158,8 @@ class ConstrainedDeformableCPD:
                 # optimization
                 if self.cdcpd_params.optimizer is not None:
                     optimizer = self.cdcpd_params.optimizer
-                    optimization_result, violate_points_1, violate_points_2 = optimizer.run(tracking_result, self.template, self.iteration)
+                    optimization_result, violate_points_1, violate_points_2 = \
+                        optimizer.run(tracking_result, self.template, self.iteration)
                     tracking_result = optimization_result
 
                 tracking_failure_index = cost_estimator.run(tracking_result)
@@ -176,7 +171,6 @@ class ConstrainedDeformableCPD:
         else:
             self.knn_library.add_template(down_sampled_points, tracking_result)
 
-        #self.prev_template = template
-        self.iteration+=1
+        self.iteration += 1
         self.template = tracking_result
         return tracking_result, violate_points_1, violate_points_2

@@ -1,7 +1,6 @@
 import operator
 import numpy as np
 import gurobipy
-# import picos
 
 
 # generate object array from dictionary with tuple key
@@ -57,6 +56,15 @@ def add_constraints(model, lhs, operation_type="<=", rhs=None, name=''):
 
     constr_arr = _gen_obj_arr(constr_dict, lhs.shape)
     return constr_arr
+
+def remove_constraints(model, name):
+    for constr in model.getConstrs():
+        if constr.ConstrName[0:len(name)] == name:
+            model.remove(constr)
+    for constr in model.getQConstrs():
+        if constr.QCName[0:len(name)] == name:
+            model.remove(constr)
+    return
 
 # def add_constraint_picos(model, lhs, operation_type="<=", rhs=None, name=''):
 #     """

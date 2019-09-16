@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 from pcl_features import vfh
-from cv_utils import project_image_space
+from cdcpd.cv_utils import project_image_space
 
 
 class KnnLibrary:
