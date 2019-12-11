@@ -1,8 +1,6 @@
 import numpy as np
-import scipy
-from optimize_eqn import opt_equations
-from geometry_msgs.msg import Point
-import ros_numpy
+from cdcpd.optimize_eqn import opt_equations
+
 
 def edge_squared_distances(points, edges):
     diff = points[edges[:, 0]] - points[edges[:, 1]]

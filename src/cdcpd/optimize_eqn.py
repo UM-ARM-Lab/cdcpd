@@ -1,6 +1,4 @@
 import numpy as np
-import gurobipy
-import gurobi_utils as grb_utils
 from numpy import sign
 from numpy import abs
 

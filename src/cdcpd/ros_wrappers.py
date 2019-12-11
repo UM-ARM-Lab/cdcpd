@@ -57,6 +57,6 @@ def get_ros_param(param_name, default):
         return param
 
     except KeyError:
-        rospy.loginfo("Default value of " + param_name + " used: " + str(default))
+        rospy.logwarn("Default value of " + param_name + " used: " + str(default))
         return default
 
