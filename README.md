@@ -25,66 +25,84 @@ Requirements
 Installation
 ------------
 
+Note: these instructions have been tested on Ubuntu 18.04 and ROS Melodic only.
+
 #### Core Package
 
-Install miniconda https://docs.conda.io/en/latest/miniconda.html; use the python 3 version
-
-Create conda virtual enviornment with the packages that conda knows about, you must name it as shown for the roslaunch/scripts to run correctly. This environment is used to isolate python3 code from the default python2 code on Ubuntu 18.04 + ROS Melodic
+Clone the following repositories into your catkin workspace:
 ```
-conda create -c gurobi --name catkin_cdcpd python=3.7 opencv gurobi numpy scipy numexpr scikit-learn matplotlib
-conda activate catkin_cdcpd
-```
-
-Gurobi as a proprietary optimization package that we use. Please obtain a [free academic license](https://user.gurobi.com/download/licenses/free-academic)
-Install gurobi key with [grbgetkey](https://www.gurobi.com/documentation/8.1/quickstart_mac/retrieving_a_free_academic.html).
-Note that gurobi installation requires university network. If you are not on campus, follow this instruction to setup [UMVPN](https://documentation.its.umich.edu/vpn/vpn-linux-vpn-instructions).
-
-If you use a IDE such as pycharm or vscode, remember to set project interpretor to this virtual enviornment.
-
-For all following oprations, make sure the newly crearted virtual enviornment is activated. The command line should show the name of virtual enviornment in brackets:
-`(catkin_cdcpd) username@hostname:`
-
-clone repositories into your catkin workspace:
-```
+cd path/to/catkin_ws/src/
 git clone git@github.com:UM-ARM-Lab/cdcpd.git
 git clone git@github.com:eric-wieser/ros_numpy.git
 ```
-
-install the rest of the requirements via pip:
+Build the project (tested with `catkin build`, not `catkin_make`)
 ```
-(catkin_cdcpd) username@hostname: pip install -r cdcpd/requirements.txt 
+catkin build
 ```
-You may noticed that a package named [glplotlib](https://github.com/cheng-chi/glplotlib) is installed by pip. glplotlib is another opensource library developed by Cheng Chi for virualizing 3D point cloud with better performance (comparing to matplotlib).
 
-
-If you need tracking failure recovery, you will also need to compile VFH feature library.
-Make sure you have PCL-1.8 installed. If you have ROS installed, its should be already there.
+If you need tracking failure recovery, you will also need to compile the VFH feature library.
+Make sure you have PCL-1.8 installed. If you have ROS installed, it should be already there.
 ```
 cd src/pcl_features
 mkdir build
 cd build
 cmake ..
 make
-cp libfeatures.so ../libfeatures.so
 cd ..
-rm -r build
+ln -s build/libfeatures.so
 ```
+
+#### Conda configuration
+
+Install miniconda https://docs.conda.io/en/latest/miniconda.html; use the python 3 version
+
+Create conda virtual enviornment with the packages that conda knows about, you must name it as shown for the roslaunch/scripts to run correctly. This environment is used to isolate python3 code from the default python2 code on Ubuntu 18.04 and ROS Melodic
+```
+conda create -c gurobi --name catkin_cdcpd python=3.7 opencv gurobi numpy scipy numexpr scikit-learn matplotlib ipython
+conda activate catkin_cdcpd
+```
+
+For the following operations, make sure the newly created virtual environment is activated. The command line should show the name of virtual environment in brackets.
+Install the rest of the requirements via pip:
+```
+(catkin_cdcpd) user@host:path/to/catkin_ws/src/cdcpd$ pip install -r cdcpd/requirements.txt
+```
+
+#### Gurobi Licence
+
+Gurobi is a proprietary optimization package that we use. Please obtain a [free academic license](https://www.gurobi.com/academia/academic-program-and-licenses).
+Note that Gurobi licence activation requires a university network. If you are not on campus, follow these instructions to setup a VPN: [UMVPN](https://documentation.its.umich.edu/vpn/vpn-linux-vpn-instructions).
+
+Ensure that the conda environment is active, and install a Gurobi key with `grbgetkey` [following the instructions here](https://www.gurobi.com/documentation/9.0/quickstart_mac/retrieving_a_free_academic.html)
+```
+(catkin_cdcpd) user@host:~$ grbgetkey 253e22f3-...
+```
+
+
+You may have noticed that a package named [glplotlib](https://github.com/cheng-chi/glplotlib) is installed by pip. glplotlib is another opensource library developed by Cheng Chi for visualizing 3D point cloud with better performance (compared to matplotlib).
+
+If you use a IDE such as PyCharm or VS Code, remember to set project interpreter to this virtual environment.
 
 Demo
 ------------
-To run the demo, you need download some [data](https://drive.google.com/drive/folders/1QSmSOw0JvQl9xnbVnBNogk0OcNo0Rn4_?usp=sharing) into <project_root>/data folder.
-Files ends with ".bag" are rosbag files and are used for testing the ROS node.
-Files ends with ".pk" are python pickle files extracted from corresponding ".bag" files, used in examples.
+To run the demo, you will need to download some [data](https://drive.google.com/drive/folders/1QSmSOw0JvQl9xnbVnBNogk0OcNo0Rn4_?usp=sharing) into <project_root>/data folder.
+The files in the `v0.1.0` folder are intended for use with [the original version of this library](https://github.com/UM-ARM-Lab/cdcpd/tree/v0.1.0). Follow instructions in the README there to use them.
 
-To run cdcpd demo:
+To run the fully ROS integrated demo start all of the following from individual terminals, without activating the conda workspace:
+* Start ROS core: `roscore`
+* Start Rviz for visualization: `rviz -d path/to/catkin_ws/src/cdcpd/config/cdcpd.rviz`
+* Start the tracking nodes: `roslaunch cdcpd tracker.launch`
+* Start playing the rosbag: `rosbag play -l data/placemat_stationary.bag`
+
+The following messages are a normal part of the initialization process:
 ```
-python examples/basic_cdcpd_example.py
-```
-
-To run ROS node:
-
-All following in commands need to be running at the same time, you may start one terminal for each:\
-Start ROS core: `roscore`\
-Start Rviz for visualization: `rviz`\
-Start tracking node: `python ros_nodes/simple_cdcpd_node.py`\
-Start playing rosbag: `rosbag play -l data/rope_simple.bag`
+[rosout]: Error: itemsize cannot be zero in type
+/path/to/catkin_ws/src/cdcpd/src/cdcpd/cv_utils.py:68: RuntimeWarning: divide by zero encountered in true_divide
+  projected[:, 0] /= projected[:, 2]
+/path/to/catkin_ws/src/cdcpd/src/cdcpd/cv_utils.py:68: RuntimeWarning: invalid value encountered in true_divide
+  projected[:, 0] /= projected[:, 2]
+/path/to/catkin_ws/src/cdcpd/src/cdcpd/cv_utils.py:69: RuntimeWarning: divide by zero encountered in true_divide
+  projected[:, 1] /= projected[:, 2]
+/path/to/catkin_ws/src/cdcpd/src/cdcpd/cv_utils.py:69: RuntimeWarning: invalid value encountered in true_divide
+  projected[:, 1] /= projected[:, 2]
+  ```
