@@ -131,7 +131,7 @@ class EdgeConstrainedOptimizer(Optimizer):
     Performs constrained optimization that optimizes MSE between output and verts,
     subject to constraint that edges length in output is within stretch_coefficient
     of original distance. It also constraints some specified nodes to be certain
-     position known a priori. It also constraints edges from passing through themselves 
+     position known a priori. It also constraints edges from passing through themselves
     """
     def __init__(self, template, edges,
                  stretch_coefficient=1.0,
@@ -149,7 +149,7 @@ class EdgeConstrainedOptimizer(Optimizer):
         self.edges = edges
         self.stretch_coefficient = stretch_coefficient
         self.visualize_violations = visualize_violations
-        self.use_passingthru_constraint = use_passingthru_constraint 
+        self.use_passingthru_constraint = use_passingthru_constraint
         self.use_gripper_prior = use_gripper_prior
         self.prior_pos = np.zeros(0)
         self.prior_idx = []
@@ -192,6 +192,7 @@ class EdgeConstrainedOptimizer(Optimizer):
         g_edge_constraints = grb_utils.add_constraints(model, lhs, "<=", rhs, name="edge")
 
         # prior pos constraint
+        g_gripper_objective = 0.0
         if self.use_gripper_prior:
             template_gripper_positions = self.template[self.prior_idx]
             max_gripper_dist = (self.stretch_coefficient ** 2) * \
@@ -203,14 +204,13 @@ class EdgeConstrainedOptimizer(Optimizer):
                 lhs = g_verts[self.prior_idx]
                 rhs = self.prior_pos
                 g_gripper_constraints = grb_utils.add_constraints(model, lhs, "==", rhs, name="prior")
-                g_gripper_objective = 0.0
             else:
                 rospy.logwarn(
                     "Gripper constraint cannot be satisfied: max (squared): {0},"
                     " current (squared): {1}. Adding to objective term instead.".format(
                         max_gripper_dist, current_gripper_dist))
                 g_gripper_objective = 100.0 * squared_norm(g_verts[self.prior_idx] - self.prior_pos)
-        
+
         # Object passing through itself constraint
         if self.use_passingthru_constraint:
             d_max = 0.1  # change
@@ -230,7 +230,7 @@ class EdgeConstrainedOptimizer(Optimizer):
                                          g_verts[j][0] - prev_verts[j][0], g_verts[j][1] - prev_verts[j][1], g_verts[j][2] - prev_verts[j][2],
                                          g_verts[j+1][0] - prev_verts[j+1][0], g_verts[j+1][1] - prev_verts[j+1][1], g_verts[j+1][2] - prev_verts[j+1][2]]
                                 derivative = opt_equations(prev_verts[i], prev_verts[i+1], prev_verts[j], prev_verts[j+1], case)
-                                
+
                                 temp = np.dot(derivative, delta)
                                 lhs.append(temp)
                                 rhs.append(d_min - diff)
