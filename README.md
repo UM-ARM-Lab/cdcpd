@@ -40,10 +40,11 @@ Build the project (tested with `catkin build`, not `catkin_make`)
 catkin build
 ```
 
+Even if you don't use this, you should still do these steps because the code imports libfeatures.
 If you need tracking failure recovery, you will also need to compile the VFH feature library.
 Make sure you have PCL-1.8 installed. If you have ROS installed, it should be already there.
 ```
-cd src/pcl_features
+cd cdcpd/src/pcl_features
 mkdir build
 cd build
 cmake ..
