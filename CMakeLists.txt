@@ -8,15 +8,19 @@ add_library(libcdcpd SHARED
 )
 
 find_package(PCL 1.8 REQUIRED COMPONENTS common io)
+find_package(OpenCV REQUIRED)
 
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 target_include_directories(libcdcpd PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> 
-    ${PCL_INCLUDE_DIRS})
+    ${PCL_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS})
 
-target_link_libraries(libcdcpd ${PCL_LIBRARIES})
+target_link_libraries(libcdcpd 
+    ${PCL_LIBRARIES}
+    ${OpenCV_LIBS})
 # target_link_directories(libcdcpd PUBLIC ${PCL_LIBRARY_DIRS})
 target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
 
