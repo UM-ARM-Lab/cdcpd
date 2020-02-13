@@ -9,6 +9,7 @@ add_library(libcdcpd SHARED
 
 find_package(PCL 1.8 REQUIRED COMPONENTS common io)
 find_package(OpenCV REQUIRED)
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
@@ -20,7 +21,8 @@ target_include_directories(libcdcpd PUBLIC
 
 target_link_libraries(libcdcpd 
     ${PCL_LIBRARIES}
-    ${OpenCV_LIBS})
+    ${OpenCV_LIBS}
+    Eigen3::Eigen)
 # target_link_directories(libcdcpd PUBLIC ${PCL_LIBRARY_DIRS})
 target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
 
