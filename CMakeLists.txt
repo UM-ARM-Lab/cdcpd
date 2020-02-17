@@ -3,13 +3,17 @@ project(cdcpd VERSION 0.1
     DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
     LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 add_library(libcdcpd SHARED
     src/cdcpd.cpp
 )
 
-find_package(PCL 1.8 REQUIRED COMPONENTS common io)
+find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization)
+# TODO Components?
 find_package(OpenCV REQUIRED)
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
@@ -25,17 +29,6 @@ target_link_libraries(libcdcpd
     Eigen3::Eigen)
 # target_link_directories(libcdcpd PUBLIC ${PCL_LIBRARY_DIRS})
 target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
-
-
-# target_compile_features(libminisat
-#     PUBLIC
-#       cxx_attributes
-#       cxx_defaulted_functions
-#       cxx_deleted_functions
-#       cxx_final
-# )
-# 
-# target_compile_definitions(libcdcpd PUBLIC __STDC_LIMIT_MACROS __STDC_FORMAT_MACROS)
 
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
