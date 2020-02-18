@@ -126,7 +126,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3 -fopenmp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3")
 
 add_executable(pcl_filtering src/rospcl_filtering.cpp)
 target_link_libraries(pcl_filtering ${catkin_LIBRARIES})

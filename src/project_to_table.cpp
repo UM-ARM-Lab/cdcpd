@@ -55,7 +55,6 @@ void cloud_cb(const PointCloud::ConstPtr& input_cloud)
     output_cloud->sensor_orientation_ = input_cloud->sensor_orientation_;
     output_cloud->points.resize(input_cloud->points.size());
 
-    #pragma omp parallel for
     for (size_t idx = 0; idx < output_cloud->points.size(); ++idx)
     {
         // Copy the RGB data
@@ -86,14 +85,10 @@ int main(int argc, char *argv[])
     ROS_INFO_STREAM("Subscribing to " << source_cloud_topic);
     ROS_INFO_STREAM("Publishing to " << cdcpd_input_cloud_topic);
 
-    ros::Subscriber sub = nh.subscribe(source_cloud_topic, 10, cloud_cb);
+    ros::Subscriber sub = nh.subscribe(source_cloud_topic, 1, cloud_cb);
     pub = nh.advertise<PointCloud>(cdcpd_input_cloud_topic, 1);
+    ros::spin();
 
-    // ros::spin();
-    while (ros::ok())
-    {
-        ros::spinOnce();
-    }
     return EXIT_SUCCESS;
 }
 
