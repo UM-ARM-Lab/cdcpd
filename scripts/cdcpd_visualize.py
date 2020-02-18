@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+#!/home/dmcconac/miniconda3/envs/catkin_cdcpd/bin/python3
+
 import time
 import sys
 import rospy
@@ -58,8 +59,8 @@ class Tracker:
             self.input_data = pickle.load(open("/home/deformtrack/examples/data/flickertest_cloth2.pk", "rb"))
 
         if self.object_name == "rope":
-            rope_num_links = get_ros_param(param_name="rope_num_links", default=50)
-            rope_length = get_ros_param(param_name="rope_length", default=1.0)
+            rope_num_links = get_ros_param(param_name="rope_num_links", default=10)
+            rope_length = get_ros_param(param_name="rope_length", default=18.0 * 0.0254)
             self.template_rows = rope_num_links
             self.template_cols = 1
             self.template_verts, self.template_edges = build_line(rope_length, rope_num_links)
@@ -111,7 +112,7 @@ class Tracker:
                                               cdcpd_params=self.cdcpd_params)
 
         # initialize ROS publishers and subscribers - data flows in the order the publishers and subscribers are listed
-        point_cloud_topic = get_ros_param(param_name="~PointCloud_topic", default="kinect2_victor_head/qhd/points")
+        point_cloud_topic = get_ros_param(param_name="~input_cloud_topic", default="kinect2_victor_head/qhd/points")
         self.point_cloud_sub = Listener(topic_name=point_cloud_topic, topic_type=PointCloud2)
         self.pub_points = rospy.Publisher("cdcpd/new_point_cloud", PointCloud2, queue_size=10)
         self.sub_sample = Listener(topic_name="cdcpd/mask_down_sampled_points", topic_type=PointCloud2)
@@ -320,7 +321,7 @@ class Tracker:
 
 def main():
     rospy.init_node('cdcpd_node')
-    object_type = get_ros_param(param_name="deformable_type", default="cloth")
+    object_type = get_ros_param(param_name="deformable_type", default="rope")
     tracker = Tracker(object_name=object_type)
     while not rospy.is_shutdown():
         try:

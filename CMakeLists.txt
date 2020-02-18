@@ -7,7 +7,7 @@ project(cdcpd)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-set(CATKIN_PACKAGES 
+set(CATKIN_PACKAGES
   geometry_msgs
   rospy
   sensor_msgs
@@ -121,18 +121,18 @@ catkin_package(
 ## Your package locations should be listed before other locations
 
 include_directories(
-# include
+  include
+  SYSTEM
   ${catkin_INCLUDE_DIRS}
 )
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3 -fopenmp")
 
 add_executable(pcl_filtering src/rospcl_filtering.cpp)
-target_link_libraries(pcl_filtering ${catkin_LIBRARIES}
-)
-## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/cdcpd.cpp
-# )
+target_link_libraries(pcl_filtering ${catkin_LIBRARIES})
+
+add_executable(project_to_table src/project_to_table.cpp)
+target_link_libraries(project_to_table ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
