@@ -14,63 +14,36 @@
 
 using std::cout;
 using std::endl;
+using Eigen::MatrixXf;
+using Eigen::MatrixXi;
 
-// Eigen::Vector3f toPoint3D(u, v, d, intrinsics)
-// {
-// 
-// }
-
-pcl::PointCloud<pcl::PointXYZ>::Ptr images_to_cloud(
-        const cv::Mat& rgb,
-        const cv::Mat& depth,
-        const cv::Mat& mask,
-        const Eigen::Matrix3f& intrinsics
-        )
+double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 {
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
- 
-
-    for (int v = 0; v < (int)rgb.rows; ++v)
+    double total_error = 0.0;
+    assert(X.rows() == Y.rows());
+    for (int i = 0; i < X.cols(); ++i)
     {
-        for (int u = 0; u < (int)rgb.cols; ++u)
+        for (int j = 0; j < Y.cols(); ++j)
         {
-            if (mask.at<uint8_t>(v, u) != 0 && depth.at<uint16_t>(v, u) != 0) {
-                assert(depth.at<uint16_t>(v, u) != 0);
-                auto pixel_color = rgb.at<cv::Vec3b>(v, u);
-                auto pixel_depth = depth.at<uint16_t>(v, u) / 1000.0f;
-                // cout << "One point: " << endl;
-                // cout << u << " " << v << " " << pixel_depth << " " 
-                //     << intrinsics(0, 0) << " "
-                //     << intrinsics(0, 1) << " "
-                //     << intrinsics(0, 2) << " "
-                //     << intrinsics(1, 0) << " "
-                //     << intrinsics(1, 1) << " "
-                //     << intrinsics(1, 2) << " "
-                //     << intrinsics(2, 0) << " "
-                //     << intrinsics(2, 1) << " "
-                //     << intrinsics(2, 2) << endl;
-                pcl::PointXYZ pt(pixel_color[0], pixel_color[1], pixel_color[2]);
-                pt.getVector3fMap() = Eigen::Vector3f(
-                    (u - intrinsics(0, 2)) * pixel_depth / intrinsics(0, 0),
-                    (v - intrinsics(1, 2)) * pixel_depth / intrinsics(1, 1),
-                    pixel_depth
-                );
-                cloud->points.push_back(pt);
-            }
+            total_error += (X.col(i) - Y.col(j)).squaredNorm();
         }
     }
-    return cloud;
+    return total_error / (X.cols() * Y.cols() * X.rows());
 }
 
-void print_matf(const cv::Mat& m) {
-    for (int v = 0; v < m.rows; ++v)
+MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
+{
+    MatrixXf diff(Y.cols(), Y.cols());
+    diff.setZero();
+    for (int i = 0; i < Y.cols(); ++i)
     {
-        for (int u = 0; u < m.cols; ++u)
+        for (int j = 0; j < Y.cols(); ++j)
         {
-            cout << m.at<float>(v, u) << " ";
+            diff(i, j) = (Y.col(i) - Y.col(j)).squaredNorm();
         }
-        cout << endl;
     }
+    MatrixXf kernel = (-diff / (2 * beta)).array().exp();
+    return kernel;
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
@@ -86,30 +59,17 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
     assert(intrinsics.rows == 3 && intrinsics.cols == 3);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
-    /// Depth mask
+    /// Filtering step
     // Get a mask for all the valid depths
     cv::Mat depth_mask = depth != 0;
-    // cv::Mat depths_f;
-    // depth.convertTo(depths_f, CV_32F);
-    // // cout << "Pre-conversion depths" << endl;
-    // // print_matf(depths_f);
-    // // Millimeters to meters
-    // depths_f /= 1000.0;
-    // cv::imwrite("depth_mask.png", depth_mask);
-
     cv::Mat combined_mask = mask & depth_mask;
-    cv::imwrite("combined_mask.png", combined_mask);
 
-    // cout << "Depth of rope: " << endl;
-    // cout << depth.at<uint16_t>(175, 150) << endl;
-
-    // Eigen::Matrix3f camera_matrix = Eigen::Matrix3f::Constant(0.0);
-    // cv::cv2eigen(intrinsics, camera_matrix);
-    
     cv::Mat points_mat;
     cv::rgbd::depthTo3d(depth, intrinsics, points_mat, combined_mask);
 
+    // TODO later we will need correspondence between depth image and points
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    // TODO this should be a function if it's still used when we have correspondence
     for (int i = 0; i < points_mat.cols; ++i)
     {
         auto cv_point = points_mat.at<cv::Vec3d>(0, i);
@@ -117,32 +77,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
         cloud->push_back(pt);
     }
 
-    cout << "All right, we have the cloud." << endl;
-    cout << "It's of type " << points_mat.type() << endl;
-    cout << "It has " << points_mat.rows << " rows and " << points_mat.cols << " cols." << endl;
-
-    // This should be all we need?
-    // TODO now we need to convert the OpenCV point cloud to a PCL one.
-
-    // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud = images_to_cloud(
-    //         rgb,
-    //         depth,
-    //         combined_mask,
-    //         camera_matrix
-    //         );
-
-
-    // cout << "Cloud: " << endl;
-    // for(pcl::PointCloud<pcl::PointXYZ>::iterator it = cloud->begin(); it
-    // loud->end(); it++){
-    //     cout << it->x << ", " << it->y << ", " << it->z << endl;
-    // }
-    
-    // TODO nooooooooooooo
-    return cloud;
-    
-    
-    /// box Filter
+    /// Box filter
     // TODO what is last element in vector?
     // TODO this needs to be a class so these can be members.
     // TODO also, we need to find the max and min and store them for next time
@@ -155,11 +90,9 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
     box_filter.setInputCloud(cloud);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_box_filtered(new pcl::PointCloud<pcl::PointXYZ>);
     box_filter.filter(*cloud_box_filtered);
-    // TODO finish up
 
-    /// Other filter
+    /// VoxelGrid filter
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_fully_filtered(new pcl::PointCloud<pcl::PointXYZ>);
-    // Create the filtering object
     pcl::VoxelGrid<pcl::PointXYZ> sor;
     sor.setInputCloud(cloud);   
     sor.setLeafSize(0.02f, 0.02f, 0.02f);   
@@ -167,6 +100,120 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
 
     /// CPD step
 
+    // Construct the template
+    // TODO template should probably be passed into the library
+    // TODO you should use a PCL point cloud for the template
+    MatrixXf template_vertices(3, 50);
+    template_vertices.setZero();
+    template_vertices.row(0).setLinSpaced(50, 0, 1);
+    MatrixXi template_edges(49, 2);
+    template_edges(0, 0) = 0;
+    template_edges(template_edges.rows() - 1, 1) = 49;
+    for (int i = 1; i <= template_edges.rows() - 1; ++i)
+    {
+        template_edges(i, 0) = i;
+        template_edges(i - 1, 1) = i;
+    }
 
-    return cloud;
+    cout << "template_vertices" << endl;
+    cout << template_vertices << endl;
+    cout << "template_edges" << endl;
+    cout << template_edges << endl;
+
+    // CPD (TODO make into a function)
+    double tolerance = 1e-4;
+    double alpha = 3.0;
+    double beta = 1.0;
+    double w = 0.1;
+    int max_iterations = 100;
+    double init_sigma_scale = 1.0 / 8;
+
+    // TODO getMatrixXfMap is not the right size. For some reason there are 4 dims?
+    const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
+    const MatrixXf& Y = template_vertices;
+
+    double sigma2 = initial_sigma2(X, Y);
+    MatrixXf G = gaussian_kernel(Y, beta);
+    cout << "sigma2 is: " << sigma2 << endl;
+
+    int iterations = 0;
+    double error = tolerance + 1; // loop runs the first time
+    while (iterations <= max_iterations && error > tolerance)
+    {
+        double qprev = sigma2;
+
+        // Expectation step
+        int N = X.cols();
+        int M = Y.cols();
+        int D = Y.rows();
+
+        // P(i, j) is the distance squared from template point i to the observed point j
+        MatrixXf P(M, N);
+        for (int i = 0; i < M; ++i)
+        {
+            for (int j = 0; j < N; ++j)
+            {
+                P(i, j) = (X.col(j) - Y.col(i)).squaredNorm();
+            }
+        }
+
+        float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+        c *= w / (1 - w);
+        c *= static_cast<double>(M) / N;
+
+        P = (-P / (2 * sigma2)).array().exp();
+        // TODO prior
+        // if self.params.Y_emit_prior is not None:
+        //      P *= self.params.Y_emit_prior[:, np.newaxis]
+
+        MatrixXf den = P.colwise().sum().replicate(M, 1);
+        // TODO ignored den[den == 0] = np.finfo(float).eps because seriously
+        den.array() += c;
+
+        P.array() /= den.array();
+
+        // Maximization step
+        MatrixXf Pt1 = P.colwise().sum();
+        MatrixXf P1 = P.rowwise().sum();
+        float Np = P1.sum();
+
+        // TODO use LLE
+        // this should be in the else of an if/else for LLE
+        MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M);
+        MatrixXf B = (P * X.transpose()) - P1.asDiagonal() * Y.transpose();
+        cout << "A is: " << endl;
+        cout << A << endl;
+        cout << "B is: " << endl;
+        cout << B << endl;
+        // TODO solve this
+        MatrixXf W = A.llt().solve(B);
+        cout << "W is: " << endl;
+        cout << W << endl;
+
+        MatrixXf TY = Y + (G * W).transpose();
+        MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
+        MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
+        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
+        double xPx = xPxMat.sum();
+        MatrixXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
+        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
+        double yPy = yPyMat.sum();
+        double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum();
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D);
+
+        if (sigma2 <= 0)
+        {
+            sigma2 = tolerance / 10;
+        }
+        error = std::abs(sigma2 - qprev);
+
+        // TODO do I need to care about the callback?
+
+        iterations++;
+        cout << "TY: " << endl;
+        cout << TY << endl;
+    }
+
+    return cloud_fully_filtered;
 }
