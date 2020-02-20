@@ -59,8 +59,8 @@ class Tracker:
             self.input_data = pickle.load(open("/home/deformtrack/examples/data/flickertest_cloth2.pk", "rb"))
 
         if self.object_name == "rope":
-            rope_num_links = get_ros_param(param_name="rope_num_links", default=10)
-            rope_length = get_ros_param(param_name="rope_length", default=18.0 * 0.0254)
+            rope_num_links = get_ros_param(param_name="link_bot/n_state", default=10)
+            rope_length = get_ros_param(param_name="link_bot/rope_length", default=18.0 * 0.0254)
             self.template_rows = rope_num_links
             self.template_cols = 1
             self.template_verts, self.template_edges = build_line(rope_length, rope_num_links)
