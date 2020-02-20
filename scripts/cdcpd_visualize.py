@@ -28,8 +28,6 @@ from cdcpd.ros_wrappers import Listener
 from cdcpd.ros_wrappers import get_ros_param
 from gurobipy import GurobiError
 import matplotlib.pyplot as plt
-# from mpl_toolkits.mplot3d import Axes3D
-# from matplotlib import cm
 
 
 class Tracker:
@@ -87,10 +85,8 @@ class Tracker:
 
         if self.use_gripper_prior:
             print("Using gripper prior")
-            self.listener_left = Listener(topic_name="cdcpd/left_gripper_prior", topic_type=TransformStamped)
-            self.listener_right = Listener(topic_name="cdcpd/right_gripper_prior", topic_type=TransformStamped)
-            self.gripper_prior_idx = [get_ros_param(param_name="right_gripper_attached_node_idx", default=0),
-                                      get_ros_param(param_name="left_gripper_attached_node_idx", default=49)]
+            self.left_tool_listener = Listener(topic_name="cdcpd/victor_left_tool", topic_type=TransformStamped)
+            self.gripper_prior_idx = [rope_num_links - 1]
 
         self.cpd_params = CPDParams()
         self.down_sample_size = get_ros_param("~down_sample_size", default=300)
@@ -209,12 +205,8 @@ class Tracker:
 
         msg = self.point_cloud_sub.get()
         data = ros_numpy.numpify(msg)
-        # table_data = self.listener_table.get()
-        # Used to disable the transform if we are so inclined
-        # table_data.data = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
         if self.use_gripper_prior:
-            left_data = self.listener_left.get()
-            right_data = self.listener_right.get()
+            left_data = self.left_tool_listener.get()
         if self.use_pickle:
             try:
                 color_img = self.input_data['colour_img'][self.count]
@@ -242,34 +234,12 @@ class Tracker:
         mask_img, point_cloud_img = self.key_func(point_cloud_img, color_img, lower_bound, upper_bound)
         filtered_points = point_cloud_img[mask_img]
 
-        # if point_cloud_img.dtype is not np.float32:
-        #     point_cloud_img = point_cloud_img.astype(np.float32)
-        # out_struct_arr = unstructured_to_structured(point_cloud_img, names=['x', 'y', 'z'])
-        # pub_points_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
-        # pub_points_msg.header = msg.header
-        # # pub_points_msg.header.frame_id ='table_surface'
-        # self.pub_points.publish(pub_points_msg)
-        # self.pub_points.publish(pub_points_msg)
-        # self.pub_points.publish(pub_points_msg)
-        # self.pub_points.publish(pub_points_msg)
-        # self.pub_points.publish(pub_points_msg)
-        # self.pub_points.publish(pub_points_msg)
-        # self.pub_points.publish(pub_points_msg)
-
         if filtered_points.dtype is not np.float32:
             filtered_points = filtered_points.astype(np.float32)
         out_struct_arr = unstructured_to_structured(filtered_points, names=['x', 'y', 'z'])
         pub_filter_msg = ros_numpy.msgify(PointCloud2, out_struct_arr)
         pub_filter_msg.header = msg.header
         self.pub_filter.publish(pub_filter_msg)
-        # X = self.template[:,0]
-        # Y = self.template[:,1]
-        # Z = self.template[:,2]
-
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111, projection='3d')
-        # ax.scatter(X,Y,Z)
-        # plt.show()
 
         if len(filtered_points) <= len(self.template_verts):
             raise ValueError("Not enough point in masked point cloud.")
@@ -280,8 +250,7 @@ class Tracker:
 
         if self.use_gripper_prior:
             left_gripper = [left_data.transform.translation.x, left_data.transform.translation.y, left_data.transform.translation.z]
-            right_gripper = [right_data.transform.translation.x, right_data.transform.translation.y, right_data.transform.translation.z]
-            prior_pos = np.array([left_gripper, right_gripper])
+            prior_pos = np.array([left_gripper])
             self.optimizer.set_prior(prior_pos=prior_pos, prior_idx=self.gripper_prior_idx)
 
         # invoke tracker

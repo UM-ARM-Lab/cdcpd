@@ -194,11 +194,12 @@ class EdgeConstrainedOptimizer(Optimizer):
         # prior pos constraint
         g_gripper_objective = 0.0
         if self.use_gripper_prior:
-            template_gripper_positions = self.template[self.prior_idx]
-            max_gripper_dist = (self.stretch_coefficient ** 2) * \
-                               squared_norm(template_gripper_positions[0] - template_gripper_positions[1])
-            current_gripper_dist = squared_norm(self.prior_pos[0] - self.prior_pos[1])
-            gripper_constraint_satisfiable = max_gripper_dist > current_gripper_dist
+            # template_gripper_positions = self.template[self.prior_idx]
+            # max_gripper_dist = (self.stretch_coefficient ** 2) * \
+            #                    squared_norm(template_gripper_positions[0] - template_gripper_positions[1])
+            # current_gripper_dist = squared_norm(self.prior_pos[0] - self.prior_pos[1])
+            # gripper_constraint_satisfiable = max_gripper_dist > current_gripper_dist
+            gripper_constraint_satisfiable = True
 
             if gripper_constraint_satisfiable:
                 lhs = g_verts[self.prior_idx]

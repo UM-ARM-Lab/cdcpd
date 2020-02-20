@@ -27,7 +27,7 @@
 
     <node name="downsampling" pkg="cdcpd" type="pcl_filtering" required="true"/>
 
-    <node name="gripper_node" pkg="cdcpd" type="gripper_tf_node.py" if="$(arg use_gripper_prior)" required="true">
+    <node name="gripper_tf_node" pkg="cdcpd" type="gripper_tf_node.py" if="$(arg use_gripper_prior)" required="true">
         <param name="kinect_frame" value="$(arg kinect_name)_rgb_optical_frame" type="string"/>
     </node>
 
