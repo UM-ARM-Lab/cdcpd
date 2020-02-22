@@ -28,11 +28,11 @@ class GripperTransforms():
         self.target_frame = get_ros_param(param_name="~kinect_frame", default='kinect2_victor_head_rgb_optical_frame')
 
     def spin(self):
+        rospy.loginfo("Gripper prior spinning ...")
         rate = rospy.Rate(100.0)
         while not rospy.is_shutdown():
             for _, tracker in self.trackers.items():
                 tracker.publish(self.target_frame)
-            rospy.loginfo_throttle(2.0, "Gripper prior spinning ...")
             rate.sleep()
 
 
