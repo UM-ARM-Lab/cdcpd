@@ -2,11 +2,14 @@
 #include <pcl_ros/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_types.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/filters/project_inliers.h>
 #include <pcl/filters/voxel_grid.h>
 #include <tf2_ros/transform_listener.h>
 #include "cdcpd/eigen_ros_conversions.hpp"
 
-typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloud;
+typedef pcl::PointXYZRGB Point;
+typedef pcl::PointCloud<Point> PointCloud;
 typedef Eigen::Isometry3d Pose;
 
 ros::Publisher pub;
@@ -42,6 +45,11 @@ void cloud_cb(const PointCloud::ConstPtr& input_cloud)
         tfBuffer, table_frame, input_cloud->header.frame_id, ros::Time(0)).cast<float>();
     Eigen::Isometry3f const target_tf_inv = target_tf.inverse(Eigen::Isometry);
 
+    // Convert the transform into a plane equation
+    Eigen::Vector3f const plane_normal = target_tf_inv.rotation().rightCols<1>();
+    Eigen::Vector3f const plane_point = target_tf_inv.translation();
+    float const d = -plane_normal.dot(plane_point);
+
     // TODO: replace with pcl::copyPointCloud?
     auto output_cloud = boost::make_shared<PointCloud>();
     output_cloud->header = input_cloud->header;
@@ -55,15 +63,34 @@ void cloud_cb(const PointCloud::ConstPtr& input_cloud)
     output_cloud->sensor_orientation_ = input_cloud->sensor_orientation_;
     output_cloud->points.resize(input_cloud->points.size());
 
+    // Find the t such that axt + byt + czt + d = 0 <==> t(n^T * p) = -d for each point
     for (size_t idx = 0; idx < output_cloud->points.size(); ++idx)
     {
         // Copy the RGB data
         output_cloud->points[idx].rgba = input_cloud->points[idx].rgba;
         // Transform the XYZ data - Don't use the vector4f map
-        Eigen::Vector3f point_in_frame = target_tf * input_cloud->points[idx].getVector3fMap();
-        point_in_frame.z() = 0;
-        output_cloud->points[idx].getVector3fMap() = target_tf_inv * point_in_frame;
+        float const t = -d / plane_normal.dot(input_cloud->points[idx].getVector3fMap());
+        output_cloud->points[idx].getVector3fMap() = t * input_cloud->points[idx].getVector3fMap();
     }
+
+# if 0
+    auto coefficients = boost::make_shared<pcl::ModelCoefficients>();
+    coefficients->values.resize(4);
+    coefficients->values[0] = plane_normal[0];
+    coefficients->values[1] = plane_normal[1];
+    coefficients->values[2] = plane_normal[2];
+    coefficients->values[3] = d;
+
+    // Create the filtering object
+    pcl::ProjectInliers<Point> proj;
+    proj.setModelType(pcl::SACMODEL_PLANE);
+    proj.setInputCloud(input_cloud);
+    proj.setModelCoefficients(coefficients);
+
+    // Do the actual filtering
+    auto output_cloud = boost::make_shared<PointCloud>();
+    proj.filter(*output_cloud);
+#endif
 
     pub.publish(output_cloud);
 }
@@ -85,8 +112,8 @@ int main(int argc, char *argv[])
     ROS_INFO_STREAM("Subscribing to " << source_cloud_topic);
     ROS_INFO_STREAM("Publishing to " << cdcpd_input_cloud_topic);
 
-    ros::Subscriber sub = nh.subscribe(source_cloud_topic, 1, cloud_cb);
-    pub = nh.advertise<PointCloud>(cdcpd_input_cloud_topic, 1);
+    ros::Subscriber sub = nh.subscribe(source_cloud_topic, 2, cloud_cb);
+    pub = nh.advertise<PointCloud>(cdcpd_input_cloud_topic, 1, true);
     ros::spin();
 
     return EXIT_SUCCESS;
