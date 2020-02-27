@@ -10,12 +10,16 @@
 
 // TODO rm
 #include <iostream>
+#include <fstream>
 // end TODO
 
 using std::cout;
 using std::endl;
+using cv::Mat;
 using Eigen::MatrixXf;
 using Eigen::MatrixXi;
+using Eigen::Vector3f;
+using Eigen::Vector4f;
 
 double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 {
@@ -46,11 +50,25 @@ MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
     return kernel;
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
+CDCPD::CDCPD(const Mat& _intrinsics) : 
+    intrinsics(_intrinsics),
+    last_lower_bounding_box(-5.0, -5.0, -5.0, 1.0),
+    last_upper_bounding_box(5.0, 5.0, 5.0, 1.0),
+    tolerance(1e-4),
+    alpha(3.0),
+    beta(1.0),
+    w(0.1),
+    initial_sigma_scale(1.0 / 8),
+    max_iterations(100)
+{
+}
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         const cv::Mat& rgb,
         const cv::Mat& depth,
         const cv::Mat& mask,
-        const cv::Mat& intrinsics)
+        const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+        const MatrixXi& template_edges)
 {
     assert(rgb.type() == CV_8UC3);
     assert(depth.type() == CV_16U);
@@ -68,7 +86,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
     cv::rgbd::depthTo3d(depth, intrinsics, points_mat, combined_mask);
 
     // TODO later we will need correspondence between depth image and points
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     // TODO this should be a function if it's still used when we have correspondence
     for (int i = 0; i < points_mat.cols; ++i)
     {
@@ -79,17 +97,14 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
 
     /// Box filter
     // TODO what is last element in vector?
-    // TODO this needs to be a class so these can be members.
-    // TODO also, we need to find the max and min and store them for next time
-    // TODO also, we need to add .1m to each one.
-    Eigen::Vector4f last_lower_bounding_box(-5.0, -5.0, -5.0, 1.0);
-    Eigen::Vector4f last_upper_bounding_box(5.0, 5.0, 5.0, 1.0);
     pcl::CropBox<pcl::PointXYZ> box_filter;
-    box_filter.setMin(last_lower_bounding_box);
-    box_filter.setMax(last_upper_bounding_box);
+    // Set the filters, allowing a bit more flexibility
+    box_filter.setMin(last_lower_bounding_box - Vector4f(0.1, 0.1, 0.1, 0.0));
+    box_filter.setMax(last_upper_bounding_box + Vector4f(0.1, 0.1, 0.1, 0.0));
     box_filter.setInputCloud(cloud);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_box_filtered(new pcl::PointCloud<pcl::PointXYZ>);
     box_filter.filter(*cloud_box_filtered);
+    // last_lower_bounding_box, last_upper_bounding_box set after the VoxelGrid filter
 
     /// VoxelGrid filter
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_fully_filtered(new pcl::PointCloud<pcl::PointXYZ>);
@@ -98,49 +113,40 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
     sor.setLeafSize(0.02f, 0.02f, 0.02f);   
     sor.filter(*cloud_fully_filtered);
 
+    // Set last_lower_bounding_box, last_upper_bounding_box to remember bounds
+    // TODO this should probably be lower, for template?
+    // pcl::getMinMax3D(*cloud_fully_filtered, last_lower_bounding_box, last_upper_bounding_box);
+
     /// CPD step
 
-    // Construct the template
-    // TODO template should probably be passed into the library
-    // TODO you should use a PCL point cloud for the template
-    MatrixXf template_vertices(3, 50);
-    template_vertices.setZero();
-    template_vertices.row(0).setLinSpaced(50, 0, 1);
-    MatrixXi template_edges(49, 2);
-    template_edges(0, 0) = 0;
-    template_edges(template_edges.rows() - 1, 1) = 49;
-    for (int i = 1; i <= template_edges.rows() - 1; ++i)
-    {
-        template_edges(i, 0) = i;
-        template_edges(i - 1, 1) = i;
-    }
-
-    cout << "template_vertices" << endl;
-    cout << template_vertices << endl;
-    cout << "template_edges" << endl;
-    cout << template_edges << endl;
-
+    // TODO maybe use a PCL point cloud for the template
     // CPD (TODO make into a function)
-    double tolerance = 1e-4;
-    double alpha = 3.0;
-    double beta = 1.0;
-    double w = 0.1;
-    int max_iterations = 100;
-    double init_sigma_scale = 1.0 / 8;
 
-    // TODO getMatrixXfMap is not the right size. For some reason there are 4 dims?
     const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
-    const MatrixXf& Y = template_vertices;
+    const MatrixXf& Y = template_cloud->getMatrixXfMap().topRows(3);
 
-    double sigma2 = initial_sigma2(X, Y);
+    cout << "X" << endl;
+    cout << X.sum() << endl;
+    cout << "Y" << endl;
+    cout << Y.sum() << endl;
+
+    std::ofstream file("../../points.txt");
+    file << X << endl;
+    file.close();
+
     MatrixXf G = gaussian_kernel(Y, beta);
+    MatrixXf TY = Y;
+    double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
     cout << "sigma2 is: " << sigma2 << endl;
 
     int iterations = 0;
     double error = tolerance + 1; // loop runs the first time
+
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
+        cout << "qprev" << endl;
+        cout << qprev << endl;
 
         // Expectation step
         int N = X.cols();
@@ -153,15 +159,24 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
         {
             for (int j = 0; j < N; ++j)
             {
-                P(i, j) = (X.col(j) - Y.col(i)).squaredNorm();
+                P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
             }
         }
+
+        cout << "P1" << endl;
+        cout << P.sum() << endl;
 
         float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
         c *= w / (1 - w);
         c *= static_cast<double>(M) / N;
 
-        P = (-P / (2 * sigma2)).array().exp();
+        cout << "c" << endl;
+        cout << c << endl;
+
+        P = (-P / (2 * sigma2)).array().exp().matrix();
+        cout << "P2" << endl;
+        // cout << P << endl;
+        cout << P.sum() << endl;
         // TODO prior
         // if self.params.Y_emit_prior is not None:
         //      P *= self.params.Y_emit_prior[:, np.newaxis]
@@ -170,36 +185,57 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
         // TODO ignored den[den == 0] = np.finfo(float).eps because seriously
         den.array() += c;
 
-        P.array() /= den.array();
+        cout << "den" << endl;
+        // cout << den << endl;
+        cout << den.sum() << endl;
+
+        P = P.cwiseQuotient(den);
+
+        cout << "P3" << endl;
+        cout << P.sum() << endl;
 
         // Maximization step
         MatrixXf Pt1 = P.colwise().sum();
         MatrixXf P1 = P.rowwise().sum();
         float Np = P1.sum();
+        
+        cout << "Np" << endl;
+        cout << Np << endl;
 
         // TODO use LLE
         // this should be in the else of an if/else for LLE
         MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M);
         MatrixXf B = (P * X.transpose()) - P1.asDiagonal() * Y.transpose();
-        cout << "A is: " << endl;
-        cout << A << endl;
-        cout << "B is: " << endl;
-        cout << B << endl;
-        // TODO solve this
-        MatrixXf W = A.llt().solve(B);
-        cout << "W is: " << endl;
-        cout << W << endl;
+        cout << "A" << endl;
+        cout << A.sum() << endl;
+        cout << "B" << endl;
+        cout << B.sum() << endl;
+        MatrixXf W = A.colPivHouseholderQr().solve(B);
+        cout << "W.rows()" << endl;
+        cout << W.rows() << endl;
+        cout << "W.cols()" << endl;
+        cout << W.cols() << endl;
+        cout << "W" << endl;
+        cout << W.sum() << endl;
 
-        MatrixXf TY = Y + (G * W).transpose();
+        TY = Y + (G * W).transpose();
+        cout << "TY" << endl;
+        cout << TY.sum() << endl;
         MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
         MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
         assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
         double xPx = xPxMat.sum();
+        cout << "xPx" << endl;
+        cout << xPx << endl;
         MatrixXf yPytemp = (TY.array() * TY.array()).colwise().sum();
         MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
         assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
         double yPy = yPyMat.sum();
+        cout << "yPy" << endl;
+        cout << yPy << endl;
         double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum();
+        cout << "trPXY" << endl;
+        cout << trPXY << endl;
         sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D);
 
         if (sigma2 <= 0)
@@ -211,9 +247,19 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cdcpd(
         // TODO do I need to care about the callback?
 
         iterations++;
-        cout << "TY: " << endl;
-        cout << TY << endl;
+        // cout << "TY: " << endl;
+        // cout << TY << endl;
     }
 
-    return cloud_fully_filtered;
+    cout << "Final check" << endl;
+    cout << TY << endl;
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < TY.cols(); ++i)
+    {
+        const Vector3f& pt = TY.col(i);
+        cpd_out->push_back(pcl::PointXYZ(pt(0), pt(1), pt(2)));
+    }
+
+    return cpd_out;
 }
