@@ -125,19 +125,9 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
     const MatrixXf& Y = template_cloud->getMatrixXfMap().topRows(3);
 
-    cout << "X" << endl;
-    cout << X.sum() << endl;
-    cout << "Y" << endl;
-    cout << Y.sum() << endl;
-
-    std::ofstream file("../../points.txt");
-    file << X << endl;
-    file.close();
-
     MatrixXf G = gaussian_kernel(Y, beta);
     MatrixXf TY = Y;
     double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
-    cout << "sigma2 is: " << sigma2 << endl;
 
     int iterations = 0;
     double error = tolerance + 1; // loop runs the first time
@@ -145,8 +135,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
-        cout << "qprev" << endl;
-        cout << qprev << endl;
 
         // Expectation step
         int N = X.cols();
@@ -163,20 +151,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
             }
         }
 
-        cout << "P1" << endl;
-        cout << P.sum() << endl;
-
         float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
         c *= w / (1 - w);
         c *= static_cast<double>(M) / N;
 
-        cout << "c" << endl;
-        cout << c << endl;
-
         P = (-P / (2 * sigma2)).array().exp().matrix();
-        cout << "P2" << endl;
-        // cout << P << endl;
-        cout << P.sum() << endl;
         // TODO prior
         // if self.params.Y_emit_prior is not None:
         //      P *= self.params.Y_emit_prior[:, np.newaxis]
@@ -185,57 +164,29 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         // TODO ignored den[den == 0] = np.finfo(float).eps because seriously
         den.array() += c;
 
-        cout << "den" << endl;
-        // cout << den << endl;
-        cout << den.sum() << endl;
-
         P = P.cwiseQuotient(den);
-
-        cout << "P3" << endl;
-        cout << P.sum() << endl;
 
         // Maximization step
         MatrixXf Pt1 = P.colwise().sum();
         MatrixXf P1 = P.rowwise().sum();
         float Np = P1.sum();
         
-        cout << "Np" << endl;
-        cout << Np << endl;
-
         // TODO use LLE
         // this should be in the else of an if/else for LLE
         MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M);
         MatrixXf B = (P * X.transpose()) - P1.asDiagonal() * Y.transpose();
-        cout << "A" << endl;
-        cout << A.sum() << endl;
-        cout << "B" << endl;
-        cout << B.sum() << endl;
         MatrixXf W = A.colPivHouseholderQr().solve(B);
-        cout << "W.rows()" << endl;
-        cout << W.rows() << endl;
-        cout << "W.cols()" << endl;
-        cout << W.cols() << endl;
-        cout << "W" << endl;
-        cout << W.sum() << endl;
 
         TY = Y + (G * W).transpose();
-        cout << "TY" << endl;
-        cout << TY.sum() << endl;
         MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
         MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
         assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
         double xPx = xPxMat.sum();
-        cout << "xPx" << endl;
-        cout << xPx << endl;
         MatrixXf yPytemp = (TY.array() * TY.array()).colwise().sum();
         MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
         assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
         double yPy = yPyMat.sum();
-        cout << "yPy" << endl;
-        cout << yPy << endl;
         double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum();
-        cout << "trPXY" << endl;
-        cout << trPXY << endl;
         sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D);
 
         if (sigma2 <= 0)
@@ -247,12 +198,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         // TODO do I need to care about the callback?
 
         iterations++;
-        // cout << "TY: " << endl;
-        // cout << TY << endl;
     }
-
-    cout << "Final check" << endl;
-    cout << TY << endl;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < TY.cols(); ++i)
