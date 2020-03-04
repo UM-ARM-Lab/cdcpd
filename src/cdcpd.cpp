@@ -5,14 +5,16 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/core/eigen.hpp"
 #include <opencv2/rgbd.hpp>
-#include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/crop_box.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/filters/voxel_grid.h>
 
 // TODO rm
 #include <iostream>
 #include <fstream>
 // end TODO
 
+using std::vector;
 using std::cout;
 using std::endl;
 using cv::Mat;
@@ -20,6 +22,7 @@ using Eigen::MatrixXf;
 using Eigen::MatrixXi;
 using Eigen::Vector3f;
 using Eigen::Vector4f;
+using Eigen::VectorXf;
 
 double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 {
@@ -50,15 +53,75 @@ MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
     return kernel;
 }
 
-CDCPD::CDCPD(const Mat& _intrinsics) : 
+MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
+                                     int lle_neighbors,
+                                     double reg)
+{
+    pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud = kdtree.getInputCloud();
+    assert(cloud->height == 1);
+    MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
+    MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
+    MatrixXf v = VectorXf::Ones(lle_neighbors);
+    for (size_t i = 0; i < cloud->width; ++i)
+    {
+        vector<int> neighbor_inds(lle_neighbors + 1);
+        vector<float> neighbor_dists(lle_neighbors + 1);
+        kdtree.nearestKSearch(i, lle_neighbors + 1, neighbor_inds, neighbor_dists);
+        MatrixXf C(lle_neighbors, 3);
+        for (size_t j = 1; j < neighbor_inds.size(); ++j)
+        {
+            C.row(j - 1) = cloud->points[neighbor_inds[j]].getVector3fMap()
+                - cloud->points[i].getVector3fMap();
+            adjacencies(i, j - 1) = neighbor_inds[j];
+        }
+        MatrixXf G = C * C.transpose();
+        float R = reg;
+        float tr = G.trace();
+        if (tr > 0)
+        {
+            R *= tr;
+        }
+        G.diagonal().array() += R;
+        VectorXf w = G.llt().solve(v);
+        B.row(i) = w / w.sum();
+    }
+    MatrixXf graph = MatrixXf::Zero(cloud->width, cloud->width);
+    for (size_t i = 0; i < graph.rows(); ++i)
+    {
+        for (size_t j = 0; j < lle_neighbors; ++j)
+        {
+            graph(i, adjacencies(i, j)) = B(i, j);
+        }
+    }
+    return graph;
+}
+
+MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+                                  int lle_neighbors,
+                                  double reg)
+{
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud (template_cloud);
+    MatrixXf W = barycenter_kneighbors_graph(kdtree, lle_neighbors, reg);
+    MatrixXf M = (W.transpose() * W) - W.transpose() - W;
+    M.diagonal().array() += 1;
+    return M;
+}
+
+CDCPD::CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+             const Mat& _intrinsics) : 
     intrinsics(_intrinsics),
     last_lower_bounding_box(-5.0, -5.0, -5.0, 1.0),
     last_upper_bounding_box(5.0, 5.0, 5.0, 1.0),
+    lle_neighbors(8),
+    m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)),
     tolerance(1e-4),
     alpha(3.0),
     beta(1.0),
     w(0.1),
     initial_sigma_scale(1.0 / 8),
+    start_lambda(1.0),
+    annealing_factor(0.6),
     max_iterations(100)
 {
 }
@@ -171,10 +234,16 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         MatrixXf P1 = P.rowwise().sum();
         float Np = P1.sum();
         
-        // TODO use LLE
-        // this should be in the else of an if/else for LLE
-        MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M);
-        MatrixXf B = (P * X.transpose()) - P1.asDiagonal() * Y.transpose();
+        // This is the code to use if you are not using LLE
+        // MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M);
+        // MatrixXf B = (P * X.transpose()) - P1.asDiagonal() * Y.transpose();
+        // MatrixXf W = A.colPivHouseholderQr().solve(B);
+        float lambda = start_lambda * std::pow(annealing_factor, iterations + 1);
+        MatrixXf A = (P1.asDiagonal() * G) 
+            + alpha * sigma2 * MatrixXf::Identity(M, M)
+            + sigma2 * lambda * (m_lle * G);
+        MatrixXf p1d = P1.asDiagonal();
+        MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
         MatrixXf W = A.colPivHouseholderQr().solve(B);
 
         TY = Y + (G * W).transpose();
@@ -199,6 +268,9 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
 
         iterations++;
     }
+
+    cout << "TY" << endl;
+    cout << TY << endl;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < TY.cols(); ++i)

@@ -91,7 +91,7 @@ int main() {
     color_calib_fs["cameraMatrix"] >> intrinsics;
     // cout << "intrinsics type: " << intrinsics.type() << endl;
 
-    CDCPD cdcpd(intrinsics);
+    CDCPD cdcpd(template_cloud, intrinsics);
 
     // TODO more
     for (int i = 0; i < 5; ++i)

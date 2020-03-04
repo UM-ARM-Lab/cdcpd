@@ -6,7 +6,8 @@
 
 class CDCPD {
 public:
-    CDCPD(const cv::Mat& _intrinsics);
+    CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+          const cv::Mat& _intrinsics);
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr operator()(
          const cv::Mat& rgb,
@@ -18,10 +19,14 @@ private:
     const cv::Mat intrinsics;
     Eigen::Vector4f last_lower_bounding_box;
     Eigen::Vector4f last_upper_bounding_box;
+    const int lle_neighbors;
+    Eigen::MatrixXf m_lle;
     const double tolerance;
     const double alpha;
     const double beta;
     const double w;
     const double initial_sigma_scale;
+    const double start_lambda;
+    const double annealing_factor;
     const int max_iterations;
 }; 
