@@ -185,10 +185,24 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     // TODO maybe use a PCL point cloud for the template
     // CPD (TODO make into a function)
 
+    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+
     const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
     const MatrixXf& Y = template_cloud->getMatrixXfMap().topRows(3);
 
+    auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
+        std::ofstream(fname) << mat.format(np_fmt);
+    };
+
+    // TODO TESTING remove this
+    to_file("cpp_X.txt", X);
+    to_file("cpp_Y.txt", Y);
+    
+    // const MatrixXf X = 
+    // const MatrixXf Y = 
+
     MatrixXf G = gaussian_kernel(Y, beta);
+    to_file("cpp_G.txt", G);
     MatrixXf TY = Y;
     double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
 
@@ -218,6 +232,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         c *= w / (1 - w);
         c *= static_cast<double>(M) / N;
 
+        cout << "sigma2" << endl;
+        cout << sigma2 << endl;
+        cout << "c" << endl;
+        cout << c << endl;
+
         P = (-P / (2 * sigma2)).array().exp().matrix();
         // TODO prior
         // if self.params.Y_emit_prior is not None:
@@ -226,8 +245,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         MatrixXf den = P.colwise().sum().replicate(M, 1);
         // TODO ignored den[den == 0] = np.finfo(float).eps because seriously
         den.array() += c;
+        to_file(std::string("cpp_den_") + std::to_string(iterations) + ".txt", den);
 
         P = P.cwiseQuotient(den);
+        to_file(std::string("cpp_P_") + std::to_string(iterations) + ".txt", P);
 
         // Maximization step
         MatrixXf Pt1 = P.colwise().sum();
@@ -245,8 +266,31 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         MatrixXf p1d = P1.asDiagonal();
         MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
         MatrixXf W = A.colPivHouseholderQr().solve(B);
+        cout << "p1d" << endl;
+        cout << p1d << endl;
+        cout << "sigma2" << endl;
+        cout << sigma2 << endl;
+        cout << "lambda" << endl;
+        cout << lambda << endl;
+        // cout << std::scientific << std::setprecision(8);
+        // cout << "m_lle" << endl;
+        // cout << m_lle << endl;
+        to_file("cpp_m_lle.txt", m_lle);
+        // cout << "A" << endl;
+        // cout << A << endl;
+        to_file(std::string("cpp_A_") + std::to_string(iterations) + ".txt", A);
+        // cout << "B" << endl;
+        // cout << B << endl;
+        to_file(std::string("cpp_B_") + std::to_string(iterations) + ".txt", B);
+        // cout << "W" << iterations <<  endl;
+        // cout << W << endl;
+        to_file(std::string("cpp_W_") + std::to_string(iterations) + ".txt", W);
 
         TY = Y + (G * W).transpose();
+        // cout << "TY" << endl;
+        // cout << TY << endl;
+        to_file(std::string("cpp_TY_") + std::to_string(iterations) + ".txt", TY);
+
         MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
         MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
         assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
@@ -268,9 +312,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
 
         iterations++;
     }
-
-    cout << "TY" << endl;
-    cout << TY << endl;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < TY.cols(); ++i)

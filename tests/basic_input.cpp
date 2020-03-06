@@ -94,7 +94,7 @@ int main() {
     CDCPD cdcpd(template_cloud, intrinsics);
 
     // TODO more
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < 1; ++i)
     {
 
         /// Color filter
@@ -129,13 +129,13 @@ int main() {
 
         template_cloud = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
 
-        pcl::visualization::PCLVisualizer::Ptr viewer = simpleVis(template_cloud);
-        
-        while (!viewer->wasStopped())
-        {
-            viewer->spinOnce (100);
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        // pcl::visualization::PCLVisualizer::Ptr viewer = simpleVis(template_cloud);
+        // 
+        // while (!viewer->wasStopped())
+        // {
+        //     viewer->spinOnce (100);
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // }
 
     }
 
