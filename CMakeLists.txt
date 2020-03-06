@@ -8,12 +8,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(libcdcpd SHARED
     src/cdcpd.cpp
+    src/optimizer.cpp
 )
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization)
 # TODO Components?
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(GUROBI REQUIRED)
 
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
@@ -21,10 +25,12 @@ list(REMOVE_AT PCL_DEFINITIONS 0)
 target_include_directories(libcdcpd PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> 
     ${PCL_INCLUDE_DIRS}
+    ${GUROBI_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS})
 
 target_link_libraries(libcdcpd 
     ${PCL_LIBRARIES}
+    ${GUROBI_LIBRARIES}
     ${OpenCV_LIBS}
     Eigen3::Eigen)
 # target_link_directories(libcdcpd PUBLIC ${PCL_LIBRARY_DIRS})
@@ -33,7 +39,7 @@ target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS libcdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
-install(FILES include/cdcpd/cdcpd.h DESTINATION include/cdcpd)
+install(FILES include/cdcpd/cdcpd.h include/cdcpd/optimizer.h DESTINATION include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
 ### End installation
