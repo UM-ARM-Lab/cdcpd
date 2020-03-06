@@ -1,4 +1,5 @@
 #include "cdcpd/cdcpd.h"
+#include "cdcpd/optimizer.h"
 #include <cassert>
 #include <Eigen/Dense>
 #include "opencv2/imgcodecs.hpp" // TODO remove after not writing images
@@ -195,8 +196,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     };
 
     // TODO TESTING remove this
-    to_file("cpp_X.txt", X);
-    to_file("cpp_Y.txt", Y);
+    // to_file("cpp_X.txt", X);
+    // to_file("cpp_Y.txt", Y);
     
     // const MatrixXf X = 
     // const MatrixXf Y = 
@@ -232,11 +233,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         c *= w / (1 - w);
         c *= static_cast<double>(M) / N;
 
-        cout << "sigma2" << endl;
-        cout << sigma2 << endl;
-        cout << "c" << endl;
-        cout << c << endl;
-
         P = (-P / (2 * sigma2)).array().exp().matrix();
         // TODO prior
         // if self.params.Y_emit_prior is not None:
@@ -266,29 +262,12 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         MatrixXf p1d = P1.asDiagonal();
         MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
         MatrixXf W = A.colPivHouseholderQr().solve(B);
-        cout << "p1d" << endl;
-        cout << p1d << endl;
-        cout << "sigma2" << endl;
-        cout << sigma2 << endl;
-        cout << "lambda" << endl;
-        cout << lambda << endl;
-        // cout << std::scientific << std::setprecision(8);
-        // cout << "m_lle" << endl;
-        // cout << m_lle << endl;
         to_file("cpp_m_lle.txt", m_lle);
-        // cout << "A" << endl;
-        // cout << A << endl;
-        to_file(std::string("cpp_A_") + std::to_string(iterations) + ".txt", A);
-        // cout << "B" << endl;
-        // cout << B << endl;
-        to_file(std::string("cpp_B_") + std::to_string(iterations) + ".txt", B);
-        // cout << "W" << iterations <<  endl;
-        // cout << W << endl;
-        to_file(std::string("cpp_W_") + std::to_string(iterations) + ".txt", W);
+        // to_file(std::string("cpp_A_") + std::to_string(iterations) + ".txt", A);
+        // to_file(std::string("cpp_B_") + std::to_string(iterations) + ".txt", B);
+        // to_file(std::string("cpp_W_") + std::to_string(iterations) + ".txt", W);
 
         TY = Y + (G * W).transpose();
-        // cout << "TY" << endl;
-        // cout << TY << endl;
         to_file(std::string("cpp_TY_") + std::to_string(iterations) + ".txt", TY);
 
         MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
@@ -312,6 +291,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
 
         iterations++;
     }
+
+    // Next step: optimization.
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < TY.cols(); ++i)
