@@ -72,13 +72,13 @@ int main() {
         template_cloud->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
 
-    MatrixXi template_edges(49, 2);
+    MatrixXi template_edges(2, 49);
     template_edges(0, 0) = 0;
-    template_edges(template_edges.rows() - 1, 1) = 49;
-    for (int i = 1; i <= template_edges.rows() - 1; ++i)
+    template_edges(1, template_edges.cols() - 1) = 49;
+    for (int i = 1; i <= template_edges.cols() - 1; ++i)
     {
-        template_edges(i, 0) = i;
-        template_edges(i - 1, 1) = i;
+        template_edges(0, i) = i;
+        template_edges(1, i - 1) = i;
     }
 
     // cout << "template_vertices" << endl;
@@ -94,17 +94,17 @@ int main() {
     CDCPD cdcpd(template_cloud, intrinsics);
 
     // TODO more
-    for (int i = 0; i < 1; ++i)
+    for (int i = 0; i < 5; ++i)
     {
 
         /// Color filter
         // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
         // The flag isn't tested or implemented
-        Mat color_image_bgr = imread("../../../../data/color.png", IMREAD_COLOR);
+        Mat color_image_bgr = imread("../../../../data/image_color_rect_screenshot_10.03.2020.png", IMREAD_COLOR);
         Mat rgb_image;
         cv::cvtColor(color_image_bgr, rgb_image, cv::COLOR_BGR2RGB);
         // TODO I'm pretty sure this is an 8-bit image.
-        Mat depth_image = imread("../../../../data/depth.png", IMREAD_UNCHANGED);
+        Mat depth_image = imread("../../../../data/image_depth_rect_screenshot_10.03.2020.png", IMREAD_UNCHANGED);
         // cout << "Depth image " << endl;
         // print_mat16(depth_image);
 
@@ -129,13 +129,13 @@ int main() {
 
         template_cloud = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
 
-        // pcl::visualization::PCLVisualizer::Ptr viewer = simpleVis(template_cloud);
-        // 
-        // while (!viewer->wasStopped())
-        // {
-        //     viewer->spinOnce (100);
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        // }
+        pcl::visualization::PCLVisualizer::Ptr viewer = simpleVis(template_cloud);
+        
+        while (!viewer->wasStopped())
+        {
+            viewer->spinOnce (100);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
 
     }
 

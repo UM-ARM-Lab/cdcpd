@@ -20,6 +20,7 @@ using std::cout;
 using std::endl;
 using cv::Mat;
 using Eigen::MatrixXf;
+using Eigen::Matrix3Xf;
 using Eigen::MatrixXi;
 using Eigen::Vector3f;
 using Eigen::Vector4f;
@@ -294,10 +295,15 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
 
     // Next step: optimization.
 
+    // TODO is really 1.0?
+    Optimizer opt(template_cloud->getMatrixXfMap().topRows(3), 1.0);
+
+    Matrix3Xf Y_opt = opt(template_cloud->getMatrixXfMap().topRows(3), template_edges);
+
     pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out(new pcl::PointCloud<pcl::PointXYZ>);
-    for (int i = 0; i < TY.cols(); ++i)
+    for (int i = 0; i < Y_opt.cols(); ++i)
     {
-        const Vector3f& pt = TY.col(i);
+        const Vector3f& pt = Y_opt.col(i);
         cpd_out->push_back(pcl::PointXYZ(pt(0), pt(1), pt(2)));
     }
 

@@ -1,3 +1,4 @@
+#include <Eigen/Dense>
 #include <gurobi_c++.h>
 
 ////////////////////////////////////////////////////////////////
@@ -7,8 +8,10 @@
 class Optimizer
 {
 public:
-    Optimizer();
+    Optimizer(const Eigen::Matrix3Xf _init_temp, const float _stretch_lambda);
 
-    MatrixXf operator()();
+    Eigen::MatrixXf operator()(const Eigen::Matrix3Xf& Y, const Eigen::MatrixXi& E);
 private:
+    Eigen::Matrix3Xf initial_template;
+    float stretch_lambda;
 };
