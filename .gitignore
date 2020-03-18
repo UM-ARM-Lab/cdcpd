@@ -6,3 +6,7 @@
 *.so
 *.pstat
 *.egg-info
+*.swp
+*DS_Store
+build
+install

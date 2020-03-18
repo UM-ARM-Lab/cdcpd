@@ -23,23 +23,29 @@ find_package(GUROBI REQUIRED)
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 target_include_directories(libcdcpd PUBLIC 
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> 
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+target_include_directories(libcdcpd SYSTEM PUBLIC 
     ${PCL_INCLUDE_DIRS}
-    ${GUROBI_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS})
+target_include_directories(libcdcpd SYSTEM PRIVATE 
+    ${GUROBI_INCLUDE_DIRS})
 
-target_link_libraries(libcdcpd 
+target_link_libraries(libcdcpd PUBLIC
     ${PCL_LIBRARIES}
-    ${GUROBI_LIBRARIES}
     ${OpenCV_LIBS}
     Eigen3::Eigen)
-# target_link_directories(libcdcpd PUBLIC ${PCL_LIBRARY_DIRS})
+target_link_libraries(libcdcpd PRIVATE
+    ${GUROBI_LIBRARIES})
 target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
+
+add_library(cdcpd::libcdcpd ALIAS libcdcpd)
+
 
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS libcdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
-install(FILES include/cdcpd/cdcpd.h include/cdcpd/optimizer.h DESTINATION include/cdcpd)
+install(FILES include/cdcpd/cdcpd.h DESTINATION include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
 ### End installation
