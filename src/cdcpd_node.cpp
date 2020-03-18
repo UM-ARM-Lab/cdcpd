@@ -1,3 +1,5 @@
+#include <string>
+#include <cdcpd/cdcpd.h>
 #include <ros/ros.h>
 #include "cdcpd_ros/kinect_sub.h"
 
@@ -24,6 +26,7 @@ inline T GetParam(const ros::NodeHandle& nh,
     }
     return param_val;
 }
+
 
 void callback_fn(cv::Mat, cv::Mat, cv::Matx33d)
 {

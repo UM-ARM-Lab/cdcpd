@@ -1,6 +1,7 @@
 #ifndef KINECT_SUB_H
 #define KINECT_SUB_H
 
+#include <memory>
 #include <string>
 #include <ros/ros.h>
 #include <ros/callback_queue.h>
@@ -64,3 +65,4 @@ class KinectSub
 
 
 #endif // KINECT_SUB_H
+
