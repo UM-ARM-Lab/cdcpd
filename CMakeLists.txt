@@ -47,7 +47,31 @@ configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" 
 install(TARGETS libcdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES include/cdcpd/cdcpd.h DESTINATION include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
+
+set_target_properties(libcdcpd
+    PROPERTIES
+        OUTPUT_NAME "cdcpd"
+)
+### 
+### ### Installation
+### install(TARGETS libcdcpd 
+###     EXPORT cdcpd-targets 
+###     LIBRARY DESTINATION lib/${PROJECT_NAME}
+###     INCLUDES DESTINATION include/${PROJECT_NAME})
+### # install(FILES include/cdcpd/cdcpd.h include/cdcpd/optimizer.h DESTINATION include/cdcpd)
+### # install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
+### include(CMakePackageConfigHelpers)
+### write_basic_package_version_file(
+###     cdcpd-config-version.cmake
+###     VERSION ${PACKAGE_VERSION}
+###     COMPATIBILITY AnyNewerVersion
+###     )
 install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
+### configure_file(cdcpd-config.cmake.in cdcpd-config.cmake @ONLY)
+### install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cdcpd-config.cmake"
+###               "${CMAKE_CURRENT_BINARY_DIR}/cdcpd-config-version.cmake"
+###               DESTINATION lib/cmake/${PROJECT_NAME}
+###         )
 ### End installation
 
 ### Testing

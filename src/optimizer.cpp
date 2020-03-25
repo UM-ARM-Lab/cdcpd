@@ -52,7 +52,7 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
         GRBEnv& env = getGRBEnv();
 
         // Disables logging to file and logging to console (with a 0 as the value of the flag)
-        env.set(GRB_IntParam_OutputFlag, 1);
+        env.set(GRB_IntParam_OutputFlag, 0);
         GRBModel model(env);
 
         // Add the vars to the model
@@ -71,7 +71,7 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
                 model.addQConstr(
                             buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
                             GRB_LESS_EQUAL,
-                            stretch_lambda * stretch_lambda * (initial_template.col(E(0, i)) - initial_template.col(E(0, i))).squaredNorm(),
+                            stretch_lambda * stretch_lambda * (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
                             "edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
             }
             model.update();
@@ -83,9 +83,9 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
             GRBQuadExpr objective_fn(0);
             for (size_t i = 0; i < num_vectors; ++i)
             {
-                const auto expr0 = vars[i * 3 + 0] - Y_copy.col(i)[0];
-                const auto expr1 = vars[i * 3 + 1] - Y_copy.col(i)[1];
-                const auto expr2 = vars[i * 3 + 2] - Y_copy.col(i)[2];
+                const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
+                const auto expr1 = vars[i * 3 + 1] - Y_copy(1, i);
+                const auto expr2 = vars[i * 3 + 2] - Y_copy(2, i);
                 objective_fn += expr0 * expr0;
                 objective_fn += expr1 * expr1;
                 objective_fn += expr2 * expr2;
@@ -99,12 +99,13 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
             model.optimize();
             if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL)
             {
+                std::cout << "Y" << std::endl;
+                std::cout << Y << std::endl;
                 for (size_t i = 0; i < num_vectors; i++)
                 {
                     Y_opt(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
                     Y_opt(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
                     Y_opt(2, i) = vars[i * 3 + 2].get(GRB_DoubleAttr_X);
-                    std::cout << vars[i * 3 + 0].get(GRB_DoubleAttr_X) << " " << vars[i * 3 + 1].get(GRB_DoubleAttr_X) << " " << vars[i * 3 + 2].get(GRB_DoubleAttr_X) << std::endl;
                 }
             }
             else

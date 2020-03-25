@@ -26,6 +26,17 @@ using Eigen::Vector3f;
 using Eigen::Vector4f;
 using Eigen::VectorXf;
 
+pcl::PointCloud<pcl::PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
+{
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < mat.cols(); ++i)
+    {
+        const Vector3f& pt = mat.col(i);
+        cloud->push_back(pcl::PointXYZ(pt(0), pt(1), pt(2)));
+    }
+    return cloud;
+}
+
 double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 {
     double total_error = 0.0;
@@ -128,7 +139,7 @@ CDCPD::CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
 {
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
+CDCPD::Output CDCPD::operator()(
         const cv::Mat& rgb,
         const cv::Mat& depth,
         const cv::Mat& mask,
@@ -142,9 +153,48 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     assert(intrinsics.rows == 3 && intrinsics.cols == 3);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
+
     /// Filtering step
     // Get a mask for all the valid depths
     cv::Mat depth_mask = depth != 0;
+
+    // For testing purposes, compute the whole cloud, though it's not really necessary TODO
+    // TODO add color
+    // cv::rgbd::depthTo3d(depth, intrinsics, entire_cloud_mat, depth_mask);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr entire_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    for (int i = 0; i < depth.rows; ++i)
+    {
+        for (int j = 0; j < depth.cols; ++j)
+        {
+            if (depth_mask.at<bool>(i, j))
+            {
+                pcl::PointXYZRGB pt;
+                pt.x = (i - intrinsics.at<double>(0, 2)) * static_cast<float>(depth.at<uint16_t>(i, j)) / intrinsics.at<double>(0, 0) / 1000.0;
+                pt.y = (j - intrinsics.at<double>(1, 2)) * static_cast<float>(depth.at<uint16_t>(i, j)) / intrinsics.at<double>(1, 1) / 1000.0;
+                pt.z = static_cast<float>(depth.at<uint16_t>(i, j)) / 1000.0;
+                cout << "X Y Z " << pt.x << " " << pt.y << " " << pt.z << endl;
+                cv::Vec3b px = rgb.at<cv::Vec3b>(i, j); // rgb
+                pt.r = px(0);
+                pt.g = px(1);
+                pt.b = px(2);
+                entire_cloud->push_back(pt);
+            }
+        }
+    }
+    // for (int i = 0; i < entire_cloud_mat.cols; ++i)
+    // {
+    //     const cv::Vec3d& pt_vec = entire_cloud_mat.at<cv::Vec3d>(0, i);
+    //     pcl::PointXYZRGB pt;
+    //     // cv::Vec3b px = rgb.at<cv::Vec3b>(); // rgb
+    //     pt.x = pt_vec[0];
+    //     pt.y = pt_vec[1];
+    //     pt.z = pt_vec[2];
+    //     pt.r = 255;
+    //     pt.g = 255;
+    //     pt.b = 255;
+    //     entire_cloud->push_back(pt);
+    // }
+
     cv::Mat combined_mask = mask & depth_mask;
 
     cv::Mat points_mat;
@@ -156,6 +206,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     for (int i = 0; i < points_mat.cols; ++i)
     {
         auto cv_point = points_mat.at<cv::Vec3d>(0, i);
+        // TODO rm this line
+        std::cout << "x y z " << cv_point(0) << " " << cv_point(1) << " " << cv_point(2) << std::endl;
         pcl::PointXYZ pt(cv_point(0), cv_point(1), cv_point(2));
         cloud->push_back(pt);
     }
@@ -204,13 +256,14 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     // const MatrixXf Y = 
 
     MatrixXf G = gaussian_kernel(Y, beta);
-    to_file("cpp_G.txt", G);
+    // to_file("cpp_G.txt", G);
     MatrixXf TY = Y;
     double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
 
     int iterations = 0;
     double error = tolerance + 1; // loop runs the first time
 
+    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> cpd_iters;
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
@@ -242,10 +295,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         MatrixXf den = P.colwise().sum().replicate(M, 1);
         // TODO ignored den[den == 0] = np.finfo(float).eps because seriously
         den.array() += c;
-        to_file(std::string("cpp_den_") + std::to_string(iterations) + ".txt", den);
+        // to_file(std::string("cpp_den_") + std::to_string(iterations) + ".txt", den);
 
         P = P.cwiseQuotient(den);
-        to_file(std::string("cpp_P_") + std::to_string(iterations) + ".txt", P);
+        // to_file(std::string("cpp_P_") + std::to_string(iterations) + ".txt", P);
 
         // Maximization step
         MatrixXf Pt1 = P.colwise().sum();
@@ -263,13 +316,14 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
         MatrixXf p1d = P1.asDiagonal();
         MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
         MatrixXf W = A.colPivHouseholderQr().solve(B);
-        to_file("cpp_m_lle.txt", m_lle);
+        // to_file("cpp_m_lle.txt", m_lle);
         // to_file(std::string("cpp_A_") + std::to_string(iterations) + ".txt", A);
         // to_file(std::string("cpp_B_") + std::to_string(iterations) + ".txt", B);
         // to_file(std::string("cpp_W_") + std::to_string(iterations) + ".txt", W);
 
         TY = Y + (G * W).transpose();
-        to_file(std::string("cpp_TY_") + std::to_string(iterations) + ".txt", TY);
+        cpd_iters.push_back(mat_to_cloud(TY));
+        // to_file(std::string("cpp_TY_") + std::to_string(iterations) + ".txt", TY);
 
         MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
         MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
@@ -298,14 +352,17 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr CDCPD::operator()(
     // TODO is really 1.0?
     Optimizer opt(template_cloud->getMatrixXfMap().topRows(3), 1.0);
 
-    Matrix3Xf Y_opt = opt(template_cloud->getMatrixXfMap().topRows(3), template_edges);
+    // TODO add back in
+    Matrix3Xf Y_opt = opt(TY, template_edges);
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out(new pcl::PointCloud<pcl::PointXYZ>);
-    for (int i = 0; i < Y_opt.cols(); ++i)
-    {
-        const Vector3f& pt = Y_opt.col(i);
-        cpd_out->push_back(pcl::PointXYZ(pt(0), pt(1), pt(2)));
-    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
 
-    return cpd_out;
+    return CDCPD::Output {
+        entire_cloud, // TODO get full cloud?
+        cloud, 
+        cloud_fully_filtered,
+        template_cloud,
+        cpd_iters,
+        cpd_out
+    };
 }

@@ -6,15 +6,25 @@
 
 class CDCPD {
 public:
+    struct Output {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr original_cloud;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr masked_point_cloud;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr last_template;
+        std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> cpd_iterations;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
+    };
+
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const cv::Mat& _intrinsics);
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr operator()(
+    Output operator()(
          const cv::Mat& rgb,
          const cv::Mat& depth,
          const cv::Mat& mask,
          const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
          const Eigen::MatrixXi& template_edges);
+
 private:
     const cv::Mat intrinsics;
     Eigen::Vector4f last_lower_bounding_box;

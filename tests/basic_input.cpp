@@ -93,8 +93,13 @@ int main() {
 
     CDCPD cdcpd(template_cloud, intrinsics);
 
+    pcl::visualization::PCLVisualizer::Ptr viewer = simpleVis(template_cloud);
+    
+    viewer->spinOnce (100);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     // TODO more
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < 30; ++i)
     {
 
         /// Color filter
@@ -127,15 +132,13 @@ int main() {
         cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
         cv::imwrite("hsv_mask.png", hsv_mask);
 
-        template_cloud = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
+        CDCPD::Output out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
+        template_cloud = out.gurobi_output;
 
-        pcl::visualization::PCLVisualizer::Ptr viewer = simpleVis(template_cloud);
-        
-        while (!viewer->wasStopped())
-        {
-            viewer->spinOnce (100);
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        viewer->removePointCloud("sample cloud");
+        viewer->addPointCloud<pcl::PointXYZ>(template_cloud, "sample cloud");
+        viewer->spinOnce (100, true);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     }
 
