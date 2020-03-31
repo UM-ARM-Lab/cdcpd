@@ -169,9 +169,10 @@ CDCPD::Output CDCPD::operator()(
             if (depth_mask.at<bool>(i, j))
             {
                 pcl::PointXYZRGB pt;
-                pt.x = (i - intrinsics.at<double>(0, 2)) * static_cast<float>(depth.at<uint16_t>(i, j)) / intrinsics.at<double>(0, 0) / 1000.0;
-                pt.y = (j - intrinsics.at<double>(1, 2)) * static_cast<float>(depth.at<uint16_t>(i, j)) / intrinsics.at<double>(1, 1) / 1000.0;
-                pt.z = static_cast<float>(depth.at<uint16_t>(i, j)) / 1000.0;
+                float d = static_cast<float>(depth.at<uint16_t>(i, j)) / 1000.0;
+                pt.x = (j - intrinsics.at<double>(0, 2)) * d / intrinsics.at<double>(0, 0);
+                pt.y = (i - intrinsics.at<double>(1, 2)) * d / intrinsics.at<double>(1, 1);
+                pt.z = d;
                 cout << "X Y Z " << pt.x << " " << pt.y << " " << pt.z << endl;
                 cv::Vec3b px = rgb.at<cv::Vec3b>(i, j); // rgb
                 pt.r = px(0);
