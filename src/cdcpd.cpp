@@ -25,14 +25,17 @@ using Eigen::MatrixXi;
 using Eigen::Vector3f;
 using Eigen::Vector4f;
 using Eigen::VectorXf;
+using pcl::PointCloud;
+using pcl::PointXYZ;
+using pcl::PointXYZRGB;
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
+PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
     for (int i = 0; i < mat.cols(); ++i)
     {
         const Vector3f& pt = mat.col(i);
-        cloud->push_back(pcl::PointXYZ(pt(0), pt(1), pt(2)));
+        cloud->push_back(PointXYZ(pt(0), pt(1), pt(2)));
     }
     return cloud;
 }
@@ -66,11 +69,11 @@ MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
     return kernel;
 }
 
-MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
+MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
                                      int lle_neighbors,
                                      double reg)
 {
-    pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud = kdtree.getInputCloud();
+    PointCloud<PointXYZ>::ConstPtr cloud = kdtree.getInputCloud();
     assert(cloud->height == 1);
     MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
     MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
@@ -109,11 +112,11 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtr
     return graph;
 }
 
-MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
                                   int lle_neighbors,
                                   double reg)
 {
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    pcl::KdTreeFLANN<PointXYZ> kdtree;
     kdtree.setInputCloud (template_cloud);
     MatrixXf W = barycenter_kneighbors_graph(kdtree, lle_neighbors, reg);
     MatrixXf M = (W.transpose() * W) - W.transpose() - W;
@@ -121,9 +124,9 @@ MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr templ
     return M;
 }
 
-CDCPD::CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
-             const Mat& _intrinsics) : 
-    intrinsics(_intrinsics),
+CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
+             const Mat& _P_matrix) : 
+    P_matrix(_P_matrix),
     last_lower_bounding_box(-5.0, -5.0, -5.0, 1.0),
     last_upper_bounding_box(5.0, 5.0, 5.0, 1.0),
     lle_neighbors(8),
@@ -139,111 +142,240 @@ CDCPD::CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
 {
 }
 
+/*
+ * Return a non-normalized probability that each of the tracked vertices produced any detected point.
+ */
+Eigen::VectorXf visibility_prior(const Matrix3Xf vertices, 
+                                 const Eigen::Matrix3f& intrinsics,
+                                 const cv::Mat& depth,
+                                 const cv::Mat& mask,
+                                 float k=1e1)
+{
+    // cout << "vertices" << endl;
+    // cout << vertices << endl;
+    // cout << "intrinsics" << endl;
+    // cout << intrinsics << endl;
+    // Project the vertices to get their corresponding pixel coordinate
+    Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
+    // Homogeneous coords: divide by third row
+    // cout << "image_space_vertices" << endl;
+    // cout << image_space_vertices << endl;
+    image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
+    image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
+    // cout << "image_space_vertices, updated" << endl;
+    // cout << image_space_vertices << endl;
+    image_space_vertices.topRows(2).array().min(0);
+    image_space_vertices.row(0).array().max(depth.cols); // TODO why?
+    image_space_vertices.row(1).array().max(depth.rows);
+    // cout << "image_space_vertices, updated again" << endl;
+    // cout << image_space_vertices << endl;
+
+    // Get image coordinates
+    Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
+    coords.row(0).array().min(0);
+    coords.row(0).array().max(depth.cols - 1);
+    coords.row(1).array().min(1);
+    coords.row(1).array().max(depth.rows - 1);
+
+    // Find difference between point depth and image depth
+    Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
+    for (int i = 0; i < vertices.cols(); ++i)
+    {
+        // cout << "depth at " << coords(1, i) << " " << coords(0, i) << endl;
+        uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
+        if (raw_depth != 0)
+        {
+            depth_diffs(i) = vertices(2, i) - static_cast<float>(raw_depth) / 1000.0;
+        }
+        else
+        {
+            depth_diffs(i) = 0.02; // prevent numerical problems; taken from the Python code
+        }
+    }
+    depth_diffs.array().min(0);
+    Eigen::VectorXf depth_factor = depth_diffs.array().min(0.0);
+    cv::Mat dist_img(depth.rows, depth.cols, depth.type());
+    int maskSize = 5;
+    cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
+    cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
+    imwrite("mask.png", mask);
+    cv::Mat dist_copy = dist_img.clone();
+    imwrite("dist_img.png", dist_copy * 255.0);
+
+    Eigen::VectorXf dist_to_mask(vertices.cols());
+    for (int i = 0; i < vertices.cols(); ++i)
+    {
+        dist_to_mask(i) = dist_img.at<float>(coords(1, i), coords(0, i));
+    }
+    VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
+    VectorXf prob = (-k * score).array().exp().matrix();
+    return prob;
+}
+
+// TODO return both point clouds
+// TODO based on the implementation here: 
+// https://github.com/ros-perception/image_pipeline/blob/ \
+// melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
+// Note that we expect that cx, cy, fx, fy are in the appropriate places in P
+std::tuple<PointCloud<PointXYZRGB>::Ptr, PointCloud<PointXYZ>::Ptr, std::vector<cv::Point>>
+point_clouds_from_images(const cv::Mat& depth_image,
+                         const cv::Mat& rgb_image,
+                         const cv::Mat& mask,
+                         const Eigen::MatrixXf& P)
+{
+    assert(depth_image.cols == rgb_image.cols);
+    assert(depth_image.rows == rgb_image.rows);
+    assert(depth_image.type() == CV_16U);
+    assert(P.rows() == 3 && P.cols() == 4);
+    // Assume unit_scaling is the standard Kinect 1mm
+    float unit_scaling = 1.0 / 1000.0;
+    float constant_x = unit_scaling / P(0, 0);
+    float constant_y = unit_scaling / P(1, 1);
+    float center_x = P(0, 2);
+    float center_y = P(1, 2);
+    float bad_point = std::numeric_limits<float>::quiet_NaN();
+
+    const uint16_t* depth_row = reinterpret_cast<const uint16_t*>(&depth_image.data[0]);
+    int row_step = depth_image.step / sizeof(uint16_t);
+    const uint8_t* rgb = &rgb_image.data[0];
+    int rgb_step = 3; // TODO check on this
+    int rgb_skip = rgb_image.step - rgb_image.cols * rgb_step;
+
+    PointCloud<PointXYZRGB>::Ptr unfiltered_cloud(
+            new PointCloud<PointXYZRGB>(depth_image.cols, depth_image.rows));
+    PointCloud<PointXYZ>::Ptr filtered_cloud(new PointCloud<PointXYZ>);
+    std::vector<cv::Point> pixel_coords;
+    auto unfiltered_iter = unfiltered_cloud->begin();
+
+    for (int v = 0; v < unfiltered_cloud->height; ++v, depth_row += row_step, rgb += rgb_skip)
+    {
+        for (int u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step, ++unfiltered_iter)
+        {
+            uint16_t depth = depth_row[u];
+
+            // Assume depth = 0 is the standard was to note invalid
+            if (depth == 0)
+            {
+                unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
+            }
+            else
+            {
+                float x = (u - center_x) * depth * constant_x;
+                float y = (v - center_y) * depth * constant_y;
+                float z = depth * unit_scaling;
+                // Add to unfiltered cloud
+                unfiltered_iter->x = x;
+                unfiltered_iter->y = y;
+                unfiltered_iter->z = z;
+                unfiltered_iter->r = rgb[0];
+                unfiltered_iter->g = rgb[1];
+                unfiltered_iter->b = rgb[2];
+
+                // Add to filtered cloud, if it's not masked TODO and also outside of the current bounds
+                cv::Point2i pixel = cv::Point2i(u, v);
+                if (mask.at<bool>(pixel))
+                {
+                    filtered_cloud->push_back(PointXYZ(x, y, z));
+                    pixel_coords.push_back(pixel);
+                }
+            }
+        }
+    }
+    assert(unfiltered_iter == unfiltered_cloud->end());
+    return { unfiltered_cloud, filtered_cloud, pixel_coords };
+}
+
 CDCPD::Output CDCPD::operator()(
         const cv::Mat& rgb,
         const cv::Mat& depth,
         const cv::Mat& mask,
-        const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+        const PointCloud<PointXYZ>::Ptr template_cloud,
         const MatrixXi& template_edges)
 {
     assert(rgb.type() == CV_8UC3);
     assert(depth.type() == CV_16U);
     assert(mask.type() == CV_8U);
-    assert(intrinsics.type() == CV_64F);
-    assert(intrinsics.rows == 3 && intrinsics.cols == 3);
+    assert(P_matrix.type() == CV_64F);
+    assert(P_matrix.rows == 3 && P_matrix.cols == 4);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
-
-    /// Filtering step
-    // Get a mask for all the valid depths
-    cv::Mat depth_mask = depth != 0;
+    // We'd like an Eigen version of the P matrix
+    Eigen::MatrixXf P_eigen(3, 4);
+    cv::cv2eigen(P_matrix, P_eigen);
+    cout << "test1" << endl;
 
     // For testing purposes, compute the whole cloud, though it's not really necessary TODO
-    // TODO add color
-    // cv::rgbd::depthTo3d(depth, intrinsics, entire_cloud_mat, depth_mask);
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr entire_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-    for (int i = 0; i < depth.rows; ++i)
-    {
-        for (int j = 0; j < depth.cols; ++j)
-        {
-            if (depth_mask.at<bool>(i, j))
-            {
-                pcl::PointXYZRGB pt;
-                float d = static_cast<float>(depth.at<uint16_t>(i, j)) / 1000.0;
-                pt.x = (j - intrinsics.at<double>(0, 2)) * d / intrinsics.at<double>(0, 0);
-                pt.y = (i - intrinsics.at<double>(1, 2)) * d / intrinsics.at<double>(1, 1);
-                pt.z = d;
-                cout << "X Y Z " << pt.x << " " << pt.y << " " << pt.z << endl;
-                cv::Vec3b px = rgb.at<cv::Vec3b>(i, j); // rgb
-                pt.r = px(0);
-                pt.g = px(1);
-                pt.b = px(2);
-                entire_cloud->push_back(pt);
-            }
-        }
-    }
-    // for (int i = 0; i < entire_cloud_mat.cols; ++i)
-    // {
-    //     const cv::Vec3d& pt_vec = entire_cloud_mat.at<cv::Vec3d>(0, i);
-    //     pcl::PointXYZRGB pt;
-    //     // cv::Vec3b px = rgb.at<cv::Vec3b>(); // rgb
-    //     pt.x = pt_vec[0];
-    //     pt.y = pt_vec[1];
-    //     pt.z = pt_vec[2];
-    //     pt.r = 255;
-    //     pt.g = 255;
-    //     pt.b = 255;
-    //     entire_cloud->push_back(pt);
-    // }
-
-    cv::Mat combined_mask = mask & depth_mask;
+    auto [entire_cloud, cloud, pixel_coords] = point_clouds_from_images(depth, rgb, mask, P_eigen);
+    cout << "test2" << endl;
 
     cv::Mat points_mat;
-    cv::rgbd::depthTo3d(depth, intrinsics, points_mat, combined_mask);
+    // TODO rm intrinsics
+    cv::Mat intrinsics;
+    cout << "test3" << endl;
+    Eigen::Matrix3f intr = P_eigen.leftCols(3);
+    cv::eigen2cv(intr, intrinsics);
+    cv::rgbd::depthTo3d(depth, intrinsics, points_mat, mask);
+    cout << "test4" << endl;
 
     // TODO later we will need correspondence between depth image and points
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    PointCloud<PointXYZ>::Ptr old_cloud(new PointCloud<PointXYZ>);
     // TODO this should be a function if it's still used when we have correspondence
     for (int i = 0; i < points_mat.cols; ++i)
     {
         auto cv_point = points_mat.at<cv::Vec3d>(0, i);
         // TODO rm this line
-        std::cout << "x y z " << cv_point(0) << " " << cv_point(1) << " " << cv_point(2) << std::endl;
-        pcl::PointXYZ pt(cv_point(0), cv_point(1), cv_point(2));
-        cloud->push_back(pt);
+        // std::cout << "x y z " << cv_point(0) << " " << cv_point(1) << " " << cv_point(2) << std::endl;
+        PointXYZ pt(cv_point(0), cv_point(1), cv_point(2));
+        old_cloud->push_back(pt);
     }
+    cout << "test5" << endl;
 
     /// Box filter
     // TODO what is last element in vector?
-    pcl::CropBox<pcl::PointXYZ> box_filter;
+    pcl::CropBox<PointXYZ> box_filter;
     // Set the filters, allowing a bit more flexibility
     box_filter.setMin(last_lower_bounding_box - Vector4f(0.1, 0.1, 0.1, 0.0));
     box_filter.setMax(last_upper_bounding_box + Vector4f(0.1, 0.1, 0.1, 0.0));
     box_filter.setInputCloud(cloud);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_box_filtered(new pcl::PointCloud<pcl::PointXYZ>);
+    PointCloud<PointXYZ>::Ptr cloud_box_filtered(new PointCloud<PointXYZ>);
     box_filter.filter(*cloud_box_filtered);
+    cout << "test6" << endl;
     // last_lower_bounding_box, last_upper_bounding_box set after the VoxelGrid filter
 
     /// VoxelGrid filter
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_fully_filtered(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    PointCloud<PointXYZ>::Ptr cloud_fully_filtered(new PointCloud<PointXYZ>);
+    pcl::VoxelGrid<PointXYZ> sor;
     sor.setInputCloud(cloud);   
     sor.setLeafSize(0.02f, 0.02f, 0.02f);   
     sor.filter(*cloud_fully_filtered);
+    cout << "test7" << endl;
 
     // Set last_lower_bounding_box, last_upper_bounding_box to remember bounds
     // TODO this should probably be lower, for template?
     // pcl::getMinMax3D(*cloud_fully_filtered, last_lower_bounding_box, last_upper_bounding_box);
 
+    const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
+    const MatrixXf& Y = template_cloud->getMatrixXfMap().topRows(3);
+
+    // TODO be able to disable?
+    // TODO the combined mask doesn't account for the PCL filter, does that matter?
+    // TODO less trash way?
+    Eigen::Matrix3f intrinsics_eigen = Eigen::Matrix3f::Zero();
+    intrinsics_eigen(0, 0) = intrinsics.at<float>(0, 0);
+    intrinsics_eigen(0, 2) = intrinsics.at<float>(0, 2);
+    intrinsics_eigen(1, 1) = intrinsics.at<float>(1, 1);
+    intrinsics_eigen(1, 2) = intrinsics.at<float>(1, 2);
+    intrinsics_eigen(2, 2) = intrinsics.at<float>(2, 2);
+    cout << "test8" << endl;
+    // TODO add back in
+    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intrinsics_eigen, depth, );
+    cout << "test9" << endl;
     /// CPD step
 
     // TODO maybe use a PCL point cloud for the template
     // CPD (TODO make into a function)
 
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-
-    const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
-    const MatrixXf& Y = template_cloud->getMatrixXfMap().topRows(3);
 
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
@@ -264,7 +396,7 @@ CDCPD::Output CDCPD::operator()(
     int iterations = 0;
     double error = tolerance + 1; // loop runs the first time
 
-    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> cpd_iters;
+    std::vector<PointCloud<PointXYZ>::Ptr> cpd_iters;
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
@@ -290,6 +422,8 @@ CDCPD::Output CDCPD::operator()(
 
         P = (-P / (2 * sigma2)).array().exp().matrix();
         // TODO prior
+        // TODO add back in
+        // P.array().colwise() *= Y_emit_prior.array();
         // if self.params.Y_emit_prior is not None:
         //      P *= self.params.Y_emit_prior[:, np.newaxis]
 
@@ -356,7 +490,7 @@ CDCPD::Output CDCPD::operator()(
     // TODO add back in
     Matrix3Xf Y_opt = opt(TY, template_edges);
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
+    PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
 
     return CDCPD::Output {
         entire_cloud, // TODO get full cloud?

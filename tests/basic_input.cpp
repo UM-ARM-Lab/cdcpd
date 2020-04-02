@@ -64,6 +64,7 @@ int main() {
     MatrixXf template_vertices(3, 50);
     template_vertices.setZero();
     template_vertices.row(0).setLinSpaced(50, 0, 1);
+    template_vertices.row(2).array() += 1; // TODO this is a hack for avoiding divide by zero issues
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < template_vertices.cols(); ++i)

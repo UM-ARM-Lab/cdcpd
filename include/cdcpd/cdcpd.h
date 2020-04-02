@@ -16,7 +16,7 @@ public:
     };
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
-          const cv::Mat& _intrinsics);
+          const cv::Mat& _P_matrix);
 
     Output operator()(
          const cv::Mat& rgb,
@@ -26,7 +26,7 @@ public:
          const Eigen::MatrixXi& template_edges);
 
 private:
-    const cv::Mat intrinsics;
+    const cv::Mat P_matrix;
     Eigen::Vector4f last_lower_bounding_box;
     Eigen::Vector4f last_upper_bounding_box;
     const int lle_neighbors;
