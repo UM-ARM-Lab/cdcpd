@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/optimizer.h"
 #include <cassert>
@@ -151,6 +152,13 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
                                  const cv::Mat& mask,
                                  float k=1e1)
 {
+    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+    auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
+        std::ofstream(fname) << mat.format(np_fmt);
+    };
+
+    to_file("/home/steven/catkin/cpp_verts.txt", vertices);
+    to_file("/home/steven/catkin/cpp_intrinsics.txt", intrinsics);
     // cout << "vertices" << endl;
     // cout << vertices << endl;
     // cout << "intrinsics" << endl;
@@ -164,18 +172,34 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
     image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
     // cout << "image_space_vertices, updated" << endl;
     // cout << image_space_vertices << endl;
-    image_space_vertices.topRows(2).array().min(0);
-    image_space_vertices.row(0).array().max(depth.cols); // TODO why?
-    image_space_vertices.row(1).array().max(depth.rows);
+    for (int i = 0; i < image_space_vertices.cols(); ++i)
+    {
+        float x = image_space_vertices(0, i);
+        float y = image_space_vertices(1, i);
+        image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
+        image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
+    }
+    // image_space_vertices.topRows(2) = image_space_vertices.topRows(2).array().min(0);
+    // image_space_vertices.row(0) = image_space_vertices.row(0).array().max(depth.cols);
+    // image_space_vertices.row(1) = image_space_vertices.row(1).array().max(depth.rows);
+    to_file("/home/steven/catkin/cpp_projected.txt", image_space_vertices);
     // cout << "image_space_vertices, updated again" << endl;
     // cout << image_space_vertices << endl;
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
-    coords.row(0).array().min(0);
-    coords.row(0).array().max(depth.cols - 1);
-    coords.row(1).array().min(1);
-    coords.row(1).array().max(depth.rows - 1);
+
+    for (int i = 0; i < coords.cols(); ++i)
+    {
+        coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
+        coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
+    }
+    // coords.row(0) = coords.row(0).array().min(0);
+    // coords.row(0) = coords.row(0).array().max(depth.cols - 1);
+    // coords.row(1) = coords.row(1).array().min(1);
+    // coords.row(1) = coords.row(1).array().max(depth.rows - 1);
+
+    to_file("/home/steven/catkin/cpp_coords.txt", coords.cast<float>());
 
     // Find difference between point depth and image depth
     Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
@@ -192,15 +216,17 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
             depth_diffs(i) = 0.02; // prevent numerical problems; taken from the Python code
         }
     }
-    depth_diffs.array().min(0);
-    Eigen::VectorXf depth_factor = depth_diffs.array().min(0.0);
+    depth_diffs = depth_diffs.array().max(0);
+    to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
+
+    Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
     cv::Mat dist_img(depth.rows, depth.cols, depth.type());
     int maskSize = 5;
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
     cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
-    imwrite("mask.png", mask);
+    imwrite("/home/steven/catkin/mask.png", mask);
     cv::Mat dist_copy = dist_img.clone();
-    imwrite("dist_img.png", dist_copy * 255.0);
+    imwrite("/home/steven/catkin/dist_img.png", dist_copy * 255.0);
 
     Eigen::VectorXf dist_to_mask(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
@@ -209,6 +235,7 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
     }
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     VectorXf prob = (-k * score).array().exp().matrix();
+    to_file("/home/steven/catkin/cpp_prob.txt", prob);
     return prob;
 }
 
@@ -368,7 +395,7 @@ CDCPD::Output CDCPD::operator()(
     intrinsics_eigen(2, 2) = intrinsics.at<float>(2, 2);
     cout << "test8" << endl;
     // TODO add back in
-    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intrinsics_eigen, depth, );
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intrinsics_eigen, depth, mask);
     cout << "test9" << endl;
     /// CPD step
 
@@ -423,7 +450,7 @@ CDCPD::Output CDCPD::operator()(
         P = (-P / (2 * sigma2)).array().exp().matrix();
         // TODO prior
         // TODO add back in
-        // P.array().colwise() *= Y_emit_prior.array();
+        P.array().colwise() *= Y_emit_prior.array();
         // if self.params.Y_emit_prior is not None:
         //      P *= self.params.Y_emit_prior[:, np.newaxis]
 
