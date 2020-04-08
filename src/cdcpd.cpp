@@ -128,8 +128,8 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
 CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
              const Mat& _P_matrix) : 
     P_matrix(_P_matrix),
-    last_lower_bounding_box(-5.0, -5.0, -5.0, 1.0),
-    last_upper_bounding_box(5.0, 5.0, 5.0, 1.0),
+    last_lower_bounding_box(-5.0, -5.0, -5.0),
+    last_upper_bounding_box(5.0, 5.0, 5.0),
     lle_neighbors(8),
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)),
     tolerance(1e-4),
@@ -248,7 +248,9 @@ std::tuple<PointCloud<PointXYZRGB>::Ptr, PointCloud<PointXYZ>::Ptr, std::vector<
 point_clouds_from_images(const cv::Mat& depth_image,
                          const cv::Mat& rgb_image,
                          const cv::Mat& mask,
-                         const Eigen::MatrixXf& P)
+                         const Eigen::MatrixXf& P,
+                         const Eigen::Vector3f lower_bounding_box_vec,
+                         const Eigen::Vector3f upper_bounding_box_vec)
 {
     assert(depth_image.cols == rgb_image.cols);
     assert(depth_image.rows == rgb_image.rows);
@@ -261,6 +263,8 @@ point_clouds_from_images(const cv::Mat& depth_image,
     float center_x = P(0, 2);
     float center_y = P(1, 2);
     float bad_point = std::numeric_limits<float>::quiet_NaN();
+    Eigen::Array<float, 3, 1> lower_bounding_box = lower_bounding_box_vec.array();
+    Eigen::Array<float, 3, 1> upper_bounding_box = upper_bounding_box_vec.array();
 
     const uint16_t* depth_row = reinterpret_cast<const uint16_t*>(&depth_image.data[0]);
     int row_step = depth_image.step / sizeof(uint16_t);
@@ -274,6 +278,7 @@ point_clouds_from_images(const cv::Mat& depth_image,
     std::vector<cv::Point> pixel_coords;
     auto unfiltered_iter = unfiltered_cloud->begin();
 
+    float infinity = std::numeric_limits<float>::infinity();
     for (int v = 0; v < unfiltered_cloud->height; ++v, depth_row += row_step, rgb += rgb_skip)
     {
         for (int u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step, ++unfiltered_iter)
@@ -298,12 +303,18 @@ point_clouds_from_images(const cv::Mat& depth_image,
                 unfiltered_iter->g = rgb[1];
                 unfiltered_iter->b = rgb[2];
 
-                // Add to filtered cloud, if it's not masked TODO and also outside of the current bounds
                 cv::Point2i pixel = cv::Point2i(u, v);
-                if (mask.at<bool>(pixel))
+                Eigen::Array<float, 3, 1> point(x, y, z);
+                if (mask.at<bool>(pixel) &&
+                    point.min(upper_bounding_box).isApprox(point) &&
+                    point.max(lower_bounding_box).isApprox(point))
                 {
                     filtered_cloud->push_back(PointXYZ(x, y, z));
                     pixel_coords.push_back(pixel);
+                }
+                else if (mask.at<bool>(pixel))
+                {
+                    cout << "Point ignored because it was outside the boundaries." << endl;
                 }
             }
         }
@@ -329,57 +340,38 @@ CDCPD::Output CDCPD::operator()(
     // We'd like an Eigen version of the P matrix
     Eigen::MatrixXf P_eigen(3, 4);
     cv::cv2eigen(P_matrix, P_eigen);
-    cout << "test1" << endl;
+    // cout << "test1" << endl;
 
     // For testing purposes, compute the whole cloud, though it's not really necessary TODO
-    auto [entire_cloud, cloud, pixel_coords] = point_clouds_from_images(depth, rgb, mask, P_eigen);
-    cout << "test2" << endl;
+    Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
+    auto [entire_cloud, cloud, pixel_coords]
+        = point_clouds_from_images(
+                depth,
+                rgb,
+                mask,
+                P_eigen,
+                last_lower_bounding_box - bounding_box_extend,
+                last_upper_bounding_box + bounding_box_extend);
+    cout << "Points in filtered: " << cloud->width << endl;
+    // cout << "test2" << endl;
 
     cv::Mat points_mat;
     // TODO rm intrinsics
     cv::Mat intrinsics;
-    cout << "test3" << endl;
+    // cout << "test3" << endl;
     Eigen::Matrix3f intr = P_eigen.leftCols(3);
     cv::eigen2cv(intr, intrinsics);
-    cv::rgbd::depthTo3d(depth, intrinsics, points_mat, mask);
-    cout << "test4" << endl;
-
-    // TODO later we will need correspondence between depth image and points
-    PointCloud<PointXYZ>::Ptr old_cloud(new PointCloud<PointXYZ>);
-    // TODO this should be a function if it's still used when we have correspondence
-    for (int i = 0; i < points_mat.cols; ++i)
-    {
-        auto cv_point = points_mat.at<cv::Vec3d>(0, i);
-        // TODO rm this line
-        // std::cout << "x y z " << cv_point(0) << " " << cv_point(1) << " " << cv_point(2) << std::endl;
-        PointXYZ pt(cv_point(0), cv_point(1), cv_point(2));
-        old_cloud->push_back(pt);
-    }
-    cout << "test5" << endl;
-
-    /// Box filter
-    // TODO what is last element in vector?
-    pcl::CropBox<PointXYZ> box_filter;
-    // Set the filters, allowing a bit more flexibility
-    box_filter.setMin(last_lower_bounding_box - Vector4f(0.1, 0.1, 0.1, 0.0));
-    box_filter.setMax(last_upper_bounding_box + Vector4f(0.1, 0.1, 0.1, 0.0));
-    box_filter.setInputCloud(cloud);
-    PointCloud<PointXYZ>::Ptr cloud_box_filtered(new PointCloud<PointXYZ>);
-    box_filter.filter(*cloud_box_filtered);
-    cout << "test6" << endl;
-    // last_lower_bounding_box, last_upper_bounding_box set after the VoxelGrid filter
+    // cout << "test4" << endl;
 
     /// VoxelGrid filter
     PointCloud<PointXYZ>::Ptr cloud_fully_filtered(new PointCloud<PointXYZ>);
     pcl::VoxelGrid<PointXYZ> sor;
-    sor.setInputCloud(cloud);   
-    sor.setLeafSize(0.02f, 0.02f, 0.02f);   
+    cout << "Points in cloud before leaf: " << cloud->width << endl;
+    sor.setInputCloud(cloud);
+    sor.setLeafSize(0.02f, 0.02f, 0.02f);
     sor.filter(*cloud_fully_filtered);
-    cout << "test7" << endl;
-
-    // Set last_lower_bounding_box, last_upper_bounding_box to remember bounds
-    // TODO this should probably be lower, for template?
-    // pcl::getMinMax3D(*cloud_fully_filtered, last_lower_bounding_box, last_upper_bounding_box);
+    cout << "Points in fully filtered: " << cloud_fully_filtered->width << endl;
+    // cout << "test7" << endl;
 
     const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
     const MatrixXf& Y = template_cloud->getMatrixXfMap().topRows(3);
@@ -393,10 +385,10 @@ CDCPD::Output CDCPD::operator()(
     intrinsics_eigen(1, 1) = intrinsics.at<float>(1, 1);
     intrinsics_eigen(1, 2) = intrinsics.at<float>(1, 2);
     intrinsics_eigen(2, 2) = intrinsics.at<float>(2, 2);
-    cout << "test8" << endl;
+    // cout << "test8" << endl;
     // TODO add back in
     Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intrinsics_eigen, depth, mask);
-    cout << "test9" << endl;
+    // cout << "test9" << endl;
     /// CPD step
 
     // TODO maybe use a PCL point cloud for the template
@@ -409,8 +401,8 @@ CDCPD::Output CDCPD::operator()(
     };
 
     // TODO TESTING remove this
-    // to_file("cpp_X.txt", X);
-    // to_file("cpp_Y.txt", Y);
+    to_file("/home/steven/catkin/cpp_X.txt", X);
+    to_file("/home/steven/catkin/cpp_Y.txt", Y);
     
     // const MatrixXf X = 
     // const MatrixXf Y = 
@@ -450,7 +442,13 @@ CDCPD::Output CDCPD::operator()(
         P = (-P / (2 * sigma2)).array().exp().matrix();
         // TODO prior
         // TODO add back in
+        // cout << "P before" << endl;
+        // cout << P << endl;
+        // cout << "Y_emit_prior" << endl;
+        // cout << Y_emit_prior << endl;
         P.array().colwise() *= Y_emit_prior.array();
+        // cout << "P after" << endl;
+        // cout << P << endl;
         // if self.params.Y_emit_prior is not None:
         //      P *= self.params.Y_emit_prior[:, np.newaxis]
 
@@ -516,8 +514,13 @@ CDCPD::Output CDCPD::operator()(
 
     // TODO add back in
     Matrix3Xf Y_opt = opt(TY, template_edges);
+    to_file("/home/steven/catkin/cpp_Y_opt.txt", Y_opt);
 
     PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
+
+    // Set the min and max for the box filter for next time
+    last_lower_bounding_box = Y_opt.rowwise().minCoeff();
+    last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
 
     return CDCPD::Output {
         entire_cloud, // TODO get full cloud?

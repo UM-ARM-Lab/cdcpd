@@ -27,8 +27,8 @@ public:
 
 private:
     const cv::Mat P_matrix;
-    Eigen::Vector4f last_lower_bounding_box;
-    Eigen::Vector4f last_upper_bounding_box;
+    Eigen::Vector3f last_lower_bounding_box;
+    Eigen::Vector3f last_upper_bounding_box;
     const int lle_neighbors;
     Eigen::MatrixXf m_lle;
     const double tolerance;

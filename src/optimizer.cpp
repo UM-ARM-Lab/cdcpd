@@ -54,6 +54,7 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
         // Disables logging to file and logging to console (with a 0 as the value of the flag)
         env.set(GRB_IntParam_OutputFlag, 0);
         GRBModel model(env);
+        model.set("ScaleFlag", "2");
 
         // Add the vars to the model
         {
