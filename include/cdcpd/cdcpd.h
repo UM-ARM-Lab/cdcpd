@@ -26,6 +26,7 @@ public:
          const Eigen::MatrixXi& template_edges);
 
 private:
+    Eigen::Matrix3Xf original_template;
     const cv::Mat P_matrix;
     Eigen::Vector3f last_lower_bounding_box;
     Eigen::Vector3f last_upper_bounding_box;

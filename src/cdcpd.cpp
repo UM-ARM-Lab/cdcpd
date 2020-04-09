@@ -127,6 +127,7 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
 
 CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
              const Mat& _P_matrix) : 
+    original_template(template_cloud->getMatrixXfMap().topRows(3)),
     P_matrix(_P_matrix),
     last_lower_bounding_box(-5.0, -5.0, -5.0),
     last_upper_bounding_box(5.0, 5.0, 5.0),
@@ -512,7 +513,7 @@ CDCPD::Output CDCPD::operator()(
     // TODO is really 1.0?
     to_file("/home/steven/catkin/cpp_TY.txt", TY);
     // cout << original_template << endl;
-    Optimizer opt(template_cloud->getMatrixXfMap().topRows(3), 1.0);
+    Optimizer opt(original_template, 1.0);
 
     // TODO add back in
     Matrix3Xf Y_opt = opt(TY, template_edges);
