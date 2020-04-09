@@ -510,6 +510,8 @@ CDCPD::Output CDCPD::operator()(
     // Next step: optimization.
 
     // TODO is really 1.0?
+    to_file("/home/steven/catkin/cpp_TY.txt", TY);
+    // cout << original_template << endl;
     Optimizer opt(template_cloud->getMatrixXfMap().topRows(3), 1.0);
 
     // TODO add back in

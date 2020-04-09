@@ -69,6 +69,7 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
         {
             for (size_t i = 0; i < E.cols(); ++i)
             {
+                std::cout << "constraint: " << stretch_lambda * stretch_lambda * (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm() << std::endl;
                 model.addQConstr(
                             buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
                             GRB_LESS_EQUAL,
