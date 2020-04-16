@@ -13,7 +13,7 @@
 using std::cout;
 using std::endl;
 using Eigen::MatrixXf;
-using Eigen::MatrixXi;
+using Eigen::Matrix2Xi;
 
 using namespace cv;
 
@@ -73,7 +73,7 @@ int main() {
         template_cloud->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
 
-    MatrixXi template_edges(2, 49);
+    Matrix2Xi template_edges(2, 49);
     template_edges(0, 0) = 0;
     template_edges(1, template_edges.cols() - 1) = 49;
     for (int i = 1; i <= template_edges.cols() - 1; ++i)
@@ -87,10 +87,10 @@ int main() {
     // cout << "template_edges" << endl;
     // cout << template_edges << endl;
 
-    FileStorage color_calib_fs("../../../kinect2_calibration_files/data/000792364047/calib_color.yaml", FileStorage::READ);
+    FileStorage color_calib_fs("../../../catkin/src/kinect2_calibration_files/data/000792364047/calib_color.yaml", FileStorage::READ);
     cv::Mat intrinsics;
     color_calib_fs["cameraMatrix"] >> intrinsics;
-    // cout << "intrinsics type: " << intrinsics.type() << endl;
+    cout << "intrinsics type: " << intrinsics.type() << endl;
 
     CDCPD cdcpd(template_cloud, intrinsics);
 
@@ -106,7 +106,7 @@ int main() {
         /// Color filter
         // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
         // The flag isn't tested or implemented
-        Mat color_image_bgr = imread("../../../../data/image_color_rect_screenshot_10.03.2020.png", IMREAD_COLOR);
+        Mat color_image_bgr = imread("../../../catkin/data/image_color_rect_screenshot_10.03.2020.png", IMREAD_COLOR);
         Mat rgb_image;
         cv::cvtColor(color_image_bgr, rgb_image, cv::COLOR_BGR2RGB);
         // TODO I'm pretty sure this is an 8-bit image.

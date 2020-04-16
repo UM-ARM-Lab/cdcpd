@@ -15,6 +15,11 @@ public:
         pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
     };
 
+    struct FixedPoint {
+        Eigen::Vector3f position;
+        int template_index;
+    };
+
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const cv::Mat& _P_matrix);
 
@@ -23,7 +28,9 @@ public:
          const cv::Mat& depth,
          const cv::Mat& mask,
          const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-         const Eigen::MatrixXi& template_edges);
+         const Eigen::Matrix2Xi& template_edges,
+         const std::vector<FixedPoint>& fixed_points = std::vector<FixedPoint>()
+         );
 
 private:
     Eigen::Matrix3Xf original_template;

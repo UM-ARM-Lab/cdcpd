@@ -23,6 +23,7 @@ using cv::Mat;
 using Eigen::MatrixXf;
 using Eigen::Matrix3Xf;
 using Eigen::MatrixXi;
+using Eigen::Matrix2Xi;
 using Eigen::Vector3f;
 using Eigen::Vector4f;
 using Eigen::VectorXf;
@@ -329,7 +330,9 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& depth,
         const cv::Mat& mask,
         const PointCloud<PointXYZ>::Ptr template_cloud,
-        const MatrixXi& template_edges)
+        const Matrix2Xi& template_edges,
+        const std::vector<CDCPD::FixedPoint>& fixed_points
+        )
 {
     assert(rgb.type() == CV_8UC3);
     assert(depth.type() == CV_16U);
@@ -374,8 +377,8 @@ CDCPD::Output CDCPD::operator()(
     cout << "Points in fully filtered: " << cloud_fully_filtered->width << endl;
     // cout << "test7" << endl;
 
-    const MatrixXf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
-    const MatrixXf& Y = template_cloud->getMatrixXfMap().topRows(3);
+    const Matrix3Xf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
+    const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
 
     // TODO be able to disable?
     // TODO the combined mask doesn't account for the PCL filter, does that matter?
@@ -410,7 +413,7 @@ CDCPD::Output CDCPD::operator()(
 
     MatrixXf G = gaussian_kernel(Y, beta);
     // to_file("cpp_G.txt", G);
-    MatrixXf TY = Y;
+    Matrix3Xf TY = Y;
     double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
 
     int iterations = 0;
@@ -515,8 +518,7 @@ CDCPD::Output CDCPD::operator()(
     // cout << original_template << endl;
     Optimizer opt(original_template, 1.0);
 
-    // TODO add back in
-    Matrix3Xf Y_opt = opt(TY, template_edges);
+    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points);
     to_file("/home/steven/catkin/cpp_Y_opt.txt", Y_opt);
 
     PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);

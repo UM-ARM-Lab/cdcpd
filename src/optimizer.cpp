@@ -1,9 +1,12 @@
 #include "cdcpd/optimizer.h"
 
-using Eigen::MatrixXf;
 using Eigen::Matrix3Xf;
 using Eigen::Matrix3Xd;
-using Eigen::MatrixXi;
+using Eigen::Matrix2Xi;
+
+#include <iostream>
+using std::cout;
+using std::endl;
 
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
@@ -37,11 +40,8 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const float _stretch_lam
 {
 }
 
-// TODO change everything to Matrix3Xfs
-
-MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
+Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points)
 {
-    assert(E.rows() == 2);
     Matrix3Xf Y_opt(Y.rows(), Y.cols());
     GRBVar* vars = nullptr;
     try
@@ -78,9 +78,36 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
             model.update();
         }
 
+        Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
+
+        // Next, add the fixed point constraints that we might have.
+        // TODO make this more
+        // First, make sure that the constraints can be satisfied
+        GRBQuadExpr gripper_objective_fn(0);
+        if (all_constraints_satisfiable(fixed_points))
+        {
+            // If that's possible, we'll require that all constraints are equal
+            for (const auto& fixed_point : fixed_points)
+            {
+                model.addConstr(vars[3 * fixed_point.template_index + 0], GRB_EQUAL, fixed_point.position(0), "fixed_point");
+                model.addConstr(vars[3 * fixed_point.template_index + 1], GRB_EQUAL, fixed_point.position(1), "fixed_point");
+                model.addConstr(vars[3 * fixed_point.template_index + 2], GRB_EQUAL, fixed_point.position(2), "fixed_point");
+            }
+        }
+        else
+        {
+            cout << "Gripper constraint cannot be satisfied." << endl;
+            for (const auto& fixed_point : fixed_points)
+            {
+                const auto expr0 = vars[fixed_point.template_index + 0] - Y_copy(0, fixed_point.template_index);
+                const auto expr1 = vars[fixed_point.template_index + 1] - Y_copy(1, fixed_point.template_index);
+                const auto expr2 = vars[fixed_point.template_index + 2] - Y_copy(2, fixed_point.template_index);
+                gripper_objective_fn += 100.0 * (expr0 * expr0 + expr1 * expr1 + expr2 * expr2);
+            }
+        }
+
         // Build the objective function
         {
-            Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
             GRBQuadExpr objective_fn(0);
             for (size_t i = 0; i < num_vectors; ++i)
             {
@@ -128,4 +155,23 @@ MatrixXf Optimizer::operator()(const Matrix3Xf& Y, const MatrixXi& E)
 
     delete[] vars;
     return Y_opt;
+}
+
+bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>& fixed_points) const
+{
+    for (auto first_elem = fixed_points.cbegin(); first_elem != fixed_points.cend(); ++first_elem)
+    {
+        for (auto second_elem = first_elem + 1; second_elem != fixed_points.cend(); ++second_elem)
+        {
+            float current_distance = (first_elem->position - second_elem->position).squaredNorm();
+            float original_distance = (initial_template.col(first_elem->template_index) - initial_template.col(second_elem->template_index)).squaredNorm();
+            cout << "current_distance " << current_distance << endl;
+            cout << "original_distance " << original_distance << endl;
+            if (current_distance > original_distance * stretch_lambda * stretch_lambda)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
 }
