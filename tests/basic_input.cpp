@@ -92,7 +92,7 @@ int main() {
     color_calib_fs["cameraMatrix"] >> intrinsics;
     cout << "intrinsics type: " << intrinsics.type() << endl;
 
-    CDCPD cdcpd(template_cloud, intrinsics);
+    CDCPD cdcpd(template_cloud, intrinsics, false);
 
     pcl::visualization::PCLVisualizer::Ptr viewer = simpleVis(template_cloud);
     

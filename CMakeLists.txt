@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(libcdcpd SHARED
     src/cdcpd.cpp
     src/optimizer.cpp
+    src/past_template_matcher.cpp
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")

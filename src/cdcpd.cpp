@@ -1,5 +1,4 @@
 #include <algorithm>
-#include "cdcpd/cdcpd.h"
 #include "cdcpd/optimizer.h"
 #include <cassert>
 #include <Eigen/Dense>
@@ -10,6 +9,7 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
+#include "cdcpd/past_template_matcher.h"
 
 // TODO rm
 #include <iostream>
@@ -22,11 +22,13 @@ using std::endl;
 using cv::Mat;
 using Eigen::MatrixXf;
 using Eigen::Matrix3Xf;
+using Eigen::Matrix3f;
 using Eigen::MatrixXi;
 using Eigen::Matrix2Xi;
 using Eigen::Vector3f;
 using Eigen::Vector4f;
 using Eigen::VectorXf;
+using Eigen::VectorXi;
 using pcl::PointCloud;
 using pcl::PointXYZ;
 using pcl::PointXYZRGB;
@@ -127,32 +129,35 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
 }
 
 CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
-             const Mat& _P_matrix) : 
+             const Mat& _P_matrix,
+             bool _use_recovery) : 
+    template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     P_matrix(_P_matrix),
-    last_lower_bounding_box(-5.0, -5.0, -5.0),
-    last_upper_bounding_box(5.0, 5.0, 5.0),
-    lle_neighbors(8),
-    m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)),
-    tolerance(1e-4),
-    alpha(3.0),
-    beta(1.0),
-    w(0.1),
-    initial_sigma_scale(1.0 / 8),
-    start_lambda(1.0),
-    annealing_factor(0.6),
-    max_iterations(100)
+    last_lower_bounding_box(-5.0, -5.0, -5.0), // TODO make configurable?
+    last_upper_bounding_box(5.0, 5.0, 5.0), // TODO make configurable?
+    lle_neighbors(8), // TODO make configurable?
+    m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
+    tolerance(1e-4), // TODO make configurable?
+    alpha(3.0), // TODO make configurable?
+    beta(1.0), // TODO make configurable?
+    w(0.1), // TODO make configurable?
+    initial_sigma_scale(1.0 / 8), // TODO make configurable?
+    start_lambda(1.0), // TODO make configurable?
+    annealing_factor(0.6), // TODO make configurable?
+    max_iterations(100), // TODO make configurable?
+    use_recovery(_use_recovery)
 {
 }
 
 /*
  * Return a non-normalized probability that each of the tracked vertices produced any detected point.
  */
-Eigen::VectorXf visibility_prior(const Matrix3Xf vertices, 
+Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices, 
                                  const Eigen::Matrix3f& intrinsics,
                                  const cv::Mat& depth,
                                  const cv::Mat& mask,
-                                 float k=1e1)
+                                 float k)
 {
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
@@ -161,19 +166,13 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
 
     to_file("/home/steven/catkin/cpp_verts.txt", vertices);
     to_file("/home/steven/catkin/cpp_intrinsics.txt", intrinsics);
-    // cout << "vertices" << endl;
-    // cout << vertices << endl;
-    // cout << "intrinsics" << endl;
-    // cout << intrinsics << endl;
     // Project the vertices to get their corresponding pixel coordinate
-    Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
+    Eigen::MatrixXf P_eigen(3, 4);
+    cv::cv2eigen(P_matrix, P_eigen);
+    Eigen::Matrix3Xf image_space_vertices = P_eigen.leftCols(3) * vertices;
     // Homogeneous coords: divide by third row
-    // cout << "image_space_vertices" << endl;
-    // cout << image_space_vertices << endl;
     image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
     image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
-    // cout << "image_space_vertices, updated" << endl;
-    // cout << image_space_vertices << endl;
     for (int i = 0; i < image_space_vertices.cols(); ++i)
     {
         float x = image_space_vertices(0, i);
@@ -181,12 +180,7 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-    // image_space_vertices.topRows(2) = image_space_vertices.topRows(2).array().min(0);
-    // image_space_vertices.row(0) = image_space_vertices.row(0).array().max(depth.cols);
-    // image_space_vertices.row(1) = image_space_vertices.row(1).array().max(depth.rows);
     to_file("/home/steven/catkin/cpp_projected.txt", image_space_vertices);
-    // cout << "image_space_vertices, updated again" << endl;
-    // cout << image_space_vertices << endl;
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -222,7 +216,7 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
     to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
 
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
-    cv::Mat dist_img(depth.rows, depth.cols, depth.type());
+    cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO haven't really tested this but seems right
     int maskSize = 5;
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
     cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
@@ -239,6 +233,90 @@ Eigen::VectorXf visibility_prior(const Matrix3Xf vertices,
     VectorXf prob = (-k * score).array().exp().matrix();
     to_file("/home/steven/catkin/cpp_prob.txt", prob);
     return prob;
+}
+
+/*
+ * Used for failure recovery. Very similar to the visibility_prior function, but with a different K and
+ * image_depth - vertex_depth, not vice-versa. There's also no normalization.
+ */
+float smooth_free_space_cost(const Matrix3Xf vertices, 
+                                 const Eigen::Matrix3f& intrinsics,
+                                 const cv::Mat& depth,
+                                 const cv::Mat& mask,
+                                 float k=1e2)
+{
+    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+    auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
+        std::ofstream(fname) << mat.format(np_fmt);
+    };
+
+    // Project the vertices to get their corresponding pixel coordinate
+    Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
+    // Homogeneous coords: divide by third row
+    image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
+    image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
+    for (int i = 0; i < image_space_vertices.cols(); ++i)
+    {
+        float x = image_space_vertices(0, i);
+        float y = image_space_vertices(1, i);
+        image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
+        image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
+    }
+    to_file("/home/steven/catkin/cpp_projected.txt", image_space_vertices);
+
+    // Get image coordinates
+    Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
+
+    for (int i = 0; i < coords.cols(); ++i)
+    {
+        coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
+        coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
+    }
+    // coords.row(0) = coords.row(0).array().min(0);
+    // coords.row(0) = coords.row(0).array().max(depth.cols - 1);
+    // coords.row(1) = coords.row(1).array().min(1);
+    // coords.row(1) = coords.row(1).array().max(depth.rows - 1);
+
+    // Find difference between point depth and image depth
+    Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
+    for (int i = 0; i < vertices.cols(); ++i)
+    {
+        // cout << "depth at " << coords(1, i) << " " << coords(0, i) << endl;
+        uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
+        if (raw_depth != 0)
+        {
+            depth_diffs(i) = static_cast<float>(raw_depth) / 1000.0 - vertices(2, i);
+        }
+        else
+        {
+            depth_diffs(i) = std::numeric_limits<float>::quiet_NaN();
+        }
+    }
+    Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
+    to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
+
+    cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
+    int maskSize = 5;
+    cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
+    imwrite("/home/steven/catkin/mask.png", mask);
+
+    Eigen::VectorXf dist_to_mask(vertices.cols());
+    for (int i = 0; i < vertices.cols(); ++i)
+    {
+        dist_to_mask(i) = dist_img.at<float>(coords(1, i), coords(0, i));
+    }
+    cout << "dist_to_mask" << endl;
+    cout << dist_to_mask << endl;
+    VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
+    cout << "score" << endl;
+    cout << score << endl;
+    VectorXf prob = (1 - (-k * score).array().exp()).matrix();
+    cout << "prob" << endl;
+    cout << prob << endl;
+    to_file("/home/steven/catkin/cpp_prob.txt", prob);
+    float cost = prob.array().isNaN().select(0, prob.array()).sum();
+    cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
+    return cost;
 }
 
 // TODO return both point clouds
@@ -325,91 +403,20 @@ point_clouds_from_images(const cv::Mat& depth_image,
     return { unfiltered_cloud, filtered_cloud, pixel_coords };
 }
 
-CDCPD::Output CDCPD::operator()(
-        const cv::Mat& rgb,
-        const cv::Mat& depth,
-        const cv::Mat& mask,
-        const PointCloud<PointXYZ>::Ptr template_cloud,
-        const Matrix2Xi& template_edges,
-        const std::vector<CDCPD::FixedPoint>& fixed_points
-        )
+Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
+                     const Matrix3Xf& Y,
+                     const cv::Mat& depth,
+                     const cv::Mat& mask,
+                     const Matrix3f& intr)
 {
-    assert(rgb.type() == CV_8UC3);
-    assert(depth.type() == CV_16U);
-    assert(mask.type() == CV_8U);
-    assert(P_matrix.type() == CV_64F);
-    assert(P_matrix.rows == 3 && P_matrix.cols == 4);
-    assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
-
-    // We'd like an Eigen version of the P matrix
-    Eigen::MatrixXf P_eigen(3, 4);
-    cv::cv2eigen(P_matrix, P_eigen);
-    // cout << "test1" << endl;
-
-    // For testing purposes, compute the whole cloud, though it's not really necessary TODO
-    Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
-    auto [entire_cloud, cloud, pixel_coords]
-        = point_clouds_from_images(
-                depth,
-                rgb,
-                mask,
-                P_eigen,
-                last_lower_bounding_box - bounding_box_extend,
-                last_upper_bounding_box + bounding_box_extend);
-    cout << "Points in filtered: " << cloud->width << endl;
-    // cout << "test2" << endl;
-
-    cv::Mat points_mat;
-    // TODO rm intrinsics
-    cv::Mat intrinsics;
-    // cout << "test3" << endl;
-    Eigen::Matrix3f intr = P_eigen.leftCols(3);
-    cv::eigen2cv(intr, intrinsics);
-    // cout << "test4" << endl;
-
-    /// VoxelGrid filter
-    PointCloud<PointXYZ>::Ptr cloud_fully_filtered(new PointCloud<PointXYZ>);
-    pcl::VoxelGrid<PointXYZ> sor;
-    cout << "Points in cloud before leaf: " << cloud->width << endl;
-    sor.setInputCloud(cloud);
-    sor.setLeafSize(0.02f, 0.02f, 0.02f);
-    sor.filter(*cloud_fully_filtered);
-    cout << "Points in fully filtered: " << cloud_fully_filtered->width << endl;
-    // cout << "test7" << endl;
-
-    const Matrix3Xf& X = cloud_fully_filtered->getMatrixXfMap().topRows(3);
-    const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
-
+    const Matrix3Xf& X = downsampled_cloud->getMatrixXfMap().topRows(3);
     // TODO be able to disable?
     // TODO the combined mask doesn't account for the PCL filter, does that matter?
-    // TODO less trash way?
-    Eigen::Matrix3f intrinsics_eigen = Eigen::Matrix3f::Zero();
-    intrinsics_eigen(0, 0) = intrinsics.at<float>(0, 0);
-    intrinsics_eigen(0, 2) = intrinsics.at<float>(0, 2);
-    intrinsics_eigen(1, 1) = intrinsics.at<float>(1, 1);
-    intrinsics_eigen(1, 2) = intrinsics.at<float>(1, 2);
-    intrinsics_eigen(2, 2) = intrinsics.at<float>(2, 2);
     // cout << "test8" << endl;
-    // TODO add back in
-    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intrinsics_eigen, depth, mask);
+    // TODO intr
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intr, depth, mask);
     // cout << "test9" << endl;
     /// CPD step
-
-    // TODO maybe use a PCL point cloud for the template
-    // CPD (TODO make into a function)
-
-    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-
-    auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
-        std::ofstream(fname) << mat.format(np_fmt);
-    };
-
-    // TODO TESTING remove this
-    to_file("/home/steven/catkin/cpp_X.txt", X);
-    to_file("/home/steven/catkin/cpp_Y.txt", Y);
-    
-    // const MatrixXf X = 
-    // const MatrixXf Y = 
 
     MatrixXf G = gaussian_kernel(Y, beta);
     // to_file("cpp_G.txt", G);
@@ -419,7 +426,6 @@ CDCPD::Output CDCPD::operator()(
     int iterations = 0;
     double error = tolerance + 1; // loop runs the first time
 
-    std::vector<PointCloud<PointXYZ>::Ptr> cpd_iters;
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
@@ -486,7 +492,6 @@ CDCPD::Output CDCPD::operator()(
         // to_file(std::string("cpp_W_") + std::to_string(iterations) + ".txt", W);
 
         TY = Y + (G * W).transpose();
-        cpd_iters.push_back(mat_to_cloud(TY));
         // to_file(std::string("cpp_TY_") + std::to_string(iterations) + ".txt", TY);
 
         MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
@@ -510,29 +515,124 @@ CDCPD::Output CDCPD::operator()(
 
         iterations++;
     }
+    return TY;
+}
+
+CDCPD::Output CDCPD::operator()(
+        const cv::Mat& rgb,
+        const cv::Mat& depth,
+        const cv::Mat& mask,
+        const PointCloud<PointXYZ>::Ptr template_cloud,
+        const Matrix2Xi& template_edges,
+        const std::vector<CDCPD::FixedPoint>& fixed_points
+        )
+{
+    assert(rgb.type() == CV_8UC3);
+    assert(depth.type() == CV_16U);
+    assert(mask.type() == CV_8U);
+    assert(P_matrix.type() == CV_64F);
+    assert(P_matrix.rows == 3 && P_matrix.cols == 4);
+    assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
+
+    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+
+    // Useful utility for outputting an Eigen matrix to a file
+    auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
+        std::ofstream(fname) << mat.format(np_fmt);
+    };
+
+    // We'd like an Eigen version of the P matrix
+    Eigen::MatrixXf P_eigen(3, 4);
+    cv::cv2eigen(P_matrix, P_eigen);
+    // cout << "test1" << endl;
+
+    // For testing purposes, compute the whole cloud, though it's not really necessary TODO
+    Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
+    auto [entire_cloud, cloud, pixel_coords]
+        = point_clouds_from_images(
+                depth,
+                rgb,
+                mask,
+                P_eigen,
+                last_lower_bounding_box - bounding_box_extend,
+                last_upper_bounding_box + bounding_box_extend);
+    cout << "Points in filtered: " << cloud->width << endl;
+    // cout << "test2" << endl;
+
+    cv::Mat points_mat;
+    // cout << "test3" << endl;
+    Eigen::Matrix3f intr = P_eigen.leftCols(3);
+
+    /// VoxelGrid filter
+    PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
+    pcl::VoxelGrid<PointXYZ> sor;
+    cout << "Points in cloud before leaf: " << cloud->width << endl;
+    sor.setInputCloud(cloud);
+    sor.setLeafSize(0.02f, 0.02f, 0.02f);
+    sor.filter(*cloud_downsampled);
+    cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
+    // cout << "test7" << endl;
+
+    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, template_cloud->getMatrixXfMap().topRows(3), depth, mask, intr);
 
     // Next step: optimization.
-
     // TODO is really 1.0?
     to_file("/home/steven/catkin/cpp_TY.txt", TY);
     // cout << original_template << endl;
     Optimizer opt(original_template, 1.0);
 
-    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points);
+    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
     to_file("/home/steven/catkin/cpp_Y_opt.txt", Y_opt);
 
-    PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
+    // If we're doing tracking recovery, do that now
+    if (use_recovery)
+    {
+        float cost = smooth_free_space_cost(Y_opt, intr, depth, mask);
+        cout << "cost" << endl;
+        cout << cost << endl;
+
+        int recovery_knn_k = 12; // TODO configure this?
+        float recovery_cost_threshold = 0.5; // TODO configure this?
+        if (cost > recovery_cost_threshold && template_matcher.size() > recovery_knn_k)
+        {
+            float best_cost = cost;
+            Matrix3Xf final_tracking_result = Y_opt;
+
+            std::vector<Matrix3Xf> matched_templates = template_matcher.query_template(cloud_downsampled, recovery_knn_k);
+
+            // TODO there's potentially a lot of copying going on here. We should be able to avoid that.
+            for (const Matrix3Xf& templ : matched_templates)
+            {
+                Matrix3Xf proposed_recovery = cpd(cloud_downsampled, templ, depth, mask, intr);
+                // TODO if we end up being able to disable optimization, we should not call this
+                proposed_recovery = opt(proposed_recovery, template_edges, fixed_points);
+                float proposal_cost = smooth_free_space_cost(proposed_recovery, intr, depth, mask);
+                if (proposal_cost < best_cost)
+                {
+                    final_tracking_result = proposed_recovery;
+                    best_cost = proposal_cost;
+                }
+            }
+
+            Y_opt = final_tracking_result;
+        }
+        else
+        {
+            template_matcher.add_template(cloud_downsampled, Y_opt);
+        }
+    }
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
     last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
 
+    PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
+
     return CDCPD::Output {
-        entire_cloud, // TODO get full cloud?
+        entire_cloud,
         cloud, 
-        cloud_fully_filtered,
+        cloud_downsampled,
         template_cloud,
-        cpd_iters,
         cpd_out
     };
 }

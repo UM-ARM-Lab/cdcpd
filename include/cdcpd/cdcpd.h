@@ -3,6 +3,7 @@
 #include <opencv2/core.hpp>
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
+#include "cdcpd/past_template_matcher.h"
 
 class CDCPD {
 public:
@@ -10,8 +11,7 @@ public:
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr original_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr masked_point_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud;
-        pcl::PointCloud<pcl::PointXYZ>::Ptr last_template;
-        std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> cpd_iterations;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_output;
         pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
     };
 
@@ -21,7 +21,8 @@ public:
     };
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
-          const cv::Mat& _P_matrix);
+          const cv::Mat& _P_matrix,
+          bool _use_recovery);
 
     Output operator()(
          const cv::Mat& rgb,
@@ -33,6 +34,20 @@ public:
          );
 
 private:
+    Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices, 
+                                            const Eigen::Matrix3f& intrinsics,
+                                            const cv::Mat& depth,
+                                            const cv::Mat& mask,
+                                            float k=1e1); // TODO this should be configurable
+    // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
+    // and not have to pass around intr in here
+    Eigen::Matrix3Xf cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
+                         const Eigen::Matrix3Xf& Y,
+                         const cv::Mat& depth,
+                         const cv::Mat& mask,
+                         const Eigen::Matrix3f& intr);
+
+    PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
     const cv::Mat P_matrix;
     Eigen::Vector3f last_lower_bounding_box;
@@ -47,4 +62,5 @@ private:
     const double start_lambda;
     const double annealing_factor;
     const int max_iterations;
+    bool use_recovery;
 }; 
