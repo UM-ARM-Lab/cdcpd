@@ -80,6 +80,39 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 
         Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
 
+        // Make sure the fixed point is not in the cylinder
+        {
+            GRBLinExpr (0);
+            for (size_t i = 0; i < Y_copy.cols(); ++i)
+            {
+                // First, find the vector from the point to the centerpoint of the cylinder 
+                Eigen::Vector3d center(-.60, -.45, 1.13); // TODO generalize
+                cout << "center" << endl;
+                cout << center << endl;
+                double radius = 0.25; // TODO generalize
+                Eigen::Vector3d from_center = Y_copy.col(i) - center;
+                from_center = from_center / from_center.norm(); // normalize it to have unit length
+                cout << "from_center" << endl;
+                cout << from_center << endl;
+                Eigen::Vector3d closest_point = center + from_center * radius;
+                cout << "closest_point" << endl;
+                cout << closest_point << endl;
+
+                auto expr0 = vars[i * 3 + 0] - closest_point(0);
+                expr0 *= from_center(0);
+                auto expr1 = vars[i * 3 + 1] - closest_point(1) ;
+                expr1 *= from_center(1);
+                auto expr2 = vars[i * 3 + 2] - closest_point(2);
+                expr2 *= from_center(2);
+                model.addConstr(
+                        expr0 + expr1 + expr2,
+                        GRB_GREATER_EQUAL,
+                        0,
+                        "point_" + std::to_string(i) + "_not_in_cyl"
+                        );
+            }
+        }
+
         // Next, add the fixed point constraints that we might have.
         // TODO make this more
         // First, make sure that the constraints can be satisfied
