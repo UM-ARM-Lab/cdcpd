@@ -13,7 +13,7 @@ I wrote a Julia script that I used to compare the maximum difference of matrices
 
 When testing, consider disabling the Python CDCPD try-except logic, so that you can see when errors happen. Also, make sure the Python intrinsic matrix is set properly.
 
-The cdcpd_ros should be a pretty good example of how to actually use the library. It should work, but some files locations are hard-coded, and those will need to be modified.
+The cdcpd_ros should be a pretty good example of how to actually use the library. It should work, but some files locations are hard-coded, and those will need to be modified. Right now, it's hardcoded to play back a file called occlusion.bag, and it will require the gripper positions via ROS TF to run (this probably shouldn't be a requirement if you're not using grippers, which would be a good thing to fix).
 
 Misc: When stepping through bags one set of pictures at a time, strangely, in order to make the CDCPD-Python match up properly with the C++, I had to call sub_sample.get() multiple times to make sure I recieved the most up-to-date, or it would get out of sync, and the Python would just stop making progress.
 
@@ -27,3 +27,4 @@ Tasks:
 - The scaling of the point cloud seems to be off by a factor of about .5. The Python implementation divided the intrinsic matrix by 2, and this might be why.
 - There probably should be a nice rosparam method of setting all of the paramters of CDCPD. Right now, there's not.
 -A bunch of parameters are hard-coded in CDCPD::CDCPD().
+- cdcpd_ros requires gripper positions even when they aren't used.
