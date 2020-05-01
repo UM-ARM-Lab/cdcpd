@@ -1,6 +1,8 @@
 Informational:
 The C++ port of the CDCPD library currently has 3 relevant branches, which should all be present on the ARMLAB remote. 
 
+Data: https://drive.google.com/open?id=1ru6W5Od5p0Ehs-BI9hx8FOk2GsvilbBj
+
 - Start with the `cpp` branch. This branch should be close to 'just working' out of the box, but it might have a few dependencies wrong, and it will likely have trouble finding Gurobi. I hackily fixed that by adding it to my PATH, but there should be a better way. The way the project is structured is as a cmake library. By default, the process should be:
     - `cmake ..`
     - `make`
