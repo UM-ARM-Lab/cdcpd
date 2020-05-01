@@ -14,12 +14,11 @@ add_library(libcdcpd SHARED
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization)
-# TODO Components?
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 
-# horrid hack to remove the space at the beginning of the list 
+# horrid hack to remove the space at the beginning of the list. I think this is a PCL issue.
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 target_include_directories(libcdcpd PUBLIC 
@@ -52,30 +51,9 @@ set_target_properties(libcdcpd
     PROPERTIES
         OUTPUT_NAME "cdcpd"
 )
-### 
-### ### Installation
-### install(TARGETS libcdcpd 
-###     EXPORT cdcpd-targets 
-###     LIBRARY DESTINATION lib/${PROJECT_NAME}
-###     INCLUDES DESTINATION include/${PROJECT_NAME})
-### # install(FILES include/cdcpd/cdcpd.h include/cdcpd/optimizer.h DESTINATION include/cdcpd)
-### # install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
-### include(CMakePackageConfigHelpers)
-### write_basic_package_version_file(
-###     cdcpd-config-version.cmake
-###     VERSION ${PACKAGE_VERSION}
-###     COMPATIBILITY AnyNewerVersion
-###     )
 install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
-### configure_file(cdcpd-config.cmake.in cdcpd-config.cmake @ONLY)
-### install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cdcpd-config.cmake"
-###               "${CMAKE_CURRENT_BINARY_DIR}/cdcpd-config-version.cmake"
-###               DESTINATION lib/cmake/${PROJECT_NAME}
-###         )
-### End installation
 
 ### Testing
-
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include(CTest)
 endif()

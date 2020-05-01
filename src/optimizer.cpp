@@ -34,7 +34,7 @@ static GRBEnv& getGRBEnv()
     return env;
 }
 
-// TODO do setup here
+// TODO Optimizer should probably be created once, and then re-used, for greater efficiency.
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const float _stretch_lambda)
     : initial_template(_init_temp), stretch_lambda(_stretch_lambda)
 {
@@ -78,10 +78,9 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
             model.update();
         }
 
-        Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
+        Matrix3Xd Y_copy = Y.cast<double>();
 
         // Next, add the fixed point constraints that we might have.
-        // TODO make this more
         // First, make sure that the constraints can be satisfied
         GRBQuadExpr gripper_objective_fn(0);
         if (all_constraints_satisfiable(fixed_points))
@@ -165,8 +164,6 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
         {
             float current_distance = (first_elem->position - second_elem->position).squaredNorm();
             float original_distance = (initial_template.col(first_elem->template_index) - initial_template.col(second_elem->template_index)).squaredNorm();
-            cout << "current_distance " << current_distance << endl;
-            cout << "original_distance " << original_distance << endl;
             if (current_distance > original_distance * stretch_lambda * stretch_lambda)
             {
                 return false;

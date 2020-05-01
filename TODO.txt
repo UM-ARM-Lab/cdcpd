@@ -1,0 +1,29 @@
+Informational:
+The C++ port of the CDCPD library currently has 3 relevant branches, which should all be present on the ARMLAB remote. 
+
+- Start with the `cpp` branch. This branch should be close to 'just working' out of the box, but it might have a few dependencies wrong, and it will likely have trouble finding Gurobi. I hackily fixed that by adding it to my PATH, but there should be a better way. The way the project is structured is as a cmake library. By default, the process should be:
+    - `cmake ..`
+    - `make`
+    - `sudo make install` which will install the libcdcpd library onto your computer. You can use CMake to place the library elsewhere on your system, but I think it will default to /usr/local/ in the include and lib directories.
+
+- The attempt-object-aware branch contains logic for basic results with a spherical bound a hard-coded location.
+- The failure-recovery-incomplete branch is my incomplete implementation of failure recovery, which is the last feature that the library needs for feature parity. It will probably fail to build, and is untested, but should be almost all of the required logic to perform failure recovery.
+
+I wrote a Julia script that I used to compare the maximum difference of matrices. If that seems useful, consider using the to_file lambda in the C++ and something like np.savetxt('np_Y.txt', self.template.T). It's in the repo now.
+
+When testing, consider disabling the Python CDCPD try-except logic, so that you can see when errors happen. Also, make sure the Python intrinsic matrix is set properly.
+
+The cdcpd_ros should be a pretty good example of how to actually use the library. It should work, but some files locations are hard-coded, and those will need to be modified.
+
+Misc: When stepping through bags one set of pictures at a time, strangely, in order to make the CDCPD-Python match up properly with the C++, I had to call sub_sample.get() multiple times to make sure I recieved the most up-to-date, or it would get out of sync, and the Python would just stop making progress.
+
+Tasks:
+
+- There are many TODOs sprinkled throughout the code. I don't think too many are critical, but I tried to make it clear the issue that each one referred to.
+- Right now, CMake doesn't properly hide the Gurobi requirement. Ideally, the user doesn't need to care that we use Gurobi. But right now, Gurobi is a requirement for the user, and it shouldn't be.
+- I wrote a very simple test for CDCPD some time ago, but since I got this working with rosbags and the Kinect and all, I haven't really kept it up-to-date, and there are definitely some hard-coded paths to images there. We may want to include some example images to run tests on in the repo itself. Also, you'll need 16-bit images for this.
+- Right now, the Gurobi usage is very inefficient: the Optimizer class is re-instantiated at each loop. It would probably be MUCH faster to just create it once.
+- One of the strange things about the original library is that when it starts out with a template with z=0, the Python has divide-by-zero errors and then recovers. Locally on my Python version of CDCPD, I changed that.
+- The scaling of the point cloud seems to be off by a factor of about .5. The Python implementation divided the intrinsic matrix by 2, and this might be why.
+- There probably should be a nice rosparam method of setting all of the paramters of CDCPD. Right now, there's not.
+-A bunch of parameters are hard-coded in CDCPD::CDCPD().
