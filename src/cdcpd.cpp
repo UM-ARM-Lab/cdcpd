@@ -33,6 +33,8 @@ using pcl::PointCloud;
 using pcl::PointXYZ;
 using pcl::PointXYZRGB;
 
+std::string workingDir = "/home/steven/catkin/";
+
 PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
     PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
@@ -159,18 +161,29 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
                                  const cv::Mat& mask,
                                  float k)
 {
+    // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // intrinsics: (3, 3) intrinsic matrix of the camera
+    // depth_image: CV_16U depth image
+    // mask: CV_8U mask for segmentation
+    // k: ???
+
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
     };
 
+    // save matrices
     to_file("/home/steven/catkin/cpp_verts.txt", vertices);
     to_file("/home/steven/catkin/cpp_intrinsics.txt", intrinsics);
+
     // Project the vertices to get their corresponding pixel coordinate
+    // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
     Eigen::MatrixXf P_eigen(3, 4);
     cv::cv2eigen(P_matrix, P_eigen);
     Eigen::Matrix3Xf image_space_vertices = P_eigen.leftCols(3) * vertices;
+
     // Homogeneous coords: divide by third row
+    // the for-loop is unnecessary
     image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
     image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
     for (int i = 0; i < image_space_vertices.cols(); ++i)
@@ -190,11 +203,6 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
         coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
     }
-    // coords.row(0) = coords.row(0).array().min(0);
-    // coords.row(0) = coords.row(0).array().max(depth.cols - 1);
-    // coords.row(1) = coords.row(1).array().min(1);
-    // coords.row(1) = coords.row(1).array().max(depth.rows - 1);
-
     to_file("/home/steven/catkin/cpp_coords.txt", coords.cast<float>());
 
     // Find difference between point depth and image depth
@@ -332,6 +340,16 @@ point_clouds_from_images(const cv::Mat& depth_image,
                          const Eigen::Vector3f lower_bounding_box_vec,
                          const Eigen::Vector3f upper_bounding_box_vec)
 {
+    // depth_image: CV_16U depth image
+    // rgb_image: CV_8U3C rgb image
+    // mask: CV_8U mask for segmentation
+    // P: camera matrix of Kinect
+    //  [[fx 0  px 0];
+    //   [0  fy py 0];
+    //   [0  0  1  0]]
+    // lower_bounding_box_vec: ???
+    // upper_bounding_box_vec: ???
+
     assert(depth_image.cols == rgb_image.cols);
     assert(depth_image.rows == rgb_image.rows);
     assert(depth_image.type() == CV_16U);
@@ -346,8 +364,10 @@ point_clouds_from_images(const cv::Mat& depth_image,
     Eigen::Array<float, 3, 1> lower_bounding_box = lower_bounding_box_vec.array();
     Eigen::Array<float, 3, 1> upper_bounding_box = upper_bounding_box_vec.array();
 
+    // ENHANCE: change the way to get access to depth image and rgb image to be more readable
+    // from "depth_row += row_step" to ".at<>()"
     const uint16_t* depth_row = reinterpret_cast<const uint16_t*>(&depth_image.data[0]);
-    int row_step = depth_image.step / sizeof(uint16_t);
+    int row_step = depth_image.step / sizeof(uint16_t); // related with accessing data in cv::Mat
     const uint8_t* rgb = &rgb_image.data[0];
     int rgb_step = 3; // TODO check on this
     int rgb_skip = rgb_image.step - rgb_image.cols * rgb_step;
@@ -376,6 +396,7 @@ point_clouds_from_images(const cv::Mat& depth_image,
                 float y = (v - center_y) * depth * constant_y;
                 float z = depth * unit_scaling;
                 // Add to unfiltered cloud
+                // ENHANCE: be more concise
                 unfiltered_iter->x = x;
                 unfiltered_iter->y = y;
                 unfiltered_iter->z = z;
@@ -385,6 +406,7 @@ point_clouds_from_images(const cv::Mat& depth_image,
 
                 cv::Point2i pixel = cv::Point2i(u, v);
                 Eigen::Array<float, 3, 1> point(x, y, z);
+                // ???: mask is CV_8U, so it is better that it is mask.at<uchar>(pixel)
                 if (mask.at<bool>(pixel) &&
                     point.min(upper_bounding_box).isApprox(point) &&
                     point.max(lower_bounding_box).isApprox(point))
@@ -409,13 +431,16 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
                      const cv::Mat& mask,
                      const Matrix3f& intr)
 {
+    // downsampled_cloud: PointXYZ pointer to downsampled point clouds
+    // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation
+    // intr: (3, 3) intrinsic matrix of the camera
+
     const Matrix3Xf& X = downsampled_cloud->getMatrixXfMap().topRows(3);
     // TODO be able to disable?
     // TODO the combined mask doesn't account for the PCL filter, does that matter?
-    // cout << "test8" << endl;
-    // TODO intr
     Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intr, depth, mask);
-    // cout << "test9" << endl;
     /// CPD step
 
     MatrixXf G = gaussian_kernel(Y, beta);
@@ -527,6 +552,13 @@ CDCPD::Output CDCPD::operator()(
         const std::vector<CDCPD::FixedPoint>& fixed_points
         )
 {
+    // rgb: CV_8U3C rgb image
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation
+    // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
+    // template_edges: (2, K) matrix corresponding to E in the paper
+    // fixed_points: fixed points during the tracking
+
     assert(rgb.type() == CV_8UC3);
     assert(depth.type() == CV_16U);
     assert(mask.type() == CV_8U);
@@ -542,11 +574,17 @@ CDCPD::Output CDCPD::operator()(
     };
 
     // We'd like an Eigen version of the P matrix
+    // ???: is P_matrix the camera matrix, or P_eigen?
     Eigen::MatrixXf P_eigen(3, 4);
     cv::cv2eigen(P_matrix, P_eigen);
-    // cout << "test1" << endl;
 
-    // For testing purposes, compute the whole cloud, though it's not really necessary TODO
+    // TODO: For testing purposes, compute the whole cloud, though it's not really necessary
+    // ENHANCE: debug macro to remove entire_cloud
+    // ENHANCE: pixel_coords is not used
+    // entire_cloud: pointer to the entire point cloud
+    // cloud: pointer to the point clouds selected
+    // pixel_coords: pixel coordinate corresponds to the point in the cloud
+    // ???: why the bounding_box_extend is needed
     Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
     auto [entire_cloud, cloud, pixel_coords]
         = point_clouds_from_images(
@@ -557,13 +595,11 @@ CDCPD::Output CDCPD::operator()(
                 last_lower_bounding_box - bounding_box_extend,
                 last_upper_bounding_box + bounding_box_extend);
     cout << "Points in filtered: " << cloud->width << endl;
-    // cout << "test2" << endl;
 
-    cv::Mat points_mat;
-    // cout << "test3" << endl;
+    // intr: intrinsics of the camera
     Eigen::Matrix3f intr = P_eigen.leftCols(3);
 
-    /// VoxelGrid filter
+    /// VoxelGrid filter downsampling
     PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
     pcl::VoxelGrid<PointXYZ> sor;
     cout << "Points in cloud before leaf: " << cloud->width << endl;
@@ -571,7 +607,7 @@ CDCPD::Output CDCPD::operator()(
     sor.setLeafSize(0.02f, 0.02f, 0.02f);
     sor.filter(*cloud_downsampled);
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
-    // cout << "test7" << endl;
+
 
     Eigen::Matrix3Xf TY = cpd(cloud_downsampled, template_cloud->getMatrixXfMap().topRows(3), depth, mask, intr);
 

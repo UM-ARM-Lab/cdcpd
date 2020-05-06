@@ -1,0 +1,7 @@
+P_matrix: the camera 
+
+last_lower_bounding_box: lower bounding of box for point cloud selection
+last_upper_bounding_box: upper bounding of box for point cloud selection
+bounding_box_extend: the extension of the bounding of box
+
+sor.setLeafSize(0.02f, 0.02f, 0.02f): Voxel Grid filter leaf size

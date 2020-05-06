@@ -25,8 +25,8 @@ public:
           bool _use_recovery);
 
     Output operator()(
-         const cv::Mat& rgb,
-         const cv::Mat& depth,
+         const cv::Mat& rgb, // RGB image
+         const cv::Mat& depth, // Depth image
          const cv::Mat& mask,
          const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
          const Eigen::Matrix2Xi& template_edges,
@@ -49,6 +49,9 @@ private:
 
     PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
+
+    // P_matrix: (3, 4) camera matrix
+    // ???
     const cv::Mat P_matrix;
     Eigen::Vector3f last_lower_bounding_box;
     Eigen::Vector3f last_upper_bounding_box;
