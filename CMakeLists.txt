@@ -3,7 +3,7 @@ project(cdcpd VERSION 0.1
     DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
     LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(libcdcpd SHARED
@@ -39,19 +39,18 @@ target_link_libraries(libcdcpd PRIVATE
 target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
 
 add_library(cdcpd::libcdcpd ALIAS libcdcpd)
+set_target_properties(libcdcpd
+    PROPERTIES
+        OUTPUT_NAME "cdcpd"
+)
 
 
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS libcdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES include/cdcpd/cdcpd.h DESTINATION include/cdcpd)
-install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
-
-set_target_properties(libcdcpd
-    PROPERTIES
-        OUTPUT_NAME "cdcpd"
-)
-install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
+install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/cmake/${PROJECT_NAME})
+install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/cmake/${PROJECT_NAME})
 
 ### Testing
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
