@@ -5,3 +5,15 @@ last_upper_bounding_box: upper bounding of box for point cloud selection
 bounding_box_extend: the extension of the bounding of box
 
 sor.setLeafSize(0.02f, 0.02f, 0.02f): Voxel Grid filter leaf size
+
+Default value of depth difference in Eq. (7): 0.02 (cdcpd.cpp L221)
+
+initial_sigma_scale: 1/8
+
+lambda: start_lambda * std::pow(annealing_factor, iterations + 1) (in Eq. (18))
+start_lambda = 1.0
+annealing factor = 0.6
+
+alpha: 3.0
+
+lle_neighbors = 8; // parameter for lle calculation

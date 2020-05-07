@@ -48,6 +48,9 @@ PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 
 double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 {
+    // X: (3, N) matrix, X^t in Algorithm 1
+    // Y: (3, M) matrix, Y^(t-1) in Algorithm 1
+    // Implement Line 2 of Algorithm 1
     double total_error = 0.0;
     assert(X.rows() == Y.rows());
     for (int i = 0; i < X.cols(); ++i)
@@ -62,6 +65,8 @@ double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 
 MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
 {
+    // Y: (3, M) matrix, corresponding to Y^(t-1) in Eq. 13.5 (Y^t in VI.A)
+    // beta: beta in Eq. 13.5 (between 13 and 14)
     MatrixXf diff(Y.cols(), Y.cols());
     diff.setZero();
     for (int i = 0; i < Y.cols(); ++i)
@@ -71,6 +76,7 @@ MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
             diff(i, j) = (Y.col(i) - Y.col(j)).squaredNorm();
         }
     }
+    // ???: beta should be beta^2
     MatrixXf kernel = (-diff / (2 * beta)).array().exp();
     return kernel;
 }
@@ -79,16 +85,25 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
                                      int lle_neighbors,
                                      double reg)
 {
+    // calculate L in Eq. (15) and Eq. (16)
+    // ENHANCE: use tapkee lib to accelarate
+    // kdtree: kdtree from Y^0
+    // lle_neighbors: parameter for lle calculation
+    // reg: regularization term (seems unnecessary)
     PointCloud<PointXYZ>::ConstPtr cloud = kdtree.getInputCloud();
     assert(cloud->height == 1);
+    // adjacencies: save index of adjacent points
     MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
+    // B: save weight W_ij 
     MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
     MatrixXf v = VectorXf::Ones(lle_neighbors);
+    // algorithm: see https://cs.nyu.edu/~roweis/lle/algorithm.html
     for (size_t i = 0; i < cloud->width; ++i)
     {
         vector<int> neighbor_inds(lle_neighbors + 1);
         vector<float> neighbor_dists(lle_neighbors + 1);
         kdtree.nearestKSearch(i, lle_neighbors + 1, neighbor_inds, neighbor_dists);
+        // C: transpose of Z in Eq [d] and [e]
         MatrixXf C(lle_neighbors, 3);
         for (size_t j = 1; j < neighbor_inds.size(); ++j)
         {
@@ -96,7 +111,9 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
                 - cloud->points[i].getVector3fMap();
             adjacencies(i, j - 1) = neighbor_inds[j];
         }
+        // G: C in Eq [f]
         MatrixXf G = C * C.transpose();
+        // ???: why += R for G
         float R = reg;
         float tr = G.trace();
         if (tr > 0)
@@ -122,9 +139,15 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
                                   int lle_neighbors,
                                   double reg)
 {
+    // calculate H in Eq. (18)
+    // template_cloud: Y^0 in Eq. (15) and (16)
+    // lle_neighbors: parameter for lle calculation
+    // reg: regularization term (seems unnecessary)
     pcl::KdTreeFLANN<PointXYZ> kdtree;
     kdtree.setInputCloud (template_cloud);
+    // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
     MatrixXf W = barycenter_kneighbors_graph(kdtree, lle_neighbors, reg);
+    // M: (M, M) matrix, corresponding to H in Eq. (18)
     MatrixXf M = (W.transpose() * W) - W.transpose() - W;
     M.diagonal().array() += 1;
     return M;
@@ -139,6 +162,7 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     last_lower_bounding_box(-5.0, -5.0, -5.0), // TODO make configurable?
     last_upper_bounding_box(5.0, 5.0, 5.0), // TODO make configurable?
     lle_neighbors(8), // TODO make configurable?
+    // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
     alpha(3.0), // TODO make configurable?
@@ -154,6 +178,7 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
 
 /*
  * Return a non-normalized probability that each of the tracked vertices produced any detected point.
+ * Implement Eq. (7) in the paper
  */
 Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices, 
                                  const Eigen::Matrix3f& intrinsics,
@@ -165,7 +190,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     // intrinsics: (3, 3) intrinsic matrix of the camera
     // depth_image: CV_16U depth image
     // mask: CV_8U mask for segmentation
-    // k: ???
+    // k: k_vis in the paper
 
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
@@ -206,6 +231,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     to_file("/home/steven/catkin/cpp_coords.txt", coords.cast<float>());
 
     // Find difference between point depth and image depth
+    // depth_diffs: (1, M) vector
     Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
     {
@@ -220,6 +246,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
             depth_diffs(i) = 0.02; // prevent numerical problems; taken from the Python code
         }
     }
+    // ENHANCE: repeating max
     depth_diffs = depth_diffs.array().max(0);
     to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
 
@@ -227,8 +254,10 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO haven't really tested this but seems right
     int maskSize = 5;
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
+    // ???: why cv::normalize is needed
     cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
     imwrite("/home/steven/catkin/mask.png", mask);
+    // ENHANCE: rm unused dist_copr
     cv::Mat dist_copy = dist_img.clone();
     imwrite("/home/steven/catkin/dist_img.png", dist_copy * 255.0);
 
@@ -239,6 +268,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     }
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     VectorXf prob = (-k * score).array().exp().matrix();
+    // ???: unnormalized prob
     to_file("/home/steven/catkin/cpp_prob.txt", prob);
     return prob;
 }
@@ -434,17 +464,18 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
     // downsampled_cloud: PointXYZ pointer to downsampled point clouds
     // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
-    // mask: CV_8U mask for segmentation
+    // mask: CV_8U mask for segmentation label
     // intr: (3, 3) intrinsic matrix of the camera
 
     const Matrix3Xf& X = downsampled_cloud->getMatrixXfMap().topRows(3);
-    // TODO be able to disable?
     // TODO the combined mask doesn't account for the PCL filter, does that matter?
     Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intr, depth, mask);
     /// CPD step
 
+    // G: (M, M) Guassian kernel matrix 
     MatrixXf G = gaussian_kernel(Y, beta);
-    // to_file("cpp_G.txt", G);
+
+    // TY: Y^(t) in Algorithm 1
     Matrix3Xf TY = Y;
     double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
 
@@ -460,7 +491,9 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         int M = Y.cols();
         int D = Y.rows();
 
-        // P(i, j) is the distance squared from template point i to the observed point j
+        // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
+        // Calculate Eq. (9) (Line 5 in Algorithm 1)
+        // NOTE: Eq. (9) misses M in the denominator
         MatrixXf P(M, N);
         for (int i = 0; i < M; ++i)
         {
@@ -475,25 +508,12 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         c *= static_cast<double>(M) / N;
 
         P = (-P / (2 * sigma2)).array().exp().matrix();
-        // TODO prior
-        // TODO add back in
-        // cout << "P before" << endl;
-        // cout << P << endl;
-        // cout << "Y_emit_prior" << endl;
-        // cout << Y_emit_prior << endl;
         P.array().colwise() *= Y_emit_prior.array();
-        // cout << "P after" << endl;
-        // cout << P << endl;
-        // if self.params.Y_emit_prior is not None:
-        //      P *= self.params.Y_emit_prior[:, np.newaxis]
-
+        
         MatrixXf den = P.colwise().sum().replicate(M, 1);
-        // TODO ignored den[den == 0] = np.finfo(float).eps because seriously
         den.array() += c;
-        // to_file(std::string("cpp_den_") + std::to_string(iterations) + ".txt", den);
 
         P = P.cwiseQuotient(den);
-        // to_file(std::string("cpp_P_") + std::to_string(iterations) + ".txt", P);
 
         // Maximization step
         MatrixXf Pt1 = P.colwise().sum();
@@ -501,9 +521,11 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         float Np = P1.sum();
         
         // This is the code to use if you are not using LLE
-        // MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M);
-        // MatrixXf B = (P * X.transpose()) - P1.asDiagonal() * Y.transpose();
-        // MatrixXf W = A.colPivHouseholderQr().solve(B);
+        // ???:
+        //  - why lambda is start_lambda * std::pow(annealing_factor, iterations + 1)
+        //  - how does lambda come, when the objective function doesn't contain lambda: assume lambda means gamma here
+        // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
+        // Corresponding to Eq. (18) in the paper
         float lambda = start_lambda * std::pow(annealing_factor, iterations + 1);
         MatrixXf A = (P1.asDiagonal() * G) 
             + alpha * sigma2 * MatrixXf::Identity(M, M)
@@ -511,14 +533,10 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         MatrixXf p1d = P1.asDiagonal();
         MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
         MatrixXf W = A.colPivHouseholderQr().solve(B);
-        // to_file("cpp_m_lle.txt", m_lle);
-        // to_file(std::string("cpp_A_") + std::to_string(iterations) + ".txt", A);
-        // to_file(std::string("cpp_B_") + std::to_string(iterations) + ".txt", B);
-        // to_file(std::string("cpp_W_") + std::to_string(iterations) + ".txt", W);
 
         TY = Y + (G * W).transpose();
-        // to_file(std::string("cpp_TY_") + std::to_string(iterations) + ".txt", TY);
 
+        // Corresponding to Eq. (19) in the paper
         MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
         MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
         assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
@@ -530,14 +548,13 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum();
         sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D);
 
+        // ???: why is sigma2 possible to be negative, and why setting sigma2 as it
         if (sigma2 <= 0)
         {
             sigma2 = tolerance / 10;
         }
+
         error = std::abs(sigma2 - qprev);
-
-        // TODO do I need to care about the callback?
-
         iterations++;
     }
     return TY;
@@ -558,6 +575,8 @@ CDCPD::Output CDCPD::operator()(
     // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
     // template_edges: (2, K) matrix corresponding to E in the paper
     // fixed_points: fixed points during the tracking
+
+    // ENHANCE: to_file can be put in DEBUG macro
 
     assert(rgb.type() == CV_8UC3);
     assert(depth.type() == CV_16U);
@@ -608,12 +627,11 @@ CDCPD::Output CDCPD::operator()(
     sor.filter(*cloud_downsampled);
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
 
-
     Eigen::Matrix3Xf TY = cpd(cloud_downsampled, template_cloud->getMatrixXfMap().topRows(3), depth, mask, intr);
+    to_file("/home/steven/catkin/cpp_TY.txt", TY);
 
     // Next step: optimization.
     // TODO is really 1.0?
-    to_file("/home/steven/catkin/cpp_TY.txt", TY);
     // cout << original_template << endl;
     Optimizer opt(original_template, 1.0);
 
