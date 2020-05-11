@@ -42,6 +42,8 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const float _stretch_lam
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points)
 {
+    // Y: Y^t in Eq. (21)
+    // E: E in Eq. (21)
     Matrix3Xf Y_opt(Y.rows(), Y.cols());
     GRBVar* vars = nullptr;
     try
@@ -66,6 +68,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         }
 
         // Add the edge constraints
+        // ???: why multiply stretch_lambda twice
         {
             for (size_t i = 0; i < E.cols(); ++i)
             {

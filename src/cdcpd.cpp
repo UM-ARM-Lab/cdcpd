@@ -631,8 +631,7 @@ CDCPD::Output CDCPD::operator()(
     to_file("/home/steven/catkin/cpp_TY.txt", TY);
 
     // Next step: optimization.
-    // TODO is really 1.0?
-    // cout << original_template << endl;
+    // ???: most likely not 1.0
     Optimizer opt(original_template, 1.0);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
