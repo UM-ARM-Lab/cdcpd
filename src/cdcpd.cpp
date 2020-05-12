@@ -1,6 +1,7 @@
 #include <algorithm>
 #include "cdcpd/optimizer.h"
 #include <cassert>
+#include <string>
 #include <Eigen/Dense>
 #include "opencv2/imgcodecs.hpp" // TODO remove after not writing images
 #include "opencv2/imgproc/imgproc.hpp"
@@ -9,7 +10,8 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
-#include "cdcpd/past_template_matcher.h"
+#include "cdcpd/cdcpd.h"
+// #include "cdcpd/past_template_matcher.h"
 
 // TODO rm
 #include <iostream>
@@ -33,7 +35,13 @@ using pcl::PointCloud;
 using pcl::PointXYZ;
 using pcl::PointXYZRGB;
 
-std::string workingDir = "/home/steven/catkin/";
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_ros/result";
+
+void clean_file(const std::string& fname) {
+    std::ofstream ofs(fname, std::ofstream::out);
+    ofs << "";
+    ofs.close();
+};
 
 PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
@@ -156,7 +164,7 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
 CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
              const Mat& _P_matrix,
              bool _use_recovery) : 
-    template_matcher(1500), // TODO make configurable?
+    // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     P_matrix(_P_matrix),
     last_lower_bounding_box(-5.0, -5.0, -5.0), // TODO make configurable?
@@ -198,8 +206,8 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     };
 
     // save matrices
-    to_file("/home/steven/catkin/cpp_verts.txt", vertices);
-    to_file("/home/steven/catkin/cpp_intrinsics.txt", intrinsics);
+    to_file(workingDir + "/cpp_verts.txt", vertices);
+    to_file(workingDir + "/cpp_intrinsics.txt", intrinsics);
 
     // Project the vertices to get their corresponding pixel coordinate
     // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
@@ -218,7 +226,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-    to_file("/home/steven/catkin/cpp_projected.txt", image_space_vertices);
+    to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -228,7 +236,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
         coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
     }
-    to_file("/home/steven/catkin/cpp_coords.txt", coords.cast<float>());
+    to_file(workingDir + "/cpp_coords.txt", coords.cast<float>());
 
     // Find difference between point depth and image depth
     // depth_diffs: (1, M) vector
@@ -248,7 +256,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     }
     // ENHANCE: repeating max
     depth_diffs = depth_diffs.array().max(0);
-    to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
+    to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
 
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO haven't really tested this but seems right
@@ -256,10 +264,10 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
     // ???: why cv::normalize is needed
     cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
-    imwrite("/home/steven/catkin/mask.png", mask);
+    imwrite(workingDir + "/mask.png", mask);
     // ENHANCE: rm unused dist_copr
     cv::Mat dist_copy = dist_img.clone();
-    imwrite("/home/steven/catkin/dist_img.png", dist_copy * 255.0);
+    imwrite(workingDir + "/dist_img.png", dist_copy * 255.0);
 
     Eigen::VectorXf dist_to_mask(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
@@ -269,7 +277,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     VectorXf prob = (-k * score).array().exp().matrix();
     // ???: unnormalized prob
-    to_file("/home/steven/catkin/cpp_prob.txt", prob);
+    to_file(workingDir + "/cpp_prob.txt", prob);
     return prob;
 }
 
@@ -300,7 +308,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-    to_file("/home/steven/catkin/cpp_projected.txt", image_space_vertices);
+    to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -331,12 +339,12 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
         }
     }
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
-    to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
+    to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
 
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
     int maskSize = 5;
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
-    imwrite("/home/steven/catkin/mask.png", mask);
+    imwrite(workingDir + "/mask.png", mask);
 
     Eigen::VectorXf dist_to_mask(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
@@ -351,7 +359,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     VectorXf prob = (1 - (-k * score).array().exp()).matrix();
     cout << "prob" << endl;
     cout << prob << endl;
-    to_file("/home/steven/catkin/cpp_prob.txt", prob);
+    to_file(workingDir + "/cpp_prob.txt", prob);
     float cost = prob.array().isNaN().select(0, prob.array()).sum();
     cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
     return cost;
@@ -585,12 +593,15 @@ CDCPD::Output CDCPD::operator()(
     assert(P_matrix.rows == 3 && P_matrix.cols == 4);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
-    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+
+    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "[", "]", "");
 
     // Useful utility for outputting an Eigen matrix to a file
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
-        std::ofstream(fname) << mat.format(np_fmt);
+        std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
     };
+
+
 
     // We'd like an Eigen version of the P matrix
     // ???: is P_matrix the camera matrix, or P_eigen?
@@ -620,26 +631,32 @@ CDCPD::Output CDCPD::operator()(
 
     /// VoxelGrid filter downsampling
     PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
+    /*
     pcl::VoxelGrid<PointXYZ> sor;
     cout << "Points in cloud before leaf: " << cloud->width << endl;
     sor.setInputCloud(cloud);
     sor.setLeafSize(0.02f, 0.02f, 0.02f);
     sor.filter(*cloud_downsampled);
+     */
+    cloud_downsampled = cloud;
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
-
+    const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
+    to_file(workingDir + "/cpp_downsample.txt", X);
+    to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
     Eigen::Matrix3Xf TY = cpd(cloud_downsampled, template_cloud->getMatrixXfMap().topRows(3), depth, mask, intr);
-    to_file("/home/steven/catkin/cpp_TY.txt", TY);
+    to_file(workingDir + "/cpp_TY.txt", TY);
 
     // Next step: optimization.
     // ???: most likely not 1.0
     Optimizer opt(original_template, 1.0);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
-    to_file("/home/steven/catkin/cpp_Y_opt.txt", Y_opt);
+    to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
 
     // If we're doing tracking recovery, do that now
     if (use_recovery)
     {
+        /*
         float cost = smooth_free_space_cost(Y_opt, intr, depth, mask);
         cout << "cost" << endl;
         cout << cost << endl;
@@ -673,6 +690,7 @@ CDCPD::Output CDCPD::operator()(
         {
             template_matcher.add_template(cloud_downsampled, Y_opt);
         }
+        */
     }
 
     // Set the min and max for the box filter for next time
