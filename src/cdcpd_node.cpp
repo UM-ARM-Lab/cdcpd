@@ -64,6 +64,15 @@ using namespace cv;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
+
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_ros/result";
+
+void clean_file(const std::string& fname) {
+    std::ofstream ofs(fname, std::ofstream::out);
+    ofs << "";
+    ofs.close();
+};
+
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float height, int num_width, int num_height)
 {
     Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
@@ -101,15 +110,16 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
 
 int main(int argc, char* argv[])
 {
+    // ENHANCE: more smart way to get Y^0 and E
     ros::init(argc, argv, "cdcpd_ros_node");
     cout << "Starting up..." << endl;
 
     int points_on_rope = 50;
     float rope_length = 1.0;
-    MatrixXf template_vertices(3, points_on_rope);
+    MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
     template_vertices.setZero();
-    template_vertices.row(0).setLinSpaced(points_on_rope, 0, rope_length);
-    template_vertices.row(2).array() += 0.1f;
+    template_vertices.row(1).setLinSpaced(points_on_rope, -rope_length, 0);
+    template_vertices.row(2).array() += 1.0f;
     MatrixXi template_edges(2, points_on_rope - 1);
     template_edges(0, 0) = 0;
     template_edges(1, template_edges.cols() - 1) = points_on_rope - 1;
@@ -118,6 +128,11 @@ int main(int argc, char* argv[])
         template_edges(0, i) = i;
         template_edges(1, i - 1) = i;
     }
+
+    clean_file(workingDir + "/cpp_downsample.txt");
+    clean_file(workingDir + "/cpp_TY.txt");
+    clean_file(workingDir + "/cpp_Y_opt.txt");
+    clean_file(workingDir + "/cpp_TY-1.txt");
 
     // int cloth_width_num = 20;
     // int cloth_height_num = 18;
@@ -169,7 +184,7 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    bag.open("data/occlusion.bag", rosbag::bagmode::Read);
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_ros/dataset/occlusion_with_movement.bag", rosbag::bagmode::Read);
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -218,18 +233,21 @@ int main(int argc, char* argv[])
     // Let's also grab the gripper positions. Note that in practice, you'd do this in real time.
     geometry_msgs::TransformStamped leftTS;
     geometry_msgs::TransformStamped rightTS;
+    bool use_grippers = false; // TODO don't error if no gripper broadcast
 
-    while (nh.ok())
-    {
-        try{
-            leftTS = tfBuffer.lookupTransform("kinect2_rgb_optical_frame", "cdcpd_ros/left_gripper_prior", ros::Time(0));
-            rightTS = tfBuffer.lookupTransform("kinect2_rgb_optical_frame", "cdcpd_ros/right_gripper_prior", ros::Time(0));
-            break;
-        }
-        catch (tf2::TransformException &ex) {
-          ROS_WARN("Tried to get a transform and failed!");
-          ROS_WARN("%s",ex.what());
-          ros::Duration(1.0).sleep();
+    if (use_grippers) {
+        while (nh.ok())
+        {
+            try{
+                leftTS = tfBuffer.lookupTransform("kinect2_rgb_optical_frame", "cdcpd_ros/left_gripper_prior", ros::Time(0));
+                rightTS = tfBuffer.lookupTransform("kinect2_rgb_optical_frame", "cdcpd_ros/right_gripper_prior", ros::Time(0));
+                break;
+            }
+            catch (tf2::TransformException &ex) {
+                ROS_WARN("Tried to get a transform and failed!");
+                ROS_WARN("%s",ex.what());
+                ros::Duration(1.0).sleep();
+            }
         }
     }
 
@@ -284,15 +302,20 @@ int main(int argc, char* argv[])
             // cv::Scalar high_hsv = cv::Scalar(1.0 * 360.0, 0.02, 1.0);
 
             // Red
-            cv::Scalar low_hsv = cv::Scalar(.85 * 360.0, 0.5, 0.0);
-            cv::Scalar high_hsv = cv::Scalar(360.0, 1.0, 1.0);
+            cv::Mat mask1;
+            cv::Mat mask2;
+            cv::inRange(color_hsv, cv::Scalar(0,50.0/255.0,20.0/255.0), cv::Scalar(5,255.0/255.0,255.0/255.0), mask1);
+            cv::inRange(color_hsv, cv::Scalar(350,50.0/255.0,20.0/255.0), cv::Scalar(360,255.0/255.0,255.0/255.0), mask2);
+
+            // cv::Scalar low_hsv = cv::Scalar(.85 * 360.0, 0.5, 0.0);
+            // cv::Scalar high_hsv = cv::Scalar(360.0, 1.0, 1.0);
 
             cv::Mat hsv_mask;
-            cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
+            bitwise_or(mask1, mask2, hsv_mask);
+            // cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
             cv::imwrite("hsv_mask.png", hsv_mask);
 
             // Without the grippers vs with the grippers
-            bool use_grippers = false; // TODO don't error if no gripper broadcast
             CDCPD::Output out;
             if (use_grippers)
             {
@@ -308,29 +331,33 @@ int main(int argc, char* argv[])
             out.original_cloud->header.frame_id = frame_id;
             out.masked_point_cloud->header.frame_id = frame_id;
             out.downsampled_cloud->header.frame_id = frame_id;
-            out.last_template->header.frame_id = frame_id;
+            out.cpd_output->header.frame_id = frame_id;
+            /*
             for (auto& iteration: out.cpd_iterations)
             {
                 iteration->header.frame_id = frame_id;
             }
+            */
             out.gurobi_output->header.frame_id = frame_id;
 
             auto time = ros::Time::now();
             pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
             pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
             pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
-            pcl_conversions::toPCL(time, out.last_template->header.stamp);
-            pcl_conversions::toPCL(time, out.cpd_iterations[0]->header.stamp);
+            pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
+            // pcl_conversions::toPCL(time, out.cpd_iterations[0]->header.stamp);
             pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
 
             original_publisher.publish(out.original_cloud);
             masked_publisher.publish(out.masked_point_cloud);
             downsampled_publisher.publish(out.downsampled_cloud);
-            template_publisher.publish(out.last_template);
+            template_publisher.publish(out.cpd_output);
+            /*
             for (const auto& iteration: out.cpd_iterations)
             {
                 cpd_iters_publisher.publish(iteration); // TODO all
             }
+            */
             output_publisher.publish(out.gurobi_output);
 
             ++color_iter;
