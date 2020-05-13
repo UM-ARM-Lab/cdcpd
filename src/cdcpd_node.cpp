@@ -1,4 +1,5 @@
 #include <string>
+#include <vector>
 #include <cdcpd/cdcpd.h>
 #include <ros/ros.h>
 // #include "cdcpd_ros/kinect_sub.h"
@@ -18,6 +19,9 @@
 #include <pcl_ros/point_cloud.h>
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/simple_filter.h>
+#include <message_filters/time_synchronizer.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <tf2_ros/transform_listener.h>
@@ -31,6 +35,9 @@ using Eigen::MatrixXf;
 using Eigen::MatrixXi;
 
 using namespace cv;
+
+std::vector<cv::Mat> color_images;
+std::vector<cv::Mat> depth_images;
 
 // auto constexpr PARAM_NAME_WIDTH = 40;
 // 
@@ -64,7 +71,6 @@ using namespace cv;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
-
 std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_ros/result";
 
 void clean_file(const std::string& fname) {
@@ -72,6 +78,36 @@ void clean_file(const std::string& fname) {
     ofs << "";
     ofs.close();
 };
+
+void to_file(const std::string fname, const cv::Mat m) {
+    std::ofstream ofs(fname, std::ofstream::app);
+    ofs << "Matrix begins\n";
+    ofs << m << "\n\n";
+    ofs << "Matrix ends\n";
+    ofs.close();
+}
+
+template <class M>
+class BagSubscriber : public message_filters::SimpleFilter<M>
+{
+public:
+    void newMessage(const boost::shared_ptr<M const> &msg)
+    {
+        this->signalMessage(msg);
+    }
+};
+
+void callback(const sensor_msgs::Image::ConstPtr &rgb_img,
+              const sensor_msgs::Image::ConstPtr &depth_img)
+{
+    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::BGR8);
+    cv::Mat color_image = rgb_ptr->image.clone();
+    color_images.push_back(color_image);
+
+    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_16UC1);
+    cv::Mat depth_image = depth_ptr->image.clone();
+    depth_images.push_back(depth_image);
+}
 
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float height, int num_width, int num_height)
 {
@@ -133,6 +169,8 @@ int main(int argc, char* argv[])
     clean_file(workingDir + "/cpp_TY.txt");
     clean_file(workingDir + "/cpp_Y_opt.txt");
     clean_file(workingDir + "/cpp_TY-1.txt");
+    clean_file(workingDir + "/cpp_hsv.txt");
+    clean_file(workingDir + "/cpp_mask.txt");
 
     // int cloth_width_num = 20;
     // int cloth_height_num = 18;
@@ -158,13 +196,11 @@ int main(int argc, char* argv[])
     // FileStorage color_calib_fs("src/kinect2_calibration_files/data/000792364047/calib_color.yaml", FileStorage::READ);
     // cv::Mat intrinsics(3, 4);
     // comes from the default P matrix on the /kinect2/qhd/camera_info channel.
-    cv::Mat P_mat = (Mat_<double>(3,4) << 9.9014711549676485e+02, 0., 9.5877371153702927e+02, 0., 0.,
-       1.0609921135189716e+03, 6.2177198520999650e+02, 0., 0., 0., 1., 0., 0., 0., 0., 1.);
+    cv::Mat P_mat(3, 4, CV_64FC1);
     // color_calib_fs["cameraMatrix"] >> intrinsics;
     // cout << "intrinsics type: " << intrinsics.type() << endl;
 
     // TODO needs bool
-    CDCPD cdcpd(template_cloud, P_mat);
     // CDCPD cdcpd(template_cloud, P_mat, true);
 
     ros::NodeHandle nh;
@@ -179,51 +215,82 @@ int main(int argc, char* argv[])
     ros::Publisher left_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/left_gripper_prior", 1);
     ros::Publisher right_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/right_gripper_prior", 1);
 
+    BagSubscriber<sensor_msgs::Image> rgb_sub, depth_sub;
+
     cout << "Making buffer" << endl;
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_ros/dataset/occlusion_with_movement.bag", rosbag::bagmode::Read);
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_ros/dataset/occlusion_no_movement.bag", rosbag::bagmode::Read);
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
+    topics.push_back(std::string("/kinect2/qhd/camera_info"));
 
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
+    message_filters::TimeSynchronizer<sensor_msgs::Image, sensor_msgs::Image> sync(rgb_sub, depth_sub, 25);
+    sync.registerCallback(boost::bind(&callback, _1, _2));
+
     // TODO this might be too much memory at some point
-    std::map<ros::Time, cv::Mat> color_images;
-    std::map<ros::Time, cv::Mat> depth_images;
 
     for(rosbag::MessageInstance const m: view)
     {
         cout << "topic: " << m.getTopic() << endl;
-        sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
         if (m.getTopic() == topics[0])
         {
-            cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(i, sensor_msgs::image_encodings::BGR8);
-            cout << "color timestamp: " << m.getTime() << endl;
-            cv::Mat color_image = cv_ptr->image.clone();
-            color_images.insert(std::make_pair(m.getTime(), color_image));
+            sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
+            if (i != nullptr)
+                rgb_sub.newMessage(i);
+            else
+                cerr << "NULL initiation!" << endl;
         }
         else if (m.getTopic() == topics[1])
         {
-            cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(i, sensor_msgs::image_encodings::TYPE_16UC1);
-            cout << "depth timestamp: " << m.getTime() << endl;
-            cv::Mat depth_image = cv_ptr->image.clone();
-            depth_images.insert(std::make_pair(m.getTime(), depth_image));
+            sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
+            if (i != nullptr)
+                depth_sub.newMessage(i);
+            else
+                cerr << "NULL initiation!" << endl;
+        }
+        else if (m.getTopic() == topics[2])
+        {
+            sensor_msgs::CameraInfo::ConstPtr info_msg = m.instantiate<sensor_msgs::CameraInfo>();
+            // the following is similar to https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
+            // Check if the input image has to be resized
+            sensor_msgs::CameraInfo info_msg_tmp = *info_msg;
+            if (!depth_images.empty() && !color_images.empty() && (depth_images.back().cols != color_images.back().cols || depth_images.back().rows != color_images.back().rows))
+            {
+                cout << "resized" << endl;
+                info_msg_tmp.width = depth_images.back().cols;
+                info_msg_tmp.height = depth_images.back().rows;
+                float ratio = float(depth_images.back().cols)/float(color_images.back().cols);
+                info_msg_tmp.K[0] *= ratio;
+                info_msg_tmp.K[2] *= ratio;
+                info_msg_tmp.K[4] *= ratio;
+                info_msg_tmp.K[5] *= ratio;
+                info_msg_tmp.P[0] *= ratio;
+                info_msg_tmp.P[2] *= ratio;
+                info_msg_tmp.P[5] *= ratio;
+                info_msg_tmp.P[6] *= ratio;
+            }
+            for (int row = 0; row < 3; ++row) {
+                for (int col = 0; col < 4; ++col) {
+                    P_mat.at<double>(row, col) = info_msg_tmp.P[row*4+col];
+                }
+            }
+            cout << "P matrix: " << endl;
+            cout << P_mat << endl << endl;
         }
         else
         {
             cerr << "Invalid topic: " << m.getTopic() << endl;
             exit(1);
         }
-        assert(i != nullptr);
-        if (i != nullptr)
-        {
-            std::cout << i << std::endl;
-        }
     }
+
+    CDCPD cdcpd(template_cloud, P_mat);
     
     bag.close();
 
@@ -276,10 +343,8 @@ int main(int argc, char* argv[])
         }
         left_gripper_pub.publish(leftTS);
         right_gripper_pub.publish(rightTS);
-        auto [color_time, color_image_bgr] = *color_iter;
-        auto [depth_time, depth_image] = *depth_iter;
-        if (std::abs((color_time - depth_time).toSec()) < 0.4) // arbitrary 
-        {
+        auto color_image_bgr = *color_iter;
+        auto depth_image = *depth_iter;
             cout << "Matched" << endl;
             /// Color filter
             // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
@@ -296,6 +361,7 @@ int main(int argc, char* argv[])
             rgb_f /= 255.0; // get RGB 0.0-1.0
             cv::Mat color_hsv;
             cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
+            to_file(workingDir + "/cpp_hsv.txt", color_hsv);
 
             // White
             // cv::Scalar low_hsv = cv::Scalar(0.0 * 360.0, 0.0, 0.98);
@@ -304,14 +370,15 @@ int main(int argc, char* argv[])
             // Red
             cv::Mat mask1;
             cv::Mat mask2;
-            cv::inRange(color_hsv, cv::Scalar(0,50.0/255.0,20.0/255.0), cv::Scalar(5,255.0/255.0,255.0/255.0), mask1);
-            cv::inRange(color_hsv, cv::Scalar(350,50.0/255.0,20.0/255.0), cv::Scalar(360,255.0/255.0,255.0/255.0), mask2);
+            cv::inRange(color_hsv, cv::Scalar(0, 0.4, 0.2), cv::Scalar(5, 1.0, 1.0), mask1);
+            cv::inRange(color_hsv, cv::Scalar(350, 0.4, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
 
             // cv::Scalar low_hsv = cv::Scalar(.85 * 360.0, 0.5, 0.0);
             // cv::Scalar high_hsv = cv::Scalar(360.0, 1.0, 1.0);
 
             cv::Mat hsv_mask;
             bitwise_or(mask1, mask2, hsv_mask);
+            to_file(workingDir + "/cpp_mask.txt", hsv_mask);
             // cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
             cv::imwrite("hsv_mask.png", hsv_mask);
 
@@ -362,17 +429,6 @@ int main(int argc, char* argv[])
 
             ++color_iter;
             ++depth_iter;
-        }
-        else if (color_time < depth_time)
-        {
-            cout << "Color behind" << endl;
-            ++color_iter;
-        }
-        else
-        {
-            cout << "Depth behind" << endl;
-            ++depth_iter;
-        }
     }
 
     cout << "Test ended" << endl;
