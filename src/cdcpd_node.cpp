@@ -2,7 +2,7 @@
 #include <vector>
 #include <cdcpd/cdcpd.h>
 #include <ros/ros.h>
-// #include "cdcpd_ros/kinect_sub.h"
+#include "cdcpd_ros/kinect_sub.h"
 #include <thread>
 #include <chrono>
 
@@ -71,7 +71,7 @@ std::vector<cv::Mat> depth_images;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_ros/result";
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 
 void clean_file(const std::string& fname) {
     std::ofstream ofs(fname, std::ofstream::out);
@@ -222,7 +222,7 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_ros/dataset/occlusion_no_movement.bag", rosbag::bagmode::Read);
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/occlusion_when_manipulation.bag", rosbag::bagmode::Read);
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -370,8 +370,12 @@ int main(int argc, char* argv[])
             // Red
             cv::Mat mask1;
             cv::Mat mask2;
-            cv::inRange(color_hsv, cv::Scalar(0, 0.4, 0.2), cv::Scalar(5, 1.0, 1.0), mask1);
-            cv::inRange(color_hsv, cv::Scalar(350, 0.4, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+            // normal2.bag
+            // cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
+            // cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+            // normal.bag
+            cv::inRange(color_hsv, cv::Scalar(0, 0.4, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
+            cv::inRange(color_hsv, cv::Scalar(340, 0.4, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
 
             // cv::Scalar low_hsv = cv::Scalar(.85 * 360.0, 0.5, 0.0);
             // cv::Scalar high_hsv = cv::Scalar(360.0, 1.0, 1.0);
