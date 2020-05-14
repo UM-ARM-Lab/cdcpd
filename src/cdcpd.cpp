@@ -11,7 +11,7 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
 #include "cdcpd/cdcpd.h"
-// #include "cdcpd/past_template_matcher.h"
+#include "cdcpd/past_template_matcher.h"
 
 // TODO rm
 #include <iostream>
@@ -35,7 +35,7 @@ using pcl::PointCloud;
 using pcl::PointXYZ;
 using pcl::PointXYZRGB;
 
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_ros/result";
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 
 void clean_file(const std::string& fname) {
     std::ofstream ofs(fname, std::ofstream::out);
@@ -164,7 +164,7 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
 CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
              const Mat& _P_matrix,
              bool _use_recovery) : 
-    // template_matcher(1500), // TODO make configurable?
+    template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     P_matrix(_P_matrix),
     last_lower_bounding_box(-5.0, -5.0, -5.0), // TODO make configurable?
@@ -284,6 +284,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
 /*
  * Used for failure recovery. Very similar to the visibility_prior function, but with a different K and
  * image_depth - vertex_depth, not vice-versa. There's also no normalization.
+ * Calculate Eq. (22) in the paper
  */
 float smooth_free_space_cost(const Matrix3Xf vertices, 
                                  const Eigen::Matrix3f& intrinsics,
@@ -291,6 +292,12 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
                                  const cv::Mat& mask,
                                  float k=1e2)
 {
+    // vertices: Y^t in Eq. (22)
+    // intrinsics: intrinsic matrix of the camera
+    // depth: depth image
+    // mask: mask image
+    // k: constant defined in Eq. (22)
+
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
@@ -305,6 +312,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     {
         float x = image_space_vertices(0, i);
         float y = image_space_vertices(1, i);
+        // ENHANCE: no need to create coords again
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
@@ -331,7 +339,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
         uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
         if (raw_depth != 0)
         {
-            depth_diffs(i) = static_cast<float>(raw_depth) / 1000.0 - vertices(2, i);
+            depth_diffs(i) = static_cast<float>(raw_depth) / 1000.0 - vertices(2, i); // unit: m
         }
         else
         {
@@ -344,7 +352,6 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
     int maskSize = 5;
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
-    imwrite(workingDir + "/mask.png", mask);
 
     Eigen::VectorXf dist_to_mask(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
@@ -356,6 +363,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     cout << "score" << endl;
     cout << score << endl;
+    // NOTE: Eq. (22) lost 1 in it
     VectorXf prob = (1 - (-k * score).array().exp()).matrix();
     cout << "prob" << endl;
     cout << prob << endl;
@@ -385,17 +393,18 @@ point_clouds_from_images(const cv::Mat& depth_image,
     //  [[fx 0  px 0];
     //   [0  fy py 0];
     //   [0  0  1  0]]
-    // lower_bounding_box_vec: ???
-    // upper_bounding_box_vec: ???
+    // lower_bounding_box_vec: bounding for mask
+    // upper_bounding_box_vec: bounding for mask
 
     assert(depth_image.cols == rgb_image.cols);
     assert(depth_image.rows == rgb_image.rows);
     assert(depth_image.type() == CV_16U);
     assert(P.rows() == 3 && P.cols() == 4);
     // Assume unit_scaling is the standard Kinect 1mm
-    float unit_scaling = 1.0 / 1000.0;
-    float constant_x = unit_scaling / P(0, 0);
-    float constant_y = unit_scaling / P(1, 1);
+    float unit_scaling = 0.001;
+    float pixel_len = 0.0002645833;
+    float constant_x = 1 / (P(0, 0) * pixel_len);
+    float constant_y = 1 / (P(1, 1) * pixel_len);
     float center_x = P(0, 2);
     float center_y = P(1, 2);
     float bad_point = std::numeric_limits<float>::quiet_NaN();
@@ -430,8 +439,8 @@ point_clouds_from_images(const cv::Mat& depth_image,
             }
             else
             {
-                float x = (u - center_x) * depth * constant_x;
-                float y = (v - center_y) * depth * constant_y;
+                float x = (float(u) - center_x) * pixel_len * depth * unit_scaling * constant_x;// * pixel_len * depth * unit_scaling * constant_x;
+                float y = (float(v) - center_y) * pixel_len * depth * unit_scaling * constant_y; // * pixel_len * depth * unit_scaling * constant_y;
                 float z = depth * unit_scaling;
                 // Add to unfiltered cloud
                 // ENHANCE: be more concise
@@ -444,7 +453,6 @@ point_clouds_from_images(const cv::Mat& depth_image,
 
                 cv::Point2i pixel = cv::Point2i(u, v);
                 Eigen::Array<float, 3, 1> point(x, y, z);
-                // ???: mask is CV_8U, so it is better that it is mask.at<uchar>(pixel)
                 if (mask.at<bool>(pixel) &&
                     point.min(upper_bounding_box).isApprox(point) &&
                     point.max(lower_bounding_box).isApprox(point))
@@ -529,12 +537,11 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         float Np = P1.sum();
         
         // This is the code to use if you are not using LLE
-        // ???:
-        //  - why lambda is start_lambda * std::pow(annealing_factor, iterations + 1)
-        //  - how does lambda come, when the objective function doesn't contain lambda: assume lambda means gamma here
+        // ???: why lambda is start_lambda * std::pow(annealing_factor, iterations + 1)
+        // NOTE: lambda means gamma here
         // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
         // Corresponding to Eq. (18) in the paper
-        float lambda = start_lambda * std::pow(annealing_factor, iterations + 1);
+        float lambda = start_lambda;// * std::pow(annealing_factor, iterations + 1);
         MatrixXf A = (P1.asDiagonal() * G) 
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G);
@@ -604,7 +611,6 @@ CDCPD::Output CDCPD::operator()(
 
 
     // We'd like an Eigen version of the P matrix
-    // ???: is P_matrix the camera matrix, or P_eigen?
     Eigen::MatrixXf P_eigen(3, 4);
     cv::cv2eigen(P_matrix, P_eigen);
 
@@ -614,8 +620,7 @@ CDCPD::Output CDCPD::operator()(
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
     // pixel_coords: pixel coordinate corresponds to the point in the cloud
-    // ???: why the bounding_box_extend is needed
-    Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
+    Eigen::Vector3f bounding_box_extend = Vector3f(0.4, 0.4, 0.4);
     auto [entire_cloud, cloud, pixel_coords]
         = point_clouds_from_images(
                 depth,
@@ -631,14 +636,12 @@ CDCPD::Output CDCPD::operator()(
 
     /// VoxelGrid filter downsampling
     PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
-    /*
+
     pcl::VoxelGrid<PointXYZ> sor;
     cout << "Points in cloud before leaf: " << cloud->width << endl;
     sor.setInputCloud(cloud);
     sor.setLeafSize(0.02f, 0.02f, 0.02f);
     sor.filter(*cloud_downsampled);
-     */
-    cloud_downsampled = cloud;
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
     const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
     to_file(workingDir + "/cpp_downsample.txt", X);
@@ -656,7 +659,6 @@ CDCPD::Output CDCPD::operator()(
     // If we're doing tracking recovery, do that now
     if (use_recovery)
     {
-        /*
         float cost = smooth_free_space_cost(Y_opt, intr, depth, mask);
         cout << "cost" << endl;
         cout << cost << endl;
@@ -690,7 +692,6 @@ CDCPD::Output CDCPD::operator()(
         {
             template_matcher.add_template(cloud_downsampled, Y_opt);
         }
-        */
     }
 
     // Set the min and max for the box filter for next time

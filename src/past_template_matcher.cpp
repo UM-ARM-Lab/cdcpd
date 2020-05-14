@@ -41,8 +41,12 @@ void PastTemplateMatcher::add_template(pcl::PointCloud<pcl::PointXYZ>::Ptr filte
     recovery_features.push_back(downsampled_feature(filtered_points));
 }
 
+/*
+ * Down sample filtered_points (X^t) to sample size
+ */
 cv::Vec<float, 308> PastTemplateMatcher::downsampled_feature(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points)
 {
+    // filtered_points: 
     if (filtered_points->size() > sample_size)
     {
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud(new pcl::PointCloud<pcl::PointXYZ>(sample_size, 1));
@@ -58,7 +62,7 @@ cv::Vec<float, 308> PastTemplateMatcher::downsampled_feature(pcl::PointCloud<pcl
     }
 }
 
-cv::Vec<float, 308> vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr input)
+cv::Vec<float, 308> PastTemplateMatcher::vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr input)
 {
     pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal> ());
 
