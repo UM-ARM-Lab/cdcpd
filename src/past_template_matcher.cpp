@@ -1,6 +1,7 @@
 #include <random>
 #include <iostream> // TODO rm
 #include <vector>
+#include <algorithm>
 
 #include "cdcpd/past_template_matcher.h"
 #include <pcl/kdtree/kdtree_flann.h>
@@ -19,13 +20,18 @@ size_t PastTemplateMatcher::size()
     return recovery_templates.size();
 }
 
+/*
+ * find k nearest neighbors of filtered points
+ */
 std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points, int k)
 {
-    cv::Vec<float, 308> feature = downsampled_feature(filtered_points);
+    // filtered_points: X^t in the paper
+    // k: k nearest neighbors
+    cv::Mat feature = downsampled_feature(filtered_points);
     std::vector<std::vector<cv::DMatch>> matches;
-    matcher.knnMatch(feature, recovery_features, matches, k);
-    std::cout << "TEST1" << matches.size() << std::endl;
-    std::cout << "TEST2" << matches[0].size() << std::endl;
+    matcher.knnMatch(feature, recovery_features, matches, std::min(k, int(recovery_features.size())));
+    // std::cout << "TEST1" << matches.size() << std::endl;
+    // std::cout << "TEST2" << matches[0].size() << std::endl;
     std::vector<Eigen::Matrix3Xf> output;
     assert(matches.size() == 1);
     for ( const cv::DMatch& match : matches[0] )
@@ -44,9 +50,9 @@ void PastTemplateMatcher::add_template(pcl::PointCloud<pcl::PointXYZ>::Ptr filte
 /*
  * Down sample filtered_points (X^t) to sample size
  */
-cv::Vec<float, 308> PastTemplateMatcher::downsampled_feature(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points)
+cv::Mat PastTemplateMatcher::downsampled_feature(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points)
 {
-    // filtered_points: 
+    // filtered_points: X^t in the paper
     if (filtered_points->size() > sample_size)
     {
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud(new pcl::PointCloud<pcl::PointXYZ>(sample_size, 1));
@@ -62,7 +68,11 @@ cv::Vec<float, 308> PastTemplateMatcher::downsampled_feature(pcl::PointCloud<pcl
     }
 }
 
-cv::Vec<float, 308> PastTemplateMatcher::vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr input)
+/*
+ * generate vfh from X^t
+ * NOTE: didn't check in details and assumed it to be true
+ */
+cv::Mat PastTemplateMatcher::vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr input)
 {
     pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal> ());
 
@@ -97,6 +107,6 @@ cv::Vec<float, 308> PastTemplateMatcher::vfh(pcl::PointCloud<pcl::PointXYZ>::Con
 
     // Compute the features
     vfh.compute(*vfhs);
-    cv::Vec<float, 308> feature(vfhs->points[0].histogram);
+    cv::Mat feature(1, 308, CV_32F, vfhs->points[0].histogram);
     return feature;
 }

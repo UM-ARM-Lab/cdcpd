@@ -167,8 +167,8 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     P_matrix(_P_matrix),
-    last_lower_bounding_box(-5.0, -5.0, -5.0), // TODO make configurable?
-    last_upper_bounding_box(5.0, 5.0, 5.0), // TODO make configurable?
+    last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?
+    last_upper_bounding_box(6.0, 6.0, 6.0), // TODO make configurable?
     lle_neighbors(8), // TODO make configurable?
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
@@ -358,15 +358,15 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     {
         dist_to_mask(i) = dist_img.at<float>(coords(1, i), coords(0, i));
     }
-    cout << "dist_to_mask" << endl;
-    cout << dist_to_mask << endl;
+    // cout << "dist_to_mask" << endl;
+    // cout << dist_to_mask << endl;
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
-    cout << "score" << endl;
-    cout << score << endl;
+    // cout << "score" << endl;
+    // cout << score << endl;
     // NOTE: Eq. (22) lost 1 in it
     VectorXf prob = (1 - (-k * score).array().exp()).matrix();
-    cout << "prob" << endl;
-    cout << prob << endl;
+    // cout << "prob" << endl;
+    // cout << prob << endl;
     to_file(workingDir + "/cpp_prob.txt", prob);
     float cost = prob.array().isNaN().select(0, prob.array()).sum();
     cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
@@ -600,6 +600,8 @@ CDCPD::Output CDCPD::operator()(
     assert(P_matrix.rows == 3 && P_matrix.cols == 4);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
+    int recovery_knn_k = 12; // TODO configure this?
+    float recovery_cost_threshold = 0.5; // TODO configure this?
 
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "[", "]", "");
 
@@ -651,7 +653,7 @@ CDCPD::Output CDCPD::operator()(
 
     // Next step: optimization.
     // ???: most likely not 1.0
-    Optimizer opt(original_template, 1.0);
+    Optimizer opt(original_template, 1.05);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
@@ -663,8 +665,6 @@ CDCPD::Output CDCPD::operator()(
         cout << "cost" << endl;
         cout << cost << endl;
 
-        int recovery_knn_k = 12; // TODO configure this?
-        float recovery_cost_threshold = 0.5; // TODO configure this?
         if (cost > recovery_cost_threshold && template_matcher.size() > recovery_knn_k)
         {
             float best_cost = cost;
@@ -693,6 +693,7 @@ CDCPD::Output CDCPD::operator()(
             template_matcher.add_template(cloud_downsampled, Y_opt);
         }
     }
+    cout << "matcher size: " << template_matcher.size() << endl;
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
