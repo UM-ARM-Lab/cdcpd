@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "cdcpd/past_template_matcher.h"
+#include <faiss/IndexFlat.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/features/vfh.h>
 #include <pcl/features/normal_3d.h>
@@ -25,10 +26,47 @@ size_t PastTemplateMatcher::size()
  */
 std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points, int k)
 {
+    cv::Mat feature = downsampled_feature(filtered_points);
+    // faiss version
+    int d = 308;                           // dimension
+    int nb = recovery_features.size();     // database size
+    int nq = 1;                            // number of queries
+    float *xb = new float[d * nb];
+    float *xq = new float[d * nq];
+
+    // convert feature dataset and feature to float*
+    for (int i = 0; i < nb; ++i) {
+        for (int j = 0; j < d; ++j) {
+            xb[i * d + j] = recovery_features[i].at<float>(1, j);
+        }
+    }
+
+    for (int l = 0; l < 308; ++l) {
+        xq[l] = feature.at<float>(1, l);
+    }
+
+    faiss::IndexFlatL2 index(d);           // call constructor
+    index.add(nb, xb);                     // add vectors to the index
+
+    long *I = new long[(k+1) * nq];
+    float *D = new float[(k+1) * nq];
+
+    index.search(nq, xq, k+1, D, I);
+
+    // convert back to std::vector<Eigen::Matrix3Xf>
+    std::vector<Eigen::Matrix3Xf> output;
+    for (int i = 1; i <= k; i++) {
+        output.push_back(recovery_templates[I[i]]);
+    }
+    return output;
+
+    /*
     // filtered_points: X^t in the paper
     // k: k nearest neighbors
     cv::Mat feature = downsampled_feature(filtered_points);
     std::vector<std::vector<cv::DMatch>> matches;
+    std::cout << "feature: " << feature.rows << " times " << feature.cols << std::endl;
+    std::cout << "recovery feature: size: " << recovery_features.size() << " and " << feature.rows << " times " << feature.cols << std::endl;
     matcher.knnMatch(feature, recovery_features, matches, std::min(k, int(recovery_features.size())));
     // std::cout << "TEST1" << matches.size() << std::endl;
     // std::cout << "TEST2" << matches[0].size() << std::endl;
@@ -39,6 +77,7 @@ std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointClou
         output.push_back(recovery_templates[match.trainIdx]);
     }
     return output;
+     */
 }
 
 void PastTemplateMatcher::add_template(pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_points, Eigen::Matrix3Xf tracking_result)
@@ -107,6 +146,6 @@ cv::Mat PastTemplateMatcher::vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr input)
 
     // Compute the features
     vfh.compute(*vfhs);
-    cv::Mat feature(1, 308, CV_32F, vfhs->points[0].histogram);
+    cv::Mat feature(308, 1, CV_32F, vfhs->points[0].histogram);
     return feature;
 }
