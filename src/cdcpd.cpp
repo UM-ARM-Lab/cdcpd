@@ -37,6 +37,25 @@ using pcl::PointXYZRGB;
 
 std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 
+void test_cylinder() {
+    // test cylinder nearest point and normal
+    // expect result:
+    //  - pt1: along radius
+    //  - pt2: along height
+    //  - pt3: along radius
+    //  - pt4: around corner
+    Matrix3Xf test(3,4);
+    test << -0.0888611, -0.04433900, -0.0952289, -0.0566346,
+            -0.0119345,  0.00663127,  0.0486963,  0.0243684,
+            0.9240000,  0.89000000,  1.0510000,  0.8760000;
+
+    auto [nearestPts, normalVecs] = nearest_points_and_normal(test);
+    std::cout << "nearest points\n";
+    std::cout << nearestPts << endl;
+    std::cout << "normal vector\n";
+    std::cout << normalVecs << endl;
+}
+
 void clean_file(const std::string& fname) {
     std::ofstream ofs(fname, std::ofstream::out);
     ofs << "";
@@ -537,7 +556,6 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         float Np = P1.sum();
         
         // This is the code to use if you are not using LLE
-        // ???: why lambda is start_lambda * std::pow(annealing_factor, iterations + 1)
         // NOTE: lambda means gamma here
         // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
         // Corresponding to Eq. (18) in the paper
@@ -603,14 +621,12 @@ CDCPD::Output CDCPD::operator()(
     int recovery_knn_k = 12; // TODO configure this?
     float recovery_cost_threshold = 0.5; // TODO configure this?
 
-    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "[", "]", "");
+    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
 
     // Useful utility for outputting an Eigen matrix to a file
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
     };
-
-
 
     // We'd like an Eigen version of the P matrix
     Eigen::MatrixXf P_eigen(3, 4);
@@ -622,7 +638,7 @@ CDCPD::Output CDCPD::operator()(
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
     // pixel_coords: pixel coordinate corresponds to the point in the cloud
-    Eigen::Vector3f bounding_box_extend = Vector3f(0.4, 0.4, 0.4);
+    Eigen::Vector3f bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
     auto [entire_cloud, cloud, pixel_coords]
         = point_clouds_from_images(
                 depth,
@@ -646,14 +662,17 @@ CDCPD::Output CDCPD::operator()(
     sor.filter(*cloud_downsampled);
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
     const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
+    const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
+    const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
+    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
     to_file(workingDir + "/cpp_downsample.txt", X);
     to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
-    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, template_cloud->getMatrixXfMap().topRows(3), depth, mask, intr);
+    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
     to_file(workingDir + "/cpp_TY.txt", TY);
 
     // Next step: optimization.
     // ???: most likely not 1.0
-    Optimizer opt(original_template, 1.05);
+    Optimizer opt(original_template, Y, 1.05);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);

@@ -3,10 +3,16 @@
 using Eigen::Matrix3Xf;
 using Eigen::Matrix3Xd;
 using Eigen::Matrix2Xi;
+using Eigen::Vector3f;
 
 #include <iostream>
 using std::cout;
 using std::endl;
+
+Vector3f cylinder_orien(0.004483963943558, 0.121338945834278, 0.130282864480891);
+Vector3f cylinder_center(-0.043180266753345, 0.038185108108776, 0.968493909342117);
+float cylinder_radius = 0.036371412988240;
+float cylinder_height = 0.178092308891112;
 
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
@@ -34,9 +40,68 @@ static GRBEnv& getGRBEnv()
     return env;
 }
 
+std::tuple<Matrix3Xf, Matrix3Xf>
+        nearest_points_and_normal(const Matrix3Xf& last_template) {
+    // find of the nearest points and corresponding normal vector on the cylinder
+    Matrix3Xf nearestPts(3, last_template.cols());
+    Matrix3Xf normalVecs(3, last_template.cols());
+    for (int i = 0; i < last_template.cols(); i++) {
+        Vector3f pt;
+        pt << last_template.col(i);
+        Vector3f unitVecH = cylinder_orien/cylinder_orien.norm();
+        Vector3f unitVecR = (pt - cylinder_center) - ((pt - cylinder_center).transpose()*unitVecH)*unitVecH;
+        unitVecR = unitVecR/unitVecR.norm();
+        float h = unitVecH.transpose()*(pt-cylinder_center);
+        float r = unitVecR.transpose()*(pt-cylinder_center);
+        Vector3f nearestPt;
+        Vector3f normalVec;
+        if (h > cylinder_height/2 && r >= cylinder_radius) {
+            nearestPt = unitVecR*cylinder_radius + unitVecH*cylinder_height + cylinder_center;
+            normalVec = unitVecR + unitVecH;
+        }
+        else if (h < -cylinder_height/2 && r >= cylinder_radius) {
+            nearestPt = unitVecR*cylinder_radius - unitVecH*cylinder_height + cylinder_center;
+            normalVec = unitVecR - cylinder_orien/cylinder_orien.norm();
+        }
+        else if (h > cylinder_height/2 && r < cylinder_radius) {
+            nearestPt = r*unitVecR + cylinder_height/2*unitVecH + cylinder_center;
+            normalVec = unitVecH;
+        }
+        else if (h < -cylinder_height/2 && r < cylinder_radius) {
+            nearestPt = r*unitVecR - cylinder_height/2*unitVecH + cylinder_center;
+            normalVec = -unitVecH;
+        }
+        else if (h <= cylinder_height/2 && h >= -cylinder_height/2 && r < cylinder_radius) {
+            if (cylinder_height/2 - h < cylinder_radius - r) {
+                nearestPt = r*unitVecR + cylinder_height/2*unitVecH + cylinder_center;
+                normalVec = unitVecH;
+            }
+            else if (h + cylinder_height/2 < cylinder_radius - r) {
+                nearestPt = r*unitVecR + cylinder_height/2*unitVecH + cylinder_center;
+                normalVec = -unitVecH;
+            } else {
+                nearestPt = cylinder_radius*unitVecR + h*unitVecH + cylinder_center;
+                normalVec = unitVecR;
+            }
+        }
+        else if (h <= cylinder_height/2 && h >= -cylinder_height/2 && r >= cylinder_radius) {
+            cout << "this case\n";
+            nearestPt = cylinder_radius*unitVecR + h*unitVecH + cylinder_center;
+            normalVec = unitVecR;
+        }
+        normalVec = normalVec/normalVec.norm();
+        for (int j = 0; j < 3; ++j) {
+            nearestPts(j, i) = nearestPt(j);
+            normalVecs(j, i) = normalVec(j);
+        }
+    }
+    return {nearestPts, normalVecs};
+}
+
+
 // TODO do setup here
-Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const float _stretch_lambda)
-    : initial_template(_init_temp), stretch_lambda(_stretch_lambda)
+Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
+    : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
 {
 }
 
@@ -46,6 +111,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
     // E: E in Eq. (21)
     Matrix3Xf Y_opt(Y.rows(), Y.cols());
     GRBVar* vars = nullptr;
+    auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
     try
     {
         const size_t num_vectors = (size_t) Y.cols();
