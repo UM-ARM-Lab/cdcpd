@@ -21,12 +21,12 @@ public:
     void add_template(pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_points, Eigen::Matrix3Xf tracking_result); 
 
 private:
-    cv::Vec<float, 308> downsampled_feature(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
-    cv::Vec<float, 308> vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
+    cv::Mat downsampled_feature(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
+    cv::Mat vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
 
     cv::FlannBasedMatcher matcher;
     std::vector<Eigen::Matrix3Xf> recovery_templates;
-    std::vector<cv::Vec<float, 308>> recovery_features;
+    std::vector<cv::Mat> recovery_features;
     std::random_device rd;
     std::mt19937 gen;
     std::uniform_int_distribution<> index_generator;

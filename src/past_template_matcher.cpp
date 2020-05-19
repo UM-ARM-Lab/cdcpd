@@ -56,8 +56,15 @@ std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointClou
     // convert back to std::vector<Eigen::Matrix3Xf>
     std::vector<Eigen::Matrix3Xf> output;
     for (int i = 1; i <= k; i++) {
-        output.push_back(recovery_templates[I[i]]);
+        Eigen::Matrix3Xf newOutput = recovery_templates[I[i]];
+        output.push_back(newOutput);
     }
+
+    delete[] xb;
+    delete[] xq;
+    delete[] I;
+    delete[] D;
+
     return output;
 
     /*

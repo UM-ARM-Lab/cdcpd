@@ -9,10 +9,17 @@ using Eigen::Vector3f;
 using std::cout;
 using std::endl;
 
+/* interraction_cylinder.bag
 Vector3f cylinder_orien(0.004483963943558, 0.121338945834278, 0.130282864480891);
 Vector3f cylinder_center(-0.043180266753345, 0.038185108108776, 0.968493909342117);
 float cylinder_radius = 0.036371412988240;
 float cylinder_height = 0.178092308891112;
+ */
+
+Vector3f cylinder_orien(-0.008885936014668, 0.101494242992091, 0.115133360576856);
+Vector3f cylinder_center(0.145124522395497, -0.152708792314512, 1.095150852162702);
+float cylinder_radius = 0.033137245873063;
+float cylinder_height = 0.153739168519654;
 
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
@@ -56,11 +63,11 @@ std::tuple<Matrix3Xf, Matrix3Xf>
         Vector3f nearestPt;
         Vector3f normalVec;
         if (h > cylinder_height/2 && r >= cylinder_radius) {
-            nearestPt = unitVecR*cylinder_radius + unitVecH*cylinder_height + cylinder_center;
+            nearestPt = unitVecR*cylinder_radius + unitVecH*cylinder_height/2 + cylinder_center;
             normalVec = unitVecR + unitVecH;
         }
         else if (h < -cylinder_height/2 && r >= cylinder_radius) {
-            nearestPt = unitVecR*cylinder_radius - unitVecH*cylinder_height + cylinder_center;
+            nearestPt = unitVecR*cylinder_radius - unitVecH*cylinder_height/2 + cylinder_center;
             normalVec = unitVecR - cylinder_orien/cylinder_orien.norm();
         }
         else if (h > cylinder_height/2 && r < cylinder_radius) {
@@ -85,7 +92,6 @@ std::tuple<Matrix3Xf, Matrix3Xf>
             }
         }
         else if (h <= cylinder_height/2 && h >= -cylinder_height/2 && r >= cylinder_radius) {
-            cout << "this case\n";
             nearestPt = cylinder_radius*unitVecR + h*unitVecH + cylinder_center;
             normalVec = unitVecR;
         }
@@ -143,15 +149,18 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                             GRB_LESS_EQUAL,
                             stretch_lambda * stretch_lambda * (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
                             "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
-                /* need DEBUG
-                model.addQConstr(
-                        buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
-                        GRB_GREATER_EQUAL,
-                        (2.0-stretch_lambda) * (2.0-stretch_lambda) * (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
-                        "lower_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
-                        */
             }
             model.update();
+        }
+
+        // Add interaction constraints
+        {
+            for (size_t i = 0; i < num_vectors; ++i) {
+                model.addConstr(
+                        (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
+                                (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
+                                (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0, "interaction constrain for point " +std::to_string(i));
+            }
         }
 
         Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?

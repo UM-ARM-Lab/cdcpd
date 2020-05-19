@@ -3,7 +3,10 @@
 #include <opencv2/core.hpp>
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
+
 #include "cdcpd/past_template_matcher.h"
+
+void test_cylinder();
 
 class CDCPD {
 public:
@@ -22,7 +25,7 @@ public:
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const cv::Mat& _P_matrix,
-          bool _use_recovery);
+          bool _use_recovery = true);
 
     Output operator()(
          const cv::Mat& rgb, // RGB image
@@ -51,7 +54,6 @@ private:
     Eigen::Matrix3Xf original_template;
 
     // P_matrix: (3, 4) camera matrix
-    // ???
     const cv::Mat P_matrix;
     Eigen::Vector3f last_lower_bounding_box;
     Eigen::Vector3f last_upper_bounding_box;

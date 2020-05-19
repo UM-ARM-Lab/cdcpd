@@ -44,10 +44,10 @@ void test_cylinder() {
     //  - pt2: along height
     //  - pt3: along radius
     //  - pt4: around corner
-    Matrix3Xf test(3,4);
-    test << -0.0888611, -0.04433900, -0.0952289, -0.0566346,
-            -0.0119345,  0.00663127,  0.0486963,  0.0243684,
-            0.9240000,  0.89000000,  1.0510000,  0.8760000;
+    Matrix3Xf test(3,5);
+    test << 0.0, 0.0, 0.0, 0.0, 0.4,
+            0.6, 0.4, 0.4, 0.3, 0.0,
+            -0.1, 0.1, 0.9, 0.9, 0.1;
 
     auto [nearestPts, normalVecs] = nearest_points_and_normal(test);
     std::cout << "nearest points\n";
@@ -458,17 +458,19 @@ point_clouds_from_images(const cv::Mat& depth_image,
             }
             else
             {
-                float x = (float(u) - center_x) * pixel_len * depth * unit_scaling * constant_x;// * pixel_len * depth * unit_scaling * constant_x;
-                float y = (float(v) - center_y) * pixel_len * depth * unit_scaling * constant_y; // * pixel_len * depth * unit_scaling * constant_y;
-                float z = depth * unit_scaling;
+                float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x;// * pixel_len * depth * unit_scaling * constant_x;
+                float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y; // * pixel_len * depth * unit_scaling * constant_y;
+                float z = float(depth) * unit_scaling;
                 // Add to unfiltered cloud
                 // ENHANCE: be more concise
+
                 unfiltered_iter->x = x;
                 unfiltered_iter->y = y;
                 unfiltered_iter->z = z;
                 unfiltered_iter->r = rgb[0];
                 unfiltered_iter->g = rgb[1];
                 unfiltered_iter->b = rgb[2];
+
 
                 cv::Point2i pixel = cv::Point2i(u, v);
                 Eigen::Array<float, 3, 1> point(x, y, z);
@@ -664,7 +666,7 @@ CDCPD::Output CDCPD::operator()(
     const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
     const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
-    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
+    //to_file(workingDir + "/cpp_entire_cloud.txt", entire);
     to_file(workingDir + "/cpp_downsample.txt", X);
     to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
     Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
@@ -704,7 +706,6 @@ CDCPD::Output CDCPD::operator()(
                     best_cost = proposal_cost;
                 }
             }
-
             Y_opt = final_tracking_result;
         }
         else
