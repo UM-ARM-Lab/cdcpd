@@ -192,8 +192,8 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(3.0), // TODO make configurable?
-    beta(1.0), // TODO make configurable?
+    alpha(1.0), // TODO make configurable?
+    beta(1), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
     start_lambda(1.0), // TODO make configurable?
@@ -666,7 +666,7 @@ CDCPD::Output CDCPD::operator()(
     const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
     const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
-    //to_file(workingDir + "/cpp_entire_cloud.txt", entire);
+    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
     to_file(workingDir + "/cpp_downsample.txt", X);
     to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
     Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
@@ -674,7 +674,7 @@ CDCPD::Output CDCPD::operator()(
 
     // Next step: optimization.
     // ???: most likely not 1.0
-    Optimizer opt(original_template, Y, 1.05);
+    Optimizer opt(original_template, Y, 1.00);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
