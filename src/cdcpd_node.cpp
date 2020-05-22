@@ -1,6 +1,5 @@
 #include <string>
 #include <vector>
-#include <cdcpd/cdcpd.h>
 #include <ros/ros.h>
 #include "cdcpd_ros/kinect_sub.h"
 #include <thread>
@@ -26,6 +25,8 @@
 #include <sensor_msgs/image_encodings.h>
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 
 #include "cdcpd/cdcpd.h"
 
@@ -33,6 +34,7 @@ using std::cout;
 using std::endl;
 using Eigen::MatrixXf;
 using Eigen::MatrixXi;
+using Eigen::Matrix3Xf;
 
 using namespace cv;
 
@@ -40,7 +42,7 @@ std::vector<cv::Mat> color_images;
 std::vector<cv::Mat> depth_images;
 
 // auto constexpr PARAM_NAME_WIDTH = 40;
-// 
+//
 // template <typename T>
 // inline T GetParam(const ros::NodeHandle& nh,
 //                   const std::string& param_name,
@@ -146,6 +148,7 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
 
 int main(int argc, char* argv[])
 {
+
     // ENHANCE: more smart way to get Y^0 and E
     ros::init(argc, argv, "cdcpd_ros_node");
     cout << "Starting up..." << endl;
@@ -165,6 +168,7 @@ int main(int argc, char* argv[])
         template_edges(1, i - 1) = i;
     }
 
+    clean_file(workingDir + "/cpp_entire_cloud.txt");
     clean_file(workingDir + "/cpp_downsample.txt");
     clean_file(workingDir + "/cpp_TY.txt");
     clean_file(workingDir + "/cpp_Y_opt.txt");
@@ -214,6 +218,9 @@ int main(int argc, char* argv[])
     ros::Publisher output_publisher = ph.advertise<PointCloud> ("output", 1);
     ros::Publisher left_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/left_gripper_prior", 1);
     ros::Publisher right_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/right_gripper_prior", 1);
+    ros::Publisher cylinder_pub = ph.advertise<visualization_msgs::Marker>( "cylinder", 0 );
+
+
 
     BagSubscriber<sensor_msgs::Image> rgb_sub, depth_sub;
 
@@ -222,7 +229,7 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/occlusion_when_manipulation.bag", rosbag::bagmode::Read);
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_4.bag", rosbag::bagmode::Read);
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -233,6 +240,10 @@ int main(int argc, char* argv[])
     message_filters::TimeSynchronizer<sensor_msgs::Image, sensor_msgs::Image> sync(rgb_sub, depth_sub, 25);
     sync.registerCallback(boost::bind(&callback, _1, _2));
 
+    // TODO: Switch to using full callback style
+    // KinectSub kinect_sub(callback_fn,
+    //                      KinectSub::SubscriptionOptions("kinect2_" + kinect_name + "/" + stream));
+
     // TODO this might be too much memory at some point
 
     for(rosbag::MessageInstance const m: view)
@@ -241,18 +252,20 @@ int main(int argc, char* argv[])
         if (m.getTopic() == topics[0])
         {
             sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
-            if (i != nullptr)
+            if (i != nullptr) {
                 rgb_sub.newMessage(i);
+            }
             else
-                cerr << "NULL initiation!" << endl;
+                cout << "NULL initiation!" << endl;
         }
         else if (m.getTopic() == topics[1])
         {
             sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
-            if (i != nullptr)
+            if (i != nullptr) {
                 depth_sub.newMessage(i);
+            }
             else
-                cerr << "NULL initiation!" << endl;
+                cout << "NULL initiation!" << endl;
         }
         else if (m.getTopic() == topics[2])
         {
@@ -291,7 +304,7 @@ int main(int argc, char* argv[])
     }
 
     CDCPD cdcpd(template_cloud, P_mat);
-    
+
     bag.close();
 
     auto color_iter = color_images.cbegin();
@@ -328,7 +341,7 @@ int main(int argc, char* argv[])
     CDCPD::FixedPoint right_gripper = { right_pos, 0 };
 
     std::string stepper;
-    ros::Rate rate(5); // 5 hz, maybe allow changes, or mimicking bag?
+    ros::Rate rate(15); // 5 hz, maybe allow changes, or mimicking bag?
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend())
     {
         if (stepper != "r") {
@@ -345,94 +358,124 @@ int main(int argc, char* argv[])
         right_gripper_pub.publish(rightTS);
         auto color_image_bgr = *color_iter;
         auto depth_image = *depth_iter;
-            cout << "Matched" << endl;
-            /// Color filter
-            // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
-            // The flag isn't tested or implemented
-            Mat rgb_image;
-            cv::cvtColor(color_image_bgr, rgb_image, cv::COLOR_BGR2RGB);
-            // TODO I'm pretty sure this is an 8-bit image.
+        cout << "Matched" << endl;
+        /// Color filter
+        // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
+        // The flag isn't tested or implemented
+        Mat rgb_image;
+        cv::cvtColor(color_image_bgr, rgb_image, cv::COLOR_BGR2RGB);
+        // TODO I'm pretty sure this is an 8-bit image.
 
-            imwrite("rgb.png", rgb_image);
-            imwrite("depth.png", depth_image);
+        imwrite("rgb.png", rgb_image);
+        imwrite("depth.png", depth_image);
 
-            cv::Mat rgb_f;
-            rgb_image.convertTo(rgb_f, CV_32FC3);
-            rgb_f /= 255.0; // get RGB 0.0-1.0
-            cv::Mat color_hsv;
-            cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
-            to_file(workingDir + "/cpp_hsv.txt", color_hsv);
+        cv::Mat rgb_f;
+        rgb_image.convertTo(rgb_f, CV_32FC3);
+        rgb_f /= 255.0; // get RGB 0.0-1.0
+        cv::Mat color_hsv;
+        cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
+        to_file(workingDir + "/cpp_hsv.txt", color_hsv);
 
-            // White
-            // cv::Scalar low_hsv = cv::Scalar(0.0 * 360.0, 0.0, 0.98);
-            // cv::Scalar high_hsv = cv::Scalar(1.0 * 360.0, 0.02, 1.0);
+        // White
+        // cv::Scalar low_hsv = cv::Scalar(0.0 * 360.0, 0.0, 0.98);
+        // cv::Scalar high_hsv = cv::Scalar(1.0 * 360.0, 0.02, 1.0);
 
-            // Red
-            cv::Mat mask1;
-            cv::Mat mask2;
-            // normal2.bag
-            // cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-            // cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
-            // normal.bag
-            cv::inRange(color_hsv, cv::Scalar(0, 0.4, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-            cv::inRange(color_hsv, cv::Scalar(340, 0.4, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+        // Red
+        cv::Mat mask1;
+        cv::Mat mask2;
+        // normal2.bag
+        // cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
+        // cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+        // normal.bag
+        cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
+        cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
 
-            // cv::Scalar low_hsv = cv::Scalar(.85 * 360.0, 0.5, 0.0);
-            // cv::Scalar high_hsv = cv::Scalar(360.0, 1.0, 1.0);
+        // cv::Scalar low_hsv = cv::Scalar(.85 * 360.0, 0.5, 0.0);
+        // cv::Scalar high_hsv = cv::Scalar(360.0, 1.0, 1.0);
 
-            cv::Mat hsv_mask;
-            bitwise_or(mask1, mask2, hsv_mask);
-            to_file(workingDir + "/cpp_mask.txt", hsv_mask);
-            // cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
-            cv::imwrite("hsv_mask.png", hsv_mask);
+        cv::Mat hsv_mask;
+        bitwise_or(mask1, mask2, hsv_mask);
+        to_file(workingDir + "/cpp_mask.txt", hsv_mask);
+        // cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
+        cv::imwrite("hsv_mask.png", hsv_mask);
 
-            // Without the grippers vs with the grippers
-            CDCPD::Output out;
-            if (use_grippers)
-            {
-                out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, {left_gripper, right_gripper});
-            }
-            else
-            {
-                out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
-            }
-            template_cloud = out.gurobi_output;
+        // Without the grippers vs with the grippers
+        CDCPD::Output out;
+        if (use_grippers)
+        {
+            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, {left_gripper, right_gripper});
+        }
+        else
+        {
+            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
+        }
 
-            auto frame_id = "kinect2_rgb_optical_frame";
-            out.original_cloud->header.frame_id = frame_id;
-            out.masked_point_cloud->header.frame_id = frame_id;
-            out.downsampled_cloud->header.frame_id = frame_id;
-            out.cpd_output->header.frame_id = frame_id;
-            /*
-            for (auto& iteration: out.cpd_iterations)
-            {
-                iteration->header.frame_id = frame_id;
-            }
-            */
-            out.gurobi_output->header.frame_id = frame_id;
+        template_cloud = out.gurobi_output;
 
-            auto time = ros::Time::now();
-            pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
-            pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
-            pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
-            pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
-            // pcl_conversions::toPCL(time, out.cpd_iterations[0]->header.stamp);
-            pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
+        auto frame_id = "kinect2_rgb_optical_frame";
+        out.original_cloud->header.frame_id = frame_id;
+        out.masked_point_cloud->header.frame_id = frame_id;
+        out.downsampled_cloud->header.frame_id = frame_id;
+        out.cpd_output->header.frame_id = frame_id;
+        /*
+        for (auto& iteration: out.cpd_iterations)
+        {
+            iteration->header.frame_id = frame_id;
+        }
+        */
+        out.gurobi_output->header.frame_id = frame_id;
 
-            original_publisher.publish(out.original_cloud);
-            masked_publisher.publish(out.masked_point_cloud);
-            downsampled_publisher.publish(out.downsampled_cloud);
-            template_publisher.publish(out.cpd_output);
-            /*
-            for (const auto& iteration: out.cpd_iterations)
-            {
-                cpd_iters_publisher.publish(iteration); // TODO all
-            }
-            */
-            output_publisher.publish(out.gurobi_output);
+        // draw cylinder
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = frame_id;
+        marker.header.stamp = ros::Time();
+        marker.ns = "cylinder";
+        marker.id = 0;
+        marker.type = visualization_msgs::Marker::CYLINDER;
+        marker.action = visualization_msgs::Marker::ADD;
+        /* interaction_cylinder_2.bag
+        marker.pose.position.x = 0.145124522395497;
+        marker.pose.position.y = -0.152708792314512;
+        marker.pose.position.z = 1.095150852162702;
+        marker.pose.orientation.x = -0.3540;
+        marker.pose.orientation.y = -0.0155;
+        marker.pose.orientation.z = 0.0408;
+        marker.pose.orientation.w = 0.9342;
+        marker.scale.x = 0.033137245873063*2;
+        marker.scale.y = 0.033137245873063*2;
+        marker.scale.z = 0.153739168519654;
+         */
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+        //only if using a MESH_RESOURCE marker type:
+        marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
+        cylinder_pub.publish( marker );
 
-            ++color_iter;
-            ++depth_iter;
+
+        auto time = ros::Time::now();
+        pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
+        pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
+        pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
+        pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
+        // pcl_conversions::toPCL(time, out.cpd_iterations[0]->header.stamp);
+        pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
+
+        original_publisher.publish(out.original_cloud);
+        masked_publisher.publish(out.masked_point_cloud);
+        downsampled_publisher.publish(out.downsampled_cloud);
+        template_publisher.publish(out.cpd_output);
+        /*
+        for (const auto& iteration: out.cpd_iterations)
+        {
+            cpd_iters_publisher.publish(iteration); // TODO all
+        }
+        */
+        output_publisher.publish(out.gurobi_output);
+
+        ++color_iter;
+        ++depth_iter;
     }
 
     cout << "Test ended" << endl;
