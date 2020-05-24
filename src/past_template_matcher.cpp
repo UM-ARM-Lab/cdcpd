@@ -55,7 +55,9 @@ std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointClou
     index.search(nq, xq, k+1, D, I);
 
     // convert back to std::vector<Eigen::Matrix3Xf>
-    std::vector<Eigen::Matrix3Xf> output; std::cout << "created output vector\n";
+    std::vector<Eigen::Matrix3Xf> output;
+    /*
+    std::cout << "created output vector\n";
     std::cout << "total templates " << recovery_templates.size() << "\n";
     std::cout << "search vector:\n";
     for (int n = 0; n < d; ++n) {
@@ -72,6 +74,7 @@ std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointClou
         std::cout << I[m] << " ";
     }
     std::cout << "\n";
+     */
     for (int i = 1; i <= k; i++) {
         if (I[i] != -1) {
             Eigen::Matrix3Xf newOutput(recovery_templates[I[i]]);
