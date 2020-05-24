@@ -666,7 +666,7 @@ CDCPD::Output CDCPD::operator()(
     const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
     const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
-    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
+    // to_file(workingDir + "/cpp_entire_cloud.txt", entire);
     to_file(workingDir + "/cpp_downsample.txt", X);
     to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
     Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);

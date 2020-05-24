@@ -37,12 +37,12 @@ std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointClou
     // convert feature dataset and feature to float*
     for (int i = 0; i < nb; ++i) {
         for (int j = 0; j < d; ++j) {
-            xb[i * d + j] = recovery_features[i].at<float>(1, j);
+            xb[i * d + j] = recovery_features[i].at<float>(0, j);
         }
     }
 
-    for (int l = 0; l < 308; ++l) {
-        xq[l] = feature.at<float>(1, l);
+    for (int l = 0; l < d; ++l) {
+        xq[l] = feature.at<float>(0, l);
     }
 
     faiss::IndexFlatL2 index(d);           // call constructor
@@ -51,13 +51,32 @@ std::vector<Eigen::Matrix3Xf> PastTemplateMatcher::query_template(pcl::PointClou
     long *I = new long[(k+1) * nq];
     float *D = new float[(k+1) * nq];
 
+    std::cout << "is trained: " << index.is_trained << "\n";
     index.search(nq, xq, k+1, D, I);
 
     // convert back to std::vector<Eigen::Matrix3Xf>
-    std::vector<Eigen::Matrix3Xf> output;
+    std::vector<Eigen::Matrix3Xf> output; std::cout << "created output vector\n";
+    std::cout << "total templates " << recovery_templates.size() << "\n";
+    std::cout << "search vector:\n";
+    for (int n = 0; n < d; ++n) {
+        std::cout << xq[n] << " ";
+    }
+    std::cout << "\n";
+    std::cout << "last one of the search base:\n";
+    for (int i1 = 0; i1 < d; ++i1) {
+        std::cout << xb[(nb-1)*d+i1] << " ";
+    }
+    std::cout << "\n";
+    std::cout << "search indexing result\n";
+    for (int m = 0; m < k+1; ++m) {
+        std::cout << I[m] << " ";
+    }
+    std::cout << "\n";
     for (int i = 1; i <= k; i++) {
-        Eigen::Matrix3Xf newOutput = recovery_templates[I[i]];
-        output.push_back(newOutput);
+        if (I[i] != -1) {
+            Eigen::Matrix3Xf newOutput(recovery_templates[I[i]]);
+            output.push_back(newOutput);
+        }
     }
 
     delete[] xb;
@@ -153,6 +172,6 @@ cv::Mat PastTemplateMatcher::vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr input)
 
     // Compute the features
     vfh.compute(*vfhs);
-    cv::Mat feature(308, 1, CV_32F, vfhs->points[0].histogram);
+    cv::Mat feature(1, 308, CV_32F, vfhs->points[0].histogram);
     return feature;
 }

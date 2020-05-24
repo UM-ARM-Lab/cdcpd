@@ -161,7 +161,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
             model.update();
         }
 
-        /*
+
         // Add interaction constraints
         {
             for (size_t i = 0; i < num_vectors; ++i) {
@@ -171,7 +171,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                                 (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0, "interaction constrain for point " +std::to_string(i));
             }
         }
-         */
+
 
         Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
 
