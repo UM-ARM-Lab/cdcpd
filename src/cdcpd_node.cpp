@@ -25,6 +25,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/Point.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -219,6 +220,7 @@ int main(int argc, char* argv[])
     ros::Publisher left_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/left_gripper_prior", 1);
     ros::Publisher right_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/right_gripper_prior", 1);
     ros::Publisher cylinder_pub = ph.advertise<visualization_msgs::Marker>( "cylinder", 0 );
+    ros::Publisher order_pub = ph.advertise<visualization_msgs::Marker>("order", 10);
 
 
 
@@ -229,7 +231,7 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_4.bag", rosbag::bagmode::Read);
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_7.bag", rosbag::bagmode::Read);
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -433,7 +435,8 @@ int main(int argc, char* argv[])
         marker.id = 0;
         marker.type = visualization_msgs::Marker::CYLINDER;
         marker.action = visualization_msgs::Marker::ADD;
-        /* interaction_cylinder_2.bag
+        // interaction_cylinder_2.bag
+        /*
         marker.pose.position.x = 0.145124522395497;
         marker.pose.position.y = -0.152708792314512;
         marker.pose.position.z = 1.095150852162702;
@@ -445,14 +448,107 @@ int main(int argc, char* argv[])
         marker.scale.y = 0.033137245873063*2;
         marker.scale.z = 0.153739168519654;
          */
+
+        // interaction_cylinder_4.bag
+        /*
+        marker.pose.position.x = -0.001783838376740;
+        marker.pose.position.y = -0.202407765852103;
+        marker.pose.position.z = 1.255950979292225;
+        marker.pose.orientation.x = -0.2134;
+        marker.pose.orientation.y = -0.0024;
+        marker.pose.orientation.z = 0.0110;
+        marker.pose.orientation.w = 0.9769;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
         marker.color.a = 1.0; // Don't forget to set the alpha!
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
+         */
+
+        // interaction_cylinder_5.bag
+        /*
+        marker.pose.position.x = -0.007203971514259;
+        marker.pose.position.y = -0.282011643023486;
+        marker.pose.position.z = 1.351697407251410;
+        marker.pose.orientation.x = -0.7884;
+        marker.pose.orientation.y = -0.0193;
+        marker.pose.orientation.z = 0.0150;
+        marker.pose.orientation.w = 0.6147;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+         */
+
+        // interation_cylinder_6.bag
+        /*
+        marker.pose.position.x = -0.025889295027034;
+        marker.pose.position.y = -0.020591825574503;
+        marker.pose.position.z = 1.200787565152055;
+        marker.pose.orientation.x = -0.7852;
+        marker.pose.orientation.y = -0.0016;
+        marker.pose.orientation.z = 0.0013;
+        marker.pose.orientation.w = 0.6193;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+         */
+
+
+        // interation_cylinder_7.bag
+
+        marker.pose.position.x = -0.025889295027034;
+        marker.pose.position.y = -0.020591825574503;
+        marker.pose.position.z = 1.200787565152055;
+        marker.pose.orientation.x = -0.7952;
+        marker.pose.orientation.y = -0.0010;
+        marker.pose.orientation.z = 0.0008;
+        marker.pose.orientation.w = 0.6064;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+
+
         //only if using a MESH_RESOURCE marker type:
         marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
         cylinder_pub.publish( marker );
 
+        // draw line order
+        visualization_msgs::Marker order;
+        order.header.frame_id = frame_id;
+        order.header.stamp = ros::Time();
+        order.ns = "line_order";
+        order.action = visualization_msgs::Marker::ADD;
+        order.pose.orientation.w = 1.0;
+        order.id = 1;
+        order.type = visualization_msgs::Marker::LINE_STRIP;
+        order.scale.x = 0.004;
+        order.color.b = 1.0;
+        order.color.a = 1.0;
+        auto pc_iter = out.gurobi_output->begin();
+        for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
+            geometry_msgs::Point p;
+            p.x = pc_iter->x;
+            p.y = pc_iter->y;
+            p.z = pc_iter->z;
+
+            order.points.push_back(p);
+        }
+
+        order_pub.publish(order);
 
         auto time = ros::Time::now();
         pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
