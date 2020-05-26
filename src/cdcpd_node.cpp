@@ -119,10 +119,10 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
 
     int edge_count = 0;
     for (int i = 0; i < num_height; ++i) {
-        cout << i << endl;
+        // cout << i << endl;
         for (int j = 0; j < num_width; ++j)
         {
-            cout << j << endl;
+            // cout << j << endl;
             int index = j * num_height + i;
             vertices(0, index) = static_cast<float>(i) * height / static_cast<float>(num_height - 1);
             vertices(1, index) = static_cast<float>(j) * width / static_cast<float>(num_width - 1);
@@ -154,6 +154,8 @@ int main(int argc, char* argv[])
     ros::init(argc, argv, "cdcpd_ros_node");
     cout << "Starting up..." << endl;
 
+    // initial connectivity model of rope
+    /*
     int points_on_rope = 50;
     float rope_length = 1.0;
     MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
@@ -168,6 +170,7 @@ int main(int argc, char* argv[])
         template_edges(0, i) = i;
         template_edges(1, i - 1) = i;
     }
+     */
 
     clean_file(workingDir + "/cpp_entire_cloud.txt");
     clean_file(workingDir + "/cpp_downsample.txt");
@@ -177,11 +180,11 @@ int main(int argc, char* argv[])
     clean_file(workingDir + "/cpp_hsv.txt");
     clean_file(workingDir + "/cpp_mask.txt");
 
-    // int cloth_width_num = 20;
-    // int cloth_height_num = 18;
-    // float cloth_width = 0.3048f;
-    // float cloth_height = 0.282f;
-    // auto [template_vertices, template_edges] = make_rectangle(cloth_width, cloth_height, cloth_width_num, cloth_height_num);
+    int cloth_width_num = 23;
+    int cloth_height_num = 18;
+    float cloth_width = 0.44f;
+    float cloth_height = 0.34f;
+    auto [template_vertices, template_edges] = make_rectangle(cloth_width, cloth_height, cloth_width_num, cloth_height_num);
     // cout << "template_vertices" << endl;
     // cout << template_vertices << endl;
     // cout << "template_edges" << endl;
@@ -231,7 +234,7 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_7.bag", rosbag::bagmode::Read);
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth2.bag", rosbag::bagmode::Read);
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -383,20 +386,19 @@ int main(int argc, char* argv[])
         // cv::Scalar high_hsv = cv::Scalar(1.0 * 360.0, 0.02, 1.0);
 
         // Red
+        /*
         cv::Mat mask1;
         cv::Mat mask2;
-        // normal2.bag
-        // cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-        // cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
-        // normal.bag
         cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
         cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
-
-        // cv::Scalar low_hsv = cv::Scalar(.85 * 360.0, 0.5, 0.0);
-        // cv::Scalar high_hsv = cv::Scalar(360.0, 1.0, 1.0);
-
         cv::Mat hsv_mask;
         bitwise_or(mask1, mask2, hsv_mask);
+        */
+
+        // Purple
+        cv::Mat hsv_mask;
+        cv::inRange(color_hsv, cv::Scalar(210, 0.2, 0.4), cv::Scalar(250, 0.6, 0.8), hsv_mask);
+
         to_file(workingDir + "/cpp_mask.txt", hsv_mask);
         // cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
         cv::imwrite("hsv_mask.png", hsv_mask);
@@ -524,9 +526,10 @@ int main(int argc, char* argv[])
 
         //only if using a MESH_RESOURCE marker type:
         marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
-        cylinder_pub.publish( marker );
+        // cylinder_pub.publish( marker );
 
         // draw line order
+
         visualization_msgs::Marker order;
         order.header.frame_id = frame_id;
         order.header.stamp = ros::Time();
@@ -534,18 +537,87 @@ int main(int argc, char* argv[])
         order.action = visualization_msgs::Marker::ADD;
         order.pose.orientation.w = 1.0;
         order.id = 1;
-        order.type = visualization_msgs::Marker::LINE_STRIP;
-        order.scale.x = 0.004;
+        order.scale.x = 0.003;
         order.color.b = 1.0;
         order.color.a = 1.0;
         auto pc_iter = out.gurobi_output->begin();
-        for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
-            geometry_msgs::Point p;
-            p.x = pc_iter->x;
-            p.y = pc_iter->y;
-            p.z = pc_iter->z;
 
-            order.points.push_back(p);
+        // rope order
+//        order.type = visualization_msgs::Marker::LINE_STRIP;
+//        for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
+//            geometry_msgs::Point p;
+//            p.x = pc_iter->x;
+//            p.y = pc_iter->y;
+//            p.z = pc_iter->z;
+//
+//            order.points.push_back(p);
+//        }
+
+        // cloth order
+        order.type = visualization_msgs::Marker::LINE_LIST;
+        for (int row = 0; row < cloth_height_num; ++row) {
+            for (int col = 0; col < cloth_width_num; ++col) {
+                if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
+                    geometry_msgs::Point cur;
+                    geometry_msgs::Point right;
+                    geometry_msgs::Point below;
+                    int cur_ind = col*cloth_height_num + row;
+                    int right_ind = cur_ind + cloth_height_num;
+                    int below_ind = cur_ind + 1;
+
+                    cur.x = (pc_iter+cur_ind)->x;
+                    cur.y = (pc_iter+cur_ind)->y;
+                    cur.z = (pc_iter+cur_ind)->z;
+
+                    right.x = (pc_iter+right_ind)->x;
+                    right.y = (pc_iter+right_ind)->y;
+                    right.z = (pc_iter+right_ind)->z;
+
+                    below.x = (pc_iter+below_ind)->x;
+                    below.y = (pc_iter+below_ind)->y;
+                    below.z = (pc_iter+below_ind)->z;
+
+                    order.points.push_back(cur);
+                    order.points.push_back(right);
+
+                    order.points.push_back(cur);
+                    order.points.push_back(below);
+                }
+                else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
+                    geometry_msgs::Point cur;
+                    geometry_msgs::Point right;
+                    int cur_ind = col*cloth_height_num + row;
+                    int right_ind = cur_ind + cloth_height_num;
+
+                    cur.x = (pc_iter+cur_ind)->x;
+                    cur.y = (pc_iter+cur_ind)->y;
+                    cur.z = (pc_iter+cur_ind)->z;
+
+                    right.x = (pc_iter+right_ind)->x;
+                    right.y = (pc_iter+right_ind)->y;
+                    right.z = (pc_iter+right_ind)->z;
+
+                    order.points.push_back(cur);
+                    order.points.push_back(right);
+                }
+                else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
+                    geometry_msgs::Point cur;
+                    geometry_msgs::Point below;
+                    int cur_ind = col*cloth_height_num + row;
+                    int below_ind = cur_ind + 1;
+
+                    cur.x = (pc_iter+cur_ind)->x;
+                    cur.y = (pc_iter+cur_ind)->y;
+                    cur.z = (pc_iter+cur_ind)->z;
+
+                    below.x = (pc_iter+below_ind)->x;
+                    below.y = (pc_iter+below_ind)->y;
+                    below.z = (pc_iter+below_ind)->z;
+
+                    order.points.push_back(cur);
+                    order.points.push_back(below);
+                }
+            }
         }
 
         order_pub.publish(order);
