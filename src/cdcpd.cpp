@@ -104,7 +104,7 @@ MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
         }
     }
     // ???: beta should be beta^2
-    MatrixXf kernel = (-diff / (2 * beta)).array().exp();
+    MatrixXf kernel = (-diff / (2 * beta * beta)).array().exp();
     return kernel;
 }
 
@@ -192,7 +192,7 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(1.0), // TODO make configurable?
+    alpha(0.5), // TODO make configurable?
     beta(1), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
@@ -510,7 +510,7 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
     /// CPD step
 
     // G: (M, M) Guassian kernel matrix 
-    MatrixXf G = gaussian_kernel(Y, beta);
+    MatrixXf G = gaussian_kernel(original_template, beta);//Y, beta);
 
     // TY: Y^(t) in Algorithm 1
     Matrix3Xf TY = Y;
