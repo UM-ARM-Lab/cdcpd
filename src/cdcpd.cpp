@@ -37,31 +37,6 @@ using pcl::PointXYZRGB;
 
 std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 
-void test_cylinder() {
-    // test cylinder nearest point and normal
-    // expect result:
-    //  - pt1: along radius
-    //  - pt2: along height
-    //  - pt3: along radius
-    //  - pt4: around corner
-    Matrix3Xf test(3,5);
-    test << 0.0, 0.0, 0.0, 0.0, 0.4,
-            0.6, 0.4, 0.4, 0.3, 0.0,
-            -0.1, 0.1, 0.9, 0.9, 0.1;
-
-    auto [nearestPts, normalVecs] = nearest_points_and_normal(test);
-    std::cout << "nearest points\n";
-    std::cout << nearestPts << endl;
-    std::cout << "normal vector\n";
-    std::cout << normalVecs << endl;
-}
-
-void clean_file(const std::string& fname) {
-    std::ofstream ofs(fname, std::ofstream::out);
-    ofs << "";
-    ofs.close();
-};
-
 PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
     PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
@@ -219,6 +194,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     // mask: CV_8U mask for segmentation
     // k: k_vis in the paper
 
+#ifdef DEBUG
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
@@ -227,6 +203,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     // save matrices
     to_file(workingDir + "/cpp_verts.txt", vertices);
     to_file(workingDir + "/cpp_intrinsics.txt", intrinsics);
+#endif
 
     // Project the vertices to get their corresponding pixel coordinate
     // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
@@ -245,7 +222,9 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
+#ifdef DEBUG
     to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
+#endif
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -255,7 +234,9 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
         coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
     }
+#ifdef DEBUG
     to_file(workingDir + "/cpp_coords.txt", coords.cast<float>());
+#endif
 
     // Find difference between point depth and image depth
     // depth_diffs: (1, M) vector
@@ -275,7 +256,9 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     }
     // ENHANCE: repeating max
     depth_diffs = depth_diffs.array().max(0);
+#ifdef DEBUG
     to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
+#endif
 
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO haven't really tested this but seems right
@@ -296,7 +279,9 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     VectorXf prob = (-k * score).array().exp().matrix();
     // ???: unnormalized prob
+#ifdef DEBUG
     to_file(workingDir + "/cpp_prob.txt", prob);
+#endif
     return prob;
 }
 
@@ -318,9 +303,11 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     // k: constant defined in Eq. (22)
 
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+#ifdef DEBUG
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
     };
+#endif
 
     // Project the vertices to get their corresponding pixel coordinate
     Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
@@ -366,7 +353,10 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
         }
     }
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
+#ifdef DEBUG
     to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
+#endif
+
 
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
     int maskSize = 5;
@@ -377,16 +367,12 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     {
         dist_to_mask(i) = dist_img.at<float>(coords(1, i), coords(0, i));
     }
-    // cout << "dist_to_mask" << endl;
-    // cout << dist_to_mask << endl;
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
-    // cout << "score" << endl;
-    // cout << score << endl;
     // NOTE: Eq. (22) lost 1 in it
     VectorXf prob = (1 - (-k * score).array().exp()).matrix();
-    // cout << "prob" << endl;
-    // cout << prob << endl;
+#ifdef DEBUG
     to_file(workingDir + "/cpp_prob.txt", prob);
+#endif
     float cost = prob.array().isNaN().select(0, prob.array()).sum();
     cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
     return cost;
@@ -562,12 +548,12 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
         // Corresponding to Eq. (18) in the paper
         float lambda = start_lambda;// * std::pow(annealing_factor, iterations + 1);
-        MatrixXf A = (P1.asDiagonal() * G) 
+        MatrixXf p1d = P1.asDiagonal();
+        MatrixXf A = (p1d * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G);
-        MatrixXf p1d = P1.asDiagonal();
         MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
-        MatrixXf W = A.colPivHouseholderQr().solve(B);
+        MatrixXf W = A.householderQr().solve(B);
 
         TY = Y + (G * W).transpose();
 
@@ -601,7 +587,8 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& mask,
         const PointCloud<PointXYZ>::Ptr template_cloud,
         const Matrix2Xi& template_edges,
-        const std::vector<CDCPD::FixedPoint>& fixed_points
+        const std::vector<CDCPD::FixedPoint>& fixed_points,
+        bool interation_constrain
         )
 {
     // rgb: CV_8U3C rgb image
@@ -610,8 +597,6 @@ CDCPD::Output CDCPD::operator()(
     // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
     // template_edges: (2, K) matrix corresponding to E in the paper
     // fixed_points: fixed points during the tracking
-
-    // ENHANCE: to_file can be put in DEBUG macro
 
     assert(rgb.type() == CV_8UC3);
     assert(depth.type() == CV_16U);
@@ -623,12 +608,14 @@ CDCPD::Output CDCPD::operator()(
     int recovery_knn_k = 12; // TODO configure this?
     float recovery_cost_threshold = 0.5; // TODO configure this?
 
+#ifdef DEBUG
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
 
     // Useful utility for outputting an Eigen matrix to a file
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
     };
+#endif
 
     // We'd like an Eigen version of the P matrix
     Eigen::MatrixXf P_eigen(3, 4);
@@ -666,18 +653,22 @@ CDCPD::Output CDCPD::operator()(
     const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
     const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
-    // to_file(workingDir + "/cpp_entire_cloud.txt", entire);
+    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
     to_file(workingDir + "/cpp_downsample.txt", X);
     to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
-    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
     to_file(workingDir + "/cpp_TY.txt", TY);
+#endif
 
     // Next step: optimization.
     // ???: most likely not 1.0
     Optimizer opt(original_template, Y, 1.00);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
+#ifdef DEBUG
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
+#endif
 
     // If we're doing tracking recovery, do that now
     if (use_recovery)

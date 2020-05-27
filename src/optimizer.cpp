@@ -1,5 +1,6 @@
 #include "cdcpd/optimizer.h"
 
+
 using Eigen::Matrix3Xf;
 using Eigen::Matrix3Xd;
 using Eigen::Matrix2Xi;
@@ -9,54 +10,53 @@ using Eigen::Vector3f;
 using std::cout;
 using std::endl;
 
+#ifdef CYL1
 // interaction_cylinder.bag
-/*
 Vector3f cylinder_orien(0.004483963943558, 0.121338945834278, 0.130282864480891);
 Vector3f cylinder_center(-0.043180266753345, 0.038185108108776, 0.968493909342117);
 float cylinder_radius = 0.036371412988240;
 float cylinder_height = 0.178092308891112;
- */
+#endif
 
+#ifdef CYL2
 // interaction_cylinder_2.bag
-/*
 Vector3f cylinder_orien(-0.008885936014668, 0.101494242992091, 0.115133360576856);
 Vector3f cylinder_center(0.145124522395497, -0.152708792314512, 1.095150852162702);
 float cylinder_radius = 0.033137245873063;
 float cylinder_height = 0.153739168519654;
- */
+#endif
 
+#ifdef CYL4
 // interaction_cylinder_4.bag
-/*
 Vector3f cylinder_orien(-0.001324255947704, 0.058704082788457, 0.128014310218385);
 Vector3f cylinder_center(-0.001783838376740, -0.202407765852103, 1.255950979292225);
 float cylinder_radius = 0.05;
 float cylinder_height = 0.21;
- */
+#endif
 
+#ifdef CYL5
 // interaction_cylinder_5.bag
-/*
 Vector3f cylinder_orien(-0.013265312948576, 0.271214729597447, -0.068290358018994);
 Vector3f cylinder_center(-0.007203971514259, -0.282011643023486, 1.351697407251410);
 float cylinder_radius = 0.05;
 float cylinder_height = 0.21;
- */
+#endif
 
+#ifdef CYL6
 // interaction_cylinder_6.bag
-/*
 Vector3f cylinder_orien(-0.001063927061630, 0.262452937850508, -0.062874506695239);
 Vector3f cylinder_center(-0.025889295027034, -0.020591825574503, 1.200787565152055);
 float cylinder_radius = 0.05;
 float cylinder_height = 0.21;
- */
+#endif
 
+#ifdef CYL7
 // interaction_cylinder_7.bag
-
 Vector3f cylinder_orien(-0.000711277105401, 0.271567425774266, -0.074522999332804 );
 Vector3f cylinder_center(-0.028109420928789, 0.024601311519531, 1.344487500578158);
 float cylinder_radius = 0.05;
 float cylinder_height = 0.21;
-
-
+#endif
 
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
@@ -190,7 +190,6 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
             model.update();
         }
 
-        /*
         // Add interaction constraints
         {
             for (size_t i = 0; i < num_vectors; ++i) {
@@ -200,7 +199,6 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                                 (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0, "interaction constrain for point " +std::to_string(i));
             }
         }
-         */
 
 
         Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
