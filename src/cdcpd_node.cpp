@@ -149,13 +149,13 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
 
 int main(int argc, char* argv[])
 {
-
     // ENHANCE: more smart way to get Y^0 and E
     ros::init(argc, argv, "cdcpd_ros_node");
     cout << "Starting up..." << endl;
 
+    #ifdef ROPE
+
     // initial connectivity model of rope
-    /*
     int points_on_rope = 50;
     float rope_length = 1.0;
     MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
@@ -170,7 +170,18 @@ int main(int argc, char* argv[])
         template_edges(0, i) = i;
         template_edges(1, i - 1) = i;
     }
-     */
+
+    #else
+
+    int cloth_width_num = 23;
+    int cloth_height_num = 18;
+    float cloth_width = 0.44f;
+    float cloth_height = 0.34f;
+    auto [template_vertices, template_edges] = make_rectangle(cloth_width, cloth_height, cloth_width_num, cloth_height_num);
+
+    #endif
+
+    #ifdef DEBUG
 
     clean_file(workingDir + "/cpp_entire_cloud.txt");
     clean_file(workingDir + "/cpp_downsample.txt");
@@ -180,17 +191,7 @@ int main(int argc, char* argv[])
     clean_file(workingDir + "/cpp_hsv.txt");
     clean_file(workingDir + "/cpp_mask.txt");
 
-    int cloth_width_num = 23;
-    int cloth_height_num = 18;
-    float cloth_width = 0.44f;
-    float cloth_height = 0.34f;
-    auto [template_vertices, template_edges] = make_rectangle(cloth_width, cloth_height, cloth_width_num, cloth_height_num);
-    // cout << "template_vertices" << endl;
-    // cout << template_vertices << endl;
-    // cout << "template_edges" << endl;
-    // cout << template_edges << endl;
-
-    cout << "Have template..." << endl;
+    #endif
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < template_vertices.cols(); ++i)
@@ -198,7 +199,6 @@ int main(int argc, char* argv[])
         const auto& c = template_vertices.col(i);
         template_cloud->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
-    cout << "Have cloud..." << endl;
 
     // TODO should not be this
     // FileStorage color_calib_fs("src/kinect2_calibration_files/data/000792364047/calib_color.yaml", FileStorage::READ);
@@ -234,7 +234,15 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth2.bag", rosbag::bagmode::Read);
+#ifdef CYL4
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_4.bag", rosbag::bagmode::Read);
+#endif
+#ifdef CYL5
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_5.bag", rosbag::bagmode::Read);
+#endif
+#ifdef CYL6
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_6.bag", rosbag::bagmode::Read);
+#endif
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -347,6 +355,13 @@ int main(int argc, char* argv[])
 
     std::string stepper;
     ros::Rate rate(15); // 5 hz, maybe allow changes, or mimicking bag?
+
+#ifdef DEBUG
+cout << "D" << endl;
+#else
+cout << "N" << endl;
+#endif
+
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend())
     {
         if (stepper != "r") {
@@ -371,37 +386,42 @@ int main(int argc, char* argv[])
         cv::cvtColor(color_image_bgr, rgb_image, cv::COLOR_BGR2RGB);
         // TODO I'm pretty sure this is an 8-bit image.
 
+#ifdef DEBUG
         imwrite("rgb.png", rgb_image);
         imwrite("depth.png", depth_image);
+#endif
 
         cv::Mat rgb_f;
         rgb_image.convertTo(rgb_f, CV_32FC3);
         rgb_f /= 255.0; // get RGB 0.0-1.0
         cv::Mat color_hsv;
         cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
+#ifdef DEBUG
         to_file(workingDir + "/cpp_hsv.txt", color_hsv);
+#endif
 
         // White
         // cv::Scalar low_hsv = cv::Scalar(0.0 * 360.0, 0.0, 0.98);
         // cv::Scalar high_hsv = cv::Scalar(1.0 * 360.0, 0.02, 1.0);
 
+#ifdef ROPE
         // Red
-        /*
         cv::Mat mask1;
         cv::Mat mask2;
         cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
         cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
         cv::Mat hsv_mask;
         bitwise_or(mask1, mask2, hsv_mask);
-        */
-
+#else
         // Purple
         cv::Mat hsv_mask;
         cv::inRange(color_hsv, cv::Scalar(210, 0.2, 0.4), cv::Scalar(250, 0.6, 0.8), hsv_mask);
+#endif
 
+#ifdef DEBUG
         to_file(workingDir + "/cpp_mask.txt", hsv_mask);
-        // cv::inRange(color_hsv, low_hsv, high_hsv, hsv_mask);
         cv::imwrite("hsv_mask.png", hsv_mask);
+#endif
 
         // Without the grippers vs with the grippers
         CDCPD::Output out;
@@ -421,12 +441,6 @@ int main(int argc, char* argv[])
         out.masked_point_cloud->header.frame_id = frame_id;
         out.downsampled_cloud->header.frame_id = frame_id;
         out.cpd_output->header.frame_id = frame_id;
-        /*
-        for (auto& iteration: out.cpd_iterations)
-        {
-            iteration->header.frame_id = frame_id;
-        }
-        */
         out.gurobi_output->header.frame_id = frame_id;
 
         // draw cylinder
@@ -437,8 +451,9 @@ int main(int argc, char* argv[])
         marker.id = 0;
         marker.type = visualization_msgs::Marker::CYLINDER;
         marker.action = visualization_msgs::Marker::ADD;
+
+#ifdef CYL2
         // interaction_cylinder_2.bag
-        /*
         marker.pose.position.x = 0.145124522395497;
         marker.pose.position.y = -0.152708792314512;
         marker.pose.position.z = 1.095150852162702;
@@ -449,10 +464,10 @@ int main(int argc, char* argv[])
         marker.scale.x = 0.033137245873063*2;
         marker.scale.y = 0.033137245873063*2;
         marker.scale.z = 0.153739168519654;
-         */
+#endif
 
+#ifdef CYL4
         // interaction_cylinder_4.bag
-        /*
         marker.pose.position.x = -0.001783838376740;
         marker.pose.position.y = -0.202407765852103;
         marker.pose.position.z = 1.255950979292225;
@@ -467,10 +482,10 @@ int main(int argc, char* argv[])
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-         */
+#endif
 
+#ifdef CYL5
         // interaction_cylinder_5.bag
-        /*
         marker.pose.position.x = -0.007203971514259;
         marker.pose.position.y = -0.282011643023486;
         marker.pose.position.z = 1.351697407251410;
@@ -485,10 +500,10 @@ int main(int argc, char* argv[])
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-         */
+#endif
 
+#ifdef CYL6
         // interation_cylinder_6.bag
-        /*
         marker.pose.position.x = -0.025889295027034;
         marker.pose.position.y = -0.020591825574503;
         marker.pose.position.z = 1.200787565152055;
@@ -503,11 +518,10 @@ int main(int argc, char* argv[])
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-         */
+#endif
 
-
+#ifdef CYL7
         // interation_cylinder_7.bag
-
         marker.pose.position.x = -0.025889295027034;
         marker.pose.position.y = -0.020591825574503;
         marker.pose.position.z = 1.200787565152055;
@@ -522,14 +536,16 @@ int main(int argc, char* argv[])
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-
+#endif
 
         //only if using a MESH_RESOURCE marker type:
         marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
-        // cylinder_pub.publish( marker );
+
+#ifdef CYLINDER_INTER
+        cylinder_pub.publish( marker );
+#endif
 
         // draw line order
-
         visualization_msgs::Marker order;
         order.header.frame_id = frame_id;
         order.header.stamp = ros::Time();
@@ -537,21 +553,26 @@ int main(int argc, char* argv[])
         order.action = visualization_msgs::Marker::ADD;
         order.pose.orientation.w = 1.0;
         order.id = 1;
-        order.scale.x = 0.003;
+        order.scale.x = 0.002;
         order.color.b = 1.0;
         order.color.a = 1.0;
         auto pc_iter = out.gurobi_output->begin();
 
+
+#ifdef ROPE
+
         // rope order
-//        order.type = visualization_msgs::Marker::LINE_STRIP;
-//        for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
-//            geometry_msgs::Point p;
-//            p.x = pc_iter->x;
-//            p.y = pc_iter->y;
-//            p.z = pc_iter->z;
-//
-//            order.points.push_back(p);
-//        }
+        order.type = visualization_msgs::Marker::LINE_STRIP;
+        for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
+            geometry_msgs::Point p;
+            p.x = pc_iter->x;
+            p.y = pc_iter->y;
+            p.z = pc_iter->z;
+
+            order.points.push_back(p);
+        }
+
+#else
 
         // cloth order
         order.type = visualization_msgs::Marker::LINE_LIST;
@@ -619,6 +640,7 @@ int main(int argc, char* argv[])
                 }
             }
         }
+#endif
 
         order_pub.publish(order);
 
@@ -627,19 +649,12 @@ int main(int argc, char* argv[])
         pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
-        // pcl_conversions::toPCL(time, out.cpd_iterations[0]->header.stamp);
         pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
 
         original_publisher.publish(out.original_cloud);
         masked_publisher.publish(out.masked_point_cloud);
         downsampled_publisher.publish(out.downsampled_cloud);
         template_publisher.publish(out.cpd_output);
-        /*
-        for (const auto& iteration: out.cpd_iterations)
-        {
-            cpd_iters_publisher.publish(iteration); // TODO all
-        }
-        */
         output_publisher.publish(out.gurobi_output);
 
         ++color_iter;
@@ -647,11 +662,6 @@ int main(int argc, char* argv[])
     }
 
     cout << "Test ended" << endl;
-    // std::string const kinect_name = GetParam<std::string>(ph, "pov", "victor_head");
-    // std::string const stream = GetParam<std::string>(ph, "stream", "qhd");
-
-    // KinectSub kinect_sub(callback_fn,
-    //                      KinectSub::SubscriptionOptions("kinect2_" + kinect_name + "/" + stream));
 
     return EXIT_SUCCESS;
 }
