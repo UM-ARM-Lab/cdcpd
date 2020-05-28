@@ -200,26 +200,30 @@ int main(int argc, char* argv[])
         template_cloud->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
 
-    // TODO should not be this
-    // FileStorage color_calib_fs("src/kinect2_calibration_files/data/000792364047/calib_color.yaml", FileStorage::READ);
-    // cv::Mat intrinsics(3, 4);
+#ifdef COMP
+    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_constrain(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < template_vertices.cols(); ++i)
+    {
+        const auto& c = template_vertices.col(i);
+        template_cloud_without_constrain->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
+    }
+#endif
+
     // comes from the default P matrix on the /kinect2/qhd/camera_info channel.
     cv::Mat P_mat(3, 4, CV_64FC1);
-    // color_calib_fs["cameraMatrix"] >> intrinsics;
-    // cout << "intrinsics type: " << intrinsics.type() << endl;
-
-    // TODO needs bool
-    // CDCPD cdcpd(template_cloud, P_mat, true);
 
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
 
+#ifdef ENTIRE
     ros::Publisher original_publisher = ph.advertise<PointCloud> ("original", 1);
+#endif
     ros::Publisher masked_publisher = ph.advertise<PointCloud> ("masked", 1);
     ros::Publisher downsampled_publisher = ph.advertise<PointCloud> ("downsampled", 1);
     ros::Publisher template_publisher = ph.advertise<PointCloud> ("template", 1);
     ros::Publisher cpd_iters_publisher = ph.advertise<PointCloud> ("cpd_iters", 1);
     ros::Publisher output_publisher = ph.advertise<PointCloud> ("output", 1);
+    ros::Publisher output_without_constrain_publisher = ph.advertise<PointCloud> ("output_without_constrain", 1);
     ros::Publisher left_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/left_gripper_prior", 1);
     ros::Publisher right_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/right_gripper_prior", 1);
     ros::Publisher cylinder_pub = ph.advertise<visualization_msgs::Marker>( "cylinder", 0 );
@@ -243,6 +247,19 @@ int main(int argc, char* argv[])
 #ifdef CYL6
     bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_6.bag", rosbag::bagmode::Read);
 #endif
+#ifdef CYL7
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_7.bag", rosbag::bagmode::Read);
+#endif
+#ifdef CYL8
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_8.bag", rosbag::bagmode::Read);
+#endif
+#ifdef CYL9
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_9.bag", rosbag::bagmode::Read);
+#endif
+#ifndef CYLINDER_INTER
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal.bag", rosbag::bagmode::Read);
+#endif
+
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -317,6 +334,9 @@ int main(int argc, char* argv[])
     }
 
     CDCPD cdcpd(template_cloud, P_mat);
+#ifdef COMP
+    CDCPD cdcpd_without_constrain(template_cloud, P_mat);
+#endif
 
     bag.close();
 
@@ -355,12 +375,6 @@ int main(int argc, char* argv[])
 
     std::string stepper;
     ros::Rate rate(15); // 5 hz, maybe allow changes, or mimicking bag?
-
-#ifdef DEBUG
-cout << "D" << endl;
-#else
-cout << "N" << endl;
-#endif
 
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend())
     {
@@ -425,23 +439,37 @@ cout << "N" << endl;
 
         // Without the grippers vs with the grippers
         CDCPD::Output out;
+#ifdef COMP
+        CDCPD::Output out_without_constrain;
+#endif
         if (use_grippers)
         {
-            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, {left_gripper, right_gripper});
+            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, true, {left_gripper, right_gripper});
         }
         else
         {
             out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
+#ifdef COMP
+            out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false);
+#endif
         }
 
         template_cloud = out.gurobi_output;
+#ifdef COMP
+        template_cloud_without_constrain = out_without_constrain.gurobi_output;
+#endif
 
         auto frame_id = "kinect2_rgb_optical_frame";
+#ifdef ENTIRE
         out.original_cloud->header.frame_id = frame_id;
+#endif
         out.masked_point_cloud->header.frame_id = frame_id;
         out.downsampled_cloud->header.frame_id = frame_id;
         out.cpd_output->header.frame_id = frame_id;
         out.gurobi_output->header.frame_id = frame_id;
+#ifdef COMP
+        out_without_constrain.gurobi_output->header.frame_id = frame_id;
+#endif
 
         // draw cylinder
         visualization_msgs::Marker marker;
@@ -538,6 +566,42 @@ cout << "N" << endl;
         marker.color.b = 0.0;
 #endif
 
+#ifdef CYL8
+        // interation_cylinder_7.bag
+        marker.pose.position.x = -0.239953252695972;
+        marker.pose.position.y = -0.326861315788172;
+        marker.pose.position.z = 1.459887097878595;
+        marker.pose.orientation.x = -0.1877;
+        marker.pose.orientation.y = -0.0009;
+        marker.pose.orientation.z = 0.0046;
+        marker.pose.orientation.w = 0.9822;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+#endif
+
+#ifdef CYL9
+        // interation_cylinder_9.bag
+        marker.pose.position.x = -0.239953252695972;
+        marker.pose.position.y = -0.28;
+        marker.pose.position.z = 1.459887097878595;
+        marker.pose.orientation.x = -0.1877;
+        marker.pose.orientation.y = -0.0009;
+        marker.pose.orientation.z = 0.0046;
+        marker.pose.orientation.w = 0.9822;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+#endif
+
         //only if using a MESH_RESOURCE marker type:
         marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
 
@@ -557,7 +621,6 @@ cout << "N" << endl;
         order.color.b = 1.0;
         order.color.a = 1.0;
         auto pc_iter = out.gurobi_output->begin();
-
 
 #ifdef ROPE
 
@@ -645,17 +708,27 @@ cout << "N" << endl;
         order_pub.publish(order);
 
         auto time = ros::Time::now();
+#ifdef ENTIRE
         pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
+#endif
         pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
         pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
+#ifdef COMP
+        pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
+#endif
 
+#ifdef ENTIRE
         original_publisher.publish(out.original_cloud);
+#endif
         masked_publisher.publish(out.masked_point_cloud);
         downsampled_publisher.publish(out.downsampled_cloud);
         template_publisher.publish(out.cpd_output);
         output_publisher.publish(out.gurobi_output);
+#ifdef COMP
+        output_without_constrain_publisher.publish(out_without_constrain.gurobi_output);
+#endif
 
         ++color_iter;
         ++depth_iter;
