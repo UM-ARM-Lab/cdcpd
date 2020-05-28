@@ -6,12 +6,32 @@
 
 #include "cdcpd/past_template_matcher.h"
 
-void test_cylinder();
+// #ifndef DEBUG
+// #define DEBUG
+// #endif
+
+#ifndef ROPE
+#define ROPE
+#endif
+
+//#ifndef COMP
+//#define COMP
+//#endif
+//
+//#ifndef CYLINDER_INTER
+//#define CYLINDER_INTER
+//#endif
+//
+//#ifndef CYL9
+//#define CYL9
+//#endif
 
 class CDCPD {
 public:
     struct Output {
+#ifdef ENTIRE
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr original_cloud;
+#endif
         pcl::PointCloud<pcl::PointXYZ>::Ptr masked_point_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_output;
@@ -33,17 +53,25 @@ public:
          const cv::Mat& mask,
          const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
          const Eigen::Matrix2Xi& template_edges,
+         bool interation_constrain = true,
          const std::vector<FixedPoint>& fixed_points = std::vector<FixedPoint>()
          );
 
 private:
-    Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices, 
+    Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices,
                                             const Eigen::Matrix3f& intrinsics,
                                             const cv::Mat& depth,
                                             const cv::Mat& mask,
                                             float k=1e1); // TODO this should be configurable
     // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
     // and not have to pass around intr in here
+    Eigen::MatrixXf calcP(const int N,
+                          const int M,
+                          const int D,
+                          const double sigma2,
+                          const Eigen::Matrix3Xf& X,
+                          const Eigen::Matrix3Xf& TY,
+                          const Eigen::Matrix3Xf& Y_emit_prior);
     Eigen::Matrix3Xf cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
                          const Eigen::Matrix3Xf& Y,
                          const cv::Mat& depth,
