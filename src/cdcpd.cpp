@@ -1,6 +1,7 @@
 #include <algorithm>
 #include "cdcpd/optimizer.h"
 #include <cassert>
+#include <chrono>
 #include <string>
 #include <Eigen/Dense>
 #include "opencv2/imgcodecs.hpp" // TODO remove after not writing images
@@ -31,6 +32,7 @@ using Eigen::Vector3f;
 using Eigen::Vector4f;
 using Eigen::VectorXf;
 using Eigen::VectorXi;
+using Eigen::RowVectorXf;
 using pcl::PointCloud;
 using pcl::PointXYZ;
 using pcl::PointXYZRGB;
@@ -322,7 +324,9 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
+#ifdef DEBUG
     to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
+#endif
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -383,7 +387,12 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
 // https://github.com/ros-perception/image_pipeline/blob/ \
 // melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
 // Note that we expect that cx, cy, fx, fy are in the appropriate places in P
-std::tuple<PointCloud<PointXYZRGB>::Ptr, PointCloud<PointXYZ>::Ptr, std::vector<cv::Point>>
+std::tuple<
+#ifdef DEBUG
+        PointCloud<PointXYZRGB>::Ptr,
+#endif
+        PointCloud<PointXYZ>::Ptr,
+        std::vector<cv::Point>>
 point_clouds_from_images(const cv::Mat& depth_image,
                          const cv::Mat& rgb_image,
                          const cv::Mat& mask,
@@ -428,19 +437,27 @@ point_clouds_from_images(const cv::Mat& depth_image,
             new PointCloud<PointXYZRGB>(depth_image.cols, depth_image.rows));
     PointCloud<PointXYZ>::Ptr filtered_cloud(new PointCloud<PointXYZ>);
     std::vector<cv::Point> pixel_coords;
+#ifdef ENTIRE
     auto unfiltered_iter = unfiltered_cloud->begin();
+#endif
 
     float infinity = std::numeric_limits<float>::infinity();
     for (int v = 0; v < unfiltered_cloud->height; ++v, depth_row += row_step, rgb += rgb_skip)
     {
-        for (int u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step, ++unfiltered_iter)
+        for (int u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step
+#ifdef ENTIRE
+                ,++unfiltered_iter
+#endif
+                )
         {
             uint16_t depth = depth_row[u];
 
             // Assume depth = 0 is the standard was to note invalid
             if (depth == 0)
             {
+#ifdef ENTIRE
                 unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
+#endif
             }
             else
             {
@@ -449,13 +466,14 @@ point_clouds_from_images(const cv::Mat& depth_image,
                 float z = float(depth) * unit_scaling;
                 // Add to unfiltered cloud
                 // ENHANCE: be more concise
-
+#ifdef ENTIRE
                 unfiltered_iter->x = x;
                 unfiltered_iter->y = y;
                 unfiltered_iter->z = z;
                 unfiltered_iter->r = rgb[0];
                 unfiltered_iter->g = rgb[1];
                 unfiltered_iter->b = rgb[2];
+#endif
 
 
                 cv::Point2i pixel = cv::Point2i(u, v);
@@ -474,8 +492,13 @@ point_clouds_from_images(const cv::Mat& depth_image,
             }
         }
     }
-    assert(unfiltered_iter == unfiltered_cloud->end());
-    return { unfiltered_cloud, filtered_cloud, pixel_coords };
+//    assert(unfiltered_iter == unfiltered_cloud->end());
+    return {
+#ifdef ENTIRE
+        unfiltered_cloud,
+#endif
+        filtered_cloud,
+        pixel_coords };
 }
 
 Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
@@ -505,6 +528,8 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
     int iterations = 0;
     double error = tolerance + 1; // loop runs the first time
 
+    std::chrono::time_point<std::chrono::system_clock> start, end;
+    start = std::chrono::system_clock::now();
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
@@ -517,59 +542,59 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
         // Calculate Eq. (9) (Line 5 in Algorithm 1)
         // NOTE: Eq. (9) misses M in the denominator
-        MatrixXf P(M, N);
-        for (int i = 0; i < M; ++i)
+        MatrixXf P(M, N);  end = std::chrono::system_clock::now(); cout << "526: " << (end-start).count() << endl;
         {
-            for (int j = 0; j < N; ++j)
-            {
-                P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+            for (int i = 0; i < M; ++i) {
+                for (int j = 0; j < N; ++j) {
+                    P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+                }
             }
-        }
 
-        float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-        c *= w / (1 - w);
-        c *= static_cast<double>(M) / N;
+            float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+            c *= w / (1 - w);
+            c *= static_cast<double>(M) / N;
 
-        P = (-P / (2 * sigma2)).array().exp().matrix();
-        P.array().colwise() *= Y_emit_prior.array();
-        
-        MatrixXf den = P.colwise().sum().replicate(M, 1);
-        den.array() += c;
+            P = (-P / (2 * sigma2)).array().exp().matrix();
+            P.array().colwise() *= Y_emit_prior.array();
 
-        P = P.cwiseQuotient(den);
+            MatrixXf den = P.colwise().sum().replicate(M, 1);
+            den.array() += c;
+
+            P = P.cwiseQuotient(den);
+        }  end = std::chrono::system_clock::now(); cout << "545: " << (end-start).count() << endl;
 
         // Maximization step
-        MatrixXf Pt1 = P.colwise().sum();
-        MatrixXf P1 = P.rowwise().sum();
-        float Np = P1.sum();
+        VectorXf Pt1 = P.colwise().sum(); end = std::chrono::system_clock::now(); cout << "548: " << (end-start).count() << endl;
+        VectorXf P1 = P.rowwise().sum(); end = std::chrono::system_clock::now(); cout << "549: " << (end-start).count() << endl;
+        float Np = P1.sum(); end = std::chrono::system_clock::now(); cout << "550: " << (end-start).count() << endl;
         
         // This is the code to use if you are not using LLE
         // NOTE: lambda means gamma here
         // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
         // Corresponding to Eq. (18) in the paper
         float lambda = start_lambda;// * std::pow(annealing_factor, iterations + 1);
-        MatrixXf p1d = P1.asDiagonal();
-        MatrixXf A = (p1d * G)
+        MatrixXf p1d = P1.asDiagonal(); cout << "557: " << (end-start).count() << endl;
+        MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
-            + sigma2 * lambda * (m_lle * G);
-        MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
-        MatrixXf W = A.householderQr().solve(B);
+            + sigma2 * lambda * (m_lle * G); cout << "560: " << (end-start).count() << endl;
+        MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); cout << "561: " << (end-start).count() << endl;
+        MatrixXf W = A.householderQr().solve(B); cout << "562: " << (end-start).count() << endl;
 
-        TY = Y + (G * W).transpose();
+        TY = Y + (G * W).transpose(); cout << "564: " << (end-start).count() << endl;
 
         // Corresponding to Eq. (19) in the paper
-        MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
-        MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
-        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
-        double xPx = xPxMat.sum();
-        MatrixXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
-        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
-        double yPy = yPyMat.sum();
-        double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum();
-        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D);
+        VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
+//        float xPx = (Pt1 * xPxtemp.transpose())(0,0);
+        double xPx = Pt1.dot(xPxtemp); cout << "569: " << (end-start).count() << endl;
+//        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
+//        double xPx = xPxMat.sum();
+        VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+//        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
+//        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
+        double yPy = P1.dot(yPytemp); cout << "575: " << (end-start).count() << endl;
+        double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum(); cout << "576: " << (end-start).count() << endl;
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); cout << "577: " << (end-start).count() << endl;
 
-        // ???: why is sigma2 possible to be negative, and why setting sigma2 as it
         if (sigma2 <= 0)
         {
             sigma2 = tolerance / 10;
@@ -587,8 +612,8 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& mask,
         const PointCloud<PointXYZ>::Ptr template_cloud,
         const Matrix2Xi& template_edges,
-        const std::vector<CDCPD::FixedPoint>& fixed_points,
-        bool interation_constrain
+        bool interation_constrain,
+        const std::vector<CDCPD::FixedPoint>& fixed_points
         )
 {
     // rgb: CV_8U3C rgb image
@@ -627,8 +652,12 @@ CDCPD::Output CDCPD::operator()(
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
     // pixel_coords: pixel coordinate corresponds to the point in the cloud
-    Eigen::Vector3f bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
-    auto [entire_cloud, cloud, pixel_coords]
+    Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
+    auto [
+#ifdef ENTIRE
+            entire_cloud,
+#endif
+                    cloud, pixel_coords]
         = point_clouds_from_images(
                 depth,
                 rgb,
@@ -652,7 +681,9 @@ CDCPD::Output CDCPD::operator()(
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
     const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
     const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
+#ifdef ENTIRE
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
+#endif
     Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
 #ifdef DEBUG
     to_file(workingDir + "/cpp_entire_cloud.txt", entire);
@@ -665,7 +696,7 @@ CDCPD::Output CDCPD::operator()(
     // ???: most likely not 1.0
     Optimizer opt(original_template, Y, 1.00);
 
-    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
+    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, interation_constrain); // TODO perhaps optionally disable optimization?
 #ifdef DEBUG
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
 #endif
@@ -713,7 +744,9 @@ CDCPD::Output CDCPD::operator()(
     PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
 
     return CDCPD::Output {
+#ifdef ENTIRE
         entire_cloud,
+#endif
         cloud, 
         cloud_downsampled,
         template_cloud,

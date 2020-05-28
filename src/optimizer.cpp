@@ -58,6 +58,22 @@ float cylinder_radius = 0.05;
 float cylinder_height = 0.21;
 #endif
 
+#ifdef CYL8
+// interaction_cylinder_8.bag
+Vector3f cylinder_orien(-0.000598250974917, 0.063758412010692, 0.160749191566454);
+Vector3f cylinder_center(-0.239953252695972, -0.326861315788172, 1.459887097878595);
+float cylinder_radius = 0.05;
+float cylinder_height = 0.21;
+#endif
+
+#ifdef CYL9
+// interaction_cylinder_9.bag
+Vector3f cylinder_orien(-0.000598250974917, 0.063758412010692, 0.160749191566454);
+Vector3f cylinder_center(-0.239953252695972, -0.28, 1.459887097878595);
+float cylinder_radius = 0.05;
+float cylinder_height = 0.21;
+#endif
+
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
 // where Q is [ I, -I
@@ -84,6 +100,7 @@ static GRBEnv& getGRBEnv()
     return env;
 }
 
+#ifdef CYLINDER_INTER
 std::tuple<Matrix3Xf, Matrix3Xf>
         nearest_points_and_normal(const Matrix3Xf& last_template) {
     // find of the nearest points and corresponding normal vector on the cylinder
@@ -140,7 +157,7 @@ std::tuple<Matrix3Xf, Matrix3Xf>
     }
     return {nearestPts, normalVecs};
 }
-
+#endif
 
 // TODO do setup here
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
@@ -148,13 +165,15 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
 {
 }
 
-Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points)
+Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points, const bool interation_constrain)
 {
     // Y: Y^t in Eq. (21)
     // E: E in Eq. (21)
     Matrix3Xf Y_opt(Y.rows(), Y.cols());
     GRBVar* vars = nullptr;
+#ifdef CYLINDER_INTER
     auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
+#endif
     try
     {
         const size_t num_vectors = (size_t) Y.cols();
@@ -191,7 +210,11 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         }
 
         // Add interaction constraints
+
+#ifdef CYLINDER_INTER
+        if (interation_constrain)
         {
+            cout << "added constrain" << endl;
             for (size_t i = 0; i < num_vectors; ++i) {
                 model.addConstr(
                         (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
@@ -199,6 +222,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                                 (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0, "interaction constrain for point " +std::to_string(i));
             }
         }
+#endif
 
 
         Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
