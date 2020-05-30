@@ -14,12 +14,12 @@ add_library(libcdcpd SHARED
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
-find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization)
 # TODO Components?
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 
+find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features)
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
