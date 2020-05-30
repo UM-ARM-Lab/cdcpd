@@ -10,21 +10,25 @@
 // #define DEBUG
 // #endif
 
+#ifndef ENTIRE
+#define ENTIRE
+#endif
+
 #ifndef ROPE
 #define ROPE
 #endif
 
-//#ifndef COMP
-//#define COMP
-//#endif
-//
-//#ifndef CYLINDER_INTER
-//#define CYLINDER_INTER
-//#endif
-//
-//#ifndef CYL9
-//#define CYL9
-//#endif
+#ifndef COMP
+#define COMP
+#endif
+
+#ifndef CYLINDER_INTER
+#define CYLINDER_INTER
+#endif
+
+#ifndef CYL9
+#define CYL9
+#endif
 
 class CDCPD {
 public:

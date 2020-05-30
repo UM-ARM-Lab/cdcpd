@@ -11,6 +11,7 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
+#include <fgt.hpp>
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/past_template_matcher.h"
 
@@ -388,7 +389,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
 // melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
 // Note that we expect that cx, cy, fx, fy are in the appropriate places in P
 std::tuple<
-#ifdef DEBUG
+#ifdef ENTIRE
         PointCloud<PointXYZRGB>::Ptr,
 #endif
         PointCloud<PointXYZ>::Ptr,
@@ -557,11 +558,15 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
             P = (-P / (2 * sigma2)).array().exp().matrix();
             P.array().colwise() *= Y_emit_prior.array();
 
-            MatrixXf den = P.colwise().sum().replicate(M, 1);
+            RowVectorXf den = P.colwise().sum();
             den.array() += c;
 
-            P = P.cwiseQuotient(den);
+            P = P.array().rowwise() / den.array();
         }  end = std::chrono::system_clock::now(); cout << "545: " << (end-start).count() << endl;
+        // Fast Gaussian Transformation to calculate Pt1, P1, PX
+        double bandwidth = 0.3;
+        // fgt::Direct direct(Y, bandwidth);
+
 
         // Maximization step
         VectorXf Pt1 = P.colwise().sum(); end = std::chrono::system_clock::now(); cout << "548: " << (end-start).count() << endl;
@@ -573,27 +578,27 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
         // Corresponding to Eq. (18) in the paper
         float lambda = start_lambda;// * std::pow(annealing_factor, iterations + 1);
-        MatrixXf p1d = P1.asDiagonal(); cout << "557: " << (end-start).count() << endl;
+        MatrixXf p1d = P1.asDiagonal(); end = std::chrono::system_clock::now(); cout << "557: " << (end-start).count() << endl;
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
-            + sigma2 * lambda * (m_lle * G); cout << "560: " << (end-start).count() << endl;
-        MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); cout << "561: " << (end-start).count() << endl;
-        MatrixXf W = A.householderQr().solve(B); cout << "562: " << (end-start).count() << endl;
+            + sigma2 * lambda * (m_lle * G); end = std::chrono::system_clock::now();cout << "560: " << (end-start).count() << endl;
+        MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;
+        MatrixXf W = A.householderQr().solve(B); end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
 
-        TY = Y + (G * W).transpose(); cout << "564: " << (end-start).count() << endl;
+        TY = Y + (G * W).transpose(); end = std::chrono::system_clock::now(); cout << "564: " << (end-start).count() << endl;
 
         // Corresponding to Eq. (19) in the paper
         VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
 //        float xPx = (Pt1 * xPxtemp.transpose())(0,0);
-        double xPx = Pt1.dot(xPxtemp); cout << "569: " << (end-start).count() << endl;
+        double xPx = Pt1.dot(xPxtemp); end = std::chrono::system_clock::now();cout << "569: " << (end-start).count() << endl;
 //        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
 //        double xPx = xPxMat.sum();
         VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
 //        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
 //        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
-        double yPy = P1.dot(yPytemp); cout << "575: " << (end-start).count() << endl;
-        double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum(); cout << "576: " << (end-start).count() << endl;
-        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); cout << "577: " << (end-start).count() << endl;
+        double yPy = P1.dot(yPytemp); end = std::chrono::system_clock::now();cout << "575: " << (end-start).count() << endl;
+        double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum(); end = std::chrono::system_clock::now();cout << "576: " << (end-start).count() << endl;
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); end = std::chrono::system_clock::now();cout << "577: " << (end-start).count() << endl;
 
         if (sigma2 <= 0)
         {

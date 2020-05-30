@@ -3,7 +3,7 @@ project(cdcpd VERSION 0.1
     DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
     LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(libcdcpd SHARED
@@ -14,11 +14,14 @@ add_library(libcdcpd SHARED
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
-find_package(PCL 1.8 REQUIRED)
+find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization kdtree features)
 # TODO Components?
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
+find_package(Fgt REQUIRED)
+set(FAISS_INCLUDE_DIRS "/home/deformtrack/local/src/faiss")
+set(LOCAL_LIBS "/home/deformtrack/local/lib")
 
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
@@ -28,14 +31,17 @@ target_include_directories(libcdcpd PUBLIC
     $<INSTALL_INTERFACE:include>)
 target_include_directories(libcdcpd SYSTEM PUBLIC 
     ${PCL_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS})
+    ${OpenCV_INCLUDE_DIRS}
+    ${FAISS_INCLUDE_DIRS})
 target_include_directories(libcdcpd SYSTEM PRIVATE 
     ${GUROBI_INCLUDE_DIRS})
 
 target_link_libraries(libcdcpd PUBLIC
     ${PCL_LIBRARIES}
     ${OpenCV_LIBS}
-    Eigen3::Eigen)
+    Eigen3::Eigen
+    ${LOCAL_LIBS}/libfaiss.a
+    Fgt::Library-C++)
 target_link_libraries(libcdcpd PRIVATE
     ${GUROBI_LIBRARIES})
 target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
@@ -46,7 +52,12 @@ add_library(cdcpd::libcdcpd ALIAS libcdcpd)
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS libcdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
-install(FILES include/cdcpd/cdcpd.h DESTINATION include/cdcpd)
+install(FILES
+	include/cdcpd/cdcpd.h 
+	include/cdcpd/optimizer.h 
+	include/cdcpd/past_template_matcher.h 
+	DESTINATION 
+	include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 
 set_target_properties(libcdcpd
