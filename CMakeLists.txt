@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   roscpp
   sensor_msgs
+  pcl_ros
 )
 
 ## System dependencies are found with CMake's conventions
