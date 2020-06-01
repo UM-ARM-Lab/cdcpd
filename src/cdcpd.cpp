@@ -1,6 +1,8 @@
 #include <algorithm>
 #include "cdcpd/optimizer.h"
 #include <cassert>
+#include <chrono>
+#include <string>
 #include <Eigen/Dense>
 #include "opencv2/imgcodecs.hpp" // TODO remove after not writing images
 #include "opencv2/imgproc/imgproc.hpp"
@@ -9,6 +11,8 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
+#include <fgt.hpp>
+#include "cdcpd/cdcpd.h"
 #include "cdcpd/past_template_matcher.h"
 
 // TODO rm
@@ -29,9 +33,12 @@ using Eigen::Vector3f;
 using Eigen::Vector4f;
 using Eigen::VectorXf;
 using Eigen::VectorXi;
+using Eigen::RowVectorXf;
 using pcl::PointCloud;
 using pcl::PointXYZ;
 using pcl::PointXYZRGB;
+
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 
 PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
@@ -46,6 +53,9 @@ PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 
 double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 {
+    // X: (3, N) matrix, X^t in Algorithm 1
+    // Y: (3, M) matrix, Y^(t-1) in Algorithm 1
+    // Implement Line 2 of Algorithm 1
     double total_error = 0.0;
     assert(X.rows() == Y.rows());
     for (int i = 0; i < X.cols(); ++i)
@@ -60,6 +70,8 @@ double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 
 MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
 {
+    // Y: (3, M) matrix, corresponding to Y^(t-1) in Eq. 13.5 (Y^t in VI.A)
+    // beta: beta in Eq. 13.5 (between 13 and 14)
     MatrixXf diff(Y.cols(), Y.cols());
     diff.setZero();
     for (int i = 0; i < Y.cols(); ++i)
@@ -69,7 +81,8 @@ MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
             diff(i, j) = (Y.col(i) - Y.col(j)).squaredNorm();
         }
     }
-    MatrixXf kernel = (-diff / (2 * beta)).array().exp();
+    // ???: beta should be beta^2
+    MatrixXf kernel = (-diff / (2 * beta * beta)).array().exp();
     return kernel;
 }
 
@@ -77,16 +90,25 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
                                      int lle_neighbors,
                                      double reg)
 {
+    // calculate L in Eq. (15) and Eq. (16)
+    // ENHANCE: use tapkee lib to accelarate
+    // kdtree: kdtree from Y^0
+    // lle_neighbors: parameter for lle calculation
+    // reg: regularization term (seems unnecessary)
     PointCloud<PointXYZ>::ConstPtr cloud = kdtree.getInputCloud();
     assert(cloud->height == 1);
+    // adjacencies: save index of adjacent points
     MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
+    // B: save weight W_ij 
     MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
     MatrixXf v = VectorXf::Ones(lle_neighbors);
+    // algorithm: see https://cs.nyu.edu/~roweis/lle/algorithm.html
     for (size_t i = 0; i < cloud->width; ++i)
     {
         vector<int> neighbor_inds(lle_neighbors + 1);
         vector<float> neighbor_dists(lle_neighbors + 1);
         kdtree.nearestKSearch(i, lle_neighbors + 1, neighbor_inds, neighbor_dists);
+        // C: transpose of Z in Eq [d] and [e]
         MatrixXf C(lle_neighbors, 3);
         for (size_t j = 1; j < neighbor_inds.size(); ++j)
         {
@@ -94,7 +116,9 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
                 - cloud->points[i].getVector3fMap();
             adjacencies(i, j - 1) = neighbor_inds[j];
         }
+        // G: C in Eq [f]
         MatrixXf G = C * C.transpose();
+        // ???: why += R for G
         float R = reg;
         float tr = G.trace();
         if (tr > 0)
@@ -120,9 +144,15 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
                                   int lle_neighbors,
                                   double reg)
 {
+    // calculate H in Eq. (18)
+    // template_cloud: Y^0 in Eq. (15) and (16)
+    // lle_neighbors: parameter for lle calculation
+    // reg: regularization term (seems unnecessary)
     pcl::KdTreeFLANN<PointXYZ> kdtree;
     kdtree.setInputCloud (template_cloud);
+    // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
     MatrixXf W = barycenter_kneighbors_graph(kdtree, lle_neighbors, reg);
+    // M: (M, M) matrix, corresponding to H in Eq. (18)
     MatrixXf M = (W.transpose() * W) - W.transpose() - W;
     M.diagonal().array() += 1;
     return M;
@@ -134,13 +164,14 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     P_matrix(_P_matrix),
-    last_lower_bounding_box(-5.0, -5.0, -5.0), // TODO make configurable?
-    last_upper_bounding_box(5.0, 5.0, 5.0), // TODO make configurable?
+    last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?
+    last_upper_bounding_box(6.0, 6.0, 6.0), // TODO make configurable?
     lle_neighbors(8), // TODO make configurable?
+    // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(3.0), // TODO make configurable?
-    beta(1.0), // TODO make configurable?
+    alpha(0.5), // TODO make configurable?
+    beta(1), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
     start_lambda(1.0), // TODO make configurable?
@@ -152,6 +183,7 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
 
 /*
  * Return a non-normalized probability that each of the tracked vertices produced any detected point.
+ * Implement Eq. (7) in the paper
  */
 Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices, 
                                  const Eigen::Matrix3f& intrinsics,
@@ -159,18 +191,31 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
                                  const cv::Mat& mask,
                                  float k)
 {
+    // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // intrinsics: (3, 3) intrinsic matrix of the camera
+    // depth_image: CV_16U depth image
+    // mask: CV_8U mask for segmentation
+    // k: k_vis in the paper
+
+#ifdef DEBUG
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
     };
 
-    to_file("/home/steven/catkin/cpp_verts.txt", vertices);
-    to_file("/home/steven/catkin/cpp_intrinsics.txt", intrinsics);
+    // save matrices
+    to_file(workingDir + "/cpp_verts.txt", vertices);
+    to_file(workingDir + "/cpp_intrinsics.txt", intrinsics);
+#endif
+
     // Project the vertices to get their corresponding pixel coordinate
+    // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
     Eigen::MatrixXf P_eigen(3, 4);
     cv::cv2eigen(P_matrix, P_eigen);
     Eigen::Matrix3Xf image_space_vertices = P_eigen.leftCols(3) * vertices;
+
     // Homogeneous coords: divide by third row
+    // the for-loop is unnecessary
     image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
     image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
     for (int i = 0; i < image_space_vertices.cols(); ++i)
@@ -180,7 +225,9 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-    to_file("/home/steven/catkin/cpp_projected.txt", image_space_vertices);
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
+#endif
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -190,14 +237,12 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
         coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
     }
-    // coords.row(0) = coords.row(0).array().min(0);
-    // coords.row(0) = coords.row(0).array().max(depth.cols - 1);
-    // coords.row(1) = coords.row(1).array().min(1);
-    // coords.row(1) = coords.row(1).array().max(depth.rows - 1);
-
-    to_file("/home/steven/catkin/cpp_coords.txt", coords.cast<float>());
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_coords.txt", coords.cast<float>());
+#endif
 
     // Find difference between point depth and image depth
+    // depth_diffs: (1, M) vector
     Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
     {
@@ -212,17 +257,22 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
             depth_diffs(i) = 0.02; // prevent numerical problems; taken from the Python code
         }
     }
+    // ENHANCE: repeating max
     depth_diffs = depth_diffs.array().max(0);
-    to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
+#endif
 
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO haven't really tested this but seems right
     int maskSize = 5;
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
+    // ???: why cv::normalize is needed
     cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
-    imwrite("/home/steven/catkin/mask.png", mask);
+    imwrite(workingDir + "/mask.png", mask);
+    // ENHANCE: rm unused dist_copr
     cv::Mat dist_copy = dist_img.clone();
-    imwrite("/home/steven/catkin/dist_img.png", dist_copy * 255.0);
+    imwrite(workingDir + "/dist_img.png", dist_copy * 255.0);
 
     Eigen::VectorXf dist_to_mask(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
@@ -231,13 +281,17 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     }
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     VectorXf prob = (-k * score).array().exp().matrix();
-    to_file("/home/steven/catkin/cpp_prob.txt", prob);
+    // ???: unnormalized prob
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_prob.txt", prob);
+#endif
     return prob;
 }
 
 /*
  * Used for failure recovery. Very similar to the visibility_prior function, but with a different K and
  * image_depth - vertex_depth, not vice-versa. There's also no normalization.
+ * Calculate Eq. (22) in the paper
  */
 float smooth_free_space_cost(const Matrix3Xf vertices, 
                                  const Eigen::Matrix3f& intrinsics,
@@ -245,10 +299,18 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
                                  const cv::Mat& mask,
                                  float k=1e2)
 {
+    // vertices: Y^t in Eq. (22)
+    // intrinsics: intrinsic matrix of the camera
+    // depth: depth image
+    // mask: mask image
+    // k: constant defined in Eq. (22)
+
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+#ifdef DEBUG
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
     };
+#endif
 
     // Project the vertices to get their corresponding pixel coordinate
     Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
@@ -259,10 +321,13 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     {
         float x = image_space_vertices(0, i);
         float y = image_space_vertices(1, i);
+        // ENHANCE: no need to create coords again
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-    to_file("/home/steven/catkin/cpp_projected.txt", image_space_vertices);
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
+#endif
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -285,7 +350,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
         uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
         if (raw_depth != 0)
         {
-            depth_diffs(i) = static_cast<float>(raw_depth) / 1000.0 - vertices(2, i);
+            depth_diffs(i) = static_cast<float>(raw_depth) / 1000.0 - vertices(2, i); // unit: m
         }
         else
         {
@@ -293,27 +358,26 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
         }
     }
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
-    to_file("/home/steven/catkin/cpp_depth_diffs.txt", depth_diffs);
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
+#endif
+
 
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
     int maskSize = 5;
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
-    imwrite("/home/steven/catkin/mask.png", mask);
 
     Eigen::VectorXf dist_to_mask(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
     {
         dist_to_mask(i) = dist_img.at<float>(coords(1, i), coords(0, i));
     }
-    cout << "dist_to_mask" << endl;
-    cout << dist_to_mask << endl;
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
-    cout << "score" << endl;
-    cout << score << endl;
+    // NOTE: Eq. (22) lost 1 in it
     VectorXf prob = (1 - (-k * score).array().exp()).matrix();
-    cout << "prob" << endl;
-    cout << prob << endl;
-    to_file("/home/steven/catkin/cpp_prob.txt", prob);
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_prob.txt", prob);
+#endif
     float cost = prob.array().isNaN().select(0, prob.array()).sum();
     cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
     return cost;
@@ -324,7 +388,12 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
 // https://github.com/ros-perception/image_pipeline/blob/ \
 // melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
 // Note that we expect that cx, cy, fx, fy are in the appropriate places in P
-std::tuple<PointCloud<PointXYZRGB>::Ptr, PointCloud<PointXYZ>::Ptr, std::vector<cv::Point>>
+std::tuple<
+#ifdef ENTIRE
+        PointCloud<PointXYZRGB>::Ptr,
+#endif
+        PointCloud<PointXYZ>::Ptr,
+        std::vector<cv::Point>>
 point_clouds_from_images(const cv::Mat& depth_image,
                          const cv::Mat& rgb_image,
                          const cv::Mat& mask,
@@ -332,22 +401,35 @@ point_clouds_from_images(const cv::Mat& depth_image,
                          const Eigen::Vector3f lower_bounding_box_vec,
                          const Eigen::Vector3f upper_bounding_box_vec)
 {
+    // depth_image: CV_16U depth image
+    // rgb_image: CV_8U3C rgb image
+    // mask: CV_8U mask for segmentation
+    // P: camera matrix of Kinect
+    //  [[fx 0  px 0];
+    //   [0  fy py 0];
+    //   [0  0  1  0]]
+    // lower_bounding_box_vec: bounding for mask
+    // upper_bounding_box_vec: bounding for mask
+
     assert(depth_image.cols == rgb_image.cols);
     assert(depth_image.rows == rgb_image.rows);
     assert(depth_image.type() == CV_16U);
     assert(P.rows() == 3 && P.cols() == 4);
     // Assume unit_scaling is the standard Kinect 1mm
-    float unit_scaling = 1.0 / 1000.0;
-    float constant_x = unit_scaling / P(0, 0);
-    float constant_y = unit_scaling / P(1, 1);
+    float unit_scaling = 0.001;
+    float pixel_len = 0.0002645833;
+    float constant_x = 1 / (P(0, 0) * pixel_len);
+    float constant_y = 1 / (P(1, 1) * pixel_len);
     float center_x = P(0, 2);
     float center_y = P(1, 2);
     float bad_point = std::numeric_limits<float>::quiet_NaN();
     Eigen::Array<float, 3, 1> lower_bounding_box = lower_bounding_box_vec.array();
     Eigen::Array<float, 3, 1> upper_bounding_box = upper_bounding_box_vec.array();
 
+    // ENHANCE: change the way to get access to depth image and rgb image to be more readable
+    // from "depth_row += row_step" to ".at<>()"
     const uint16_t* depth_row = reinterpret_cast<const uint16_t*>(&depth_image.data[0]);
-    int row_step = depth_image.step / sizeof(uint16_t);
+    int row_step = depth_image.step / sizeof(uint16_t); // related with accessing data in cv::Mat
     const uint8_t* rgb = &rgb_image.data[0];
     int rgb_step = 3; // TODO check on this
     int rgb_skip = rgb_image.step - rgb_image.cols * rgb_step;
@@ -356,32 +438,44 @@ point_clouds_from_images(const cv::Mat& depth_image,
             new PointCloud<PointXYZRGB>(depth_image.cols, depth_image.rows));
     PointCloud<PointXYZ>::Ptr filtered_cloud(new PointCloud<PointXYZ>);
     std::vector<cv::Point> pixel_coords;
+#ifdef ENTIRE
     auto unfiltered_iter = unfiltered_cloud->begin();
+#endif
 
     float infinity = std::numeric_limits<float>::infinity();
     for (int v = 0; v < unfiltered_cloud->height; ++v, depth_row += row_step, rgb += rgb_skip)
     {
-        for (int u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step, ++unfiltered_iter)
+        for (int u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step
+#ifdef ENTIRE
+                ,++unfiltered_iter
+#endif
+                )
         {
             uint16_t depth = depth_row[u];
 
             // Assume depth = 0 is the standard was to note invalid
             if (depth == 0)
             {
+#ifdef ENTIRE
                 unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
+#endif
             }
             else
             {
-                float x = (u - center_x) * depth * constant_x;
-                float y = (v - center_y) * depth * constant_y;
-                float z = depth * unit_scaling;
+                float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x;// * pixel_len * depth * unit_scaling * constant_x;
+                float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y; // * pixel_len * depth * unit_scaling * constant_y;
+                float z = float(depth) * unit_scaling;
                 // Add to unfiltered cloud
+                // ENHANCE: be more concise
+#ifdef ENTIRE
                 unfiltered_iter->x = x;
                 unfiltered_iter->y = y;
                 unfiltered_iter->z = z;
                 unfiltered_iter->r = rgb[0];
                 unfiltered_iter->g = rgb[1];
                 unfiltered_iter->b = rgb[2];
+#endif
+
 
                 cv::Point2i pixel = cv::Point2i(u, v);
                 Eigen::Array<float, 3, 1> point(x, y, z);
@@ -399,8 +493,13 @@ point_clouds_from_images(const cv::Mat& depth_image,
             }
         }
     }
-    assert(unfiltered_iter == unfiltered_cloud->end());
-    return { unfiltered_cloud, filtered_cloud, pixel_coords };
+//    assert(unfiltered_iter == unfiltered_cloud->end());
+    return {
+#ifdef ENTIRE
+        unfiltered_cloud,
+#endif
+        filtered_cloud,
+        pixel_coords };
 }
 
 Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
@@ -409,23 +508,29 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
                      const cv::Mat& mask,
                      const Matrix3f& intr)
 {
+    // downsampled_cloud: PointXYZ pointer to downsampled point clouds
+    // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation label
+    // intr: (3, 3) intrinsic matrix of the camera
+
     const Matrix3Xf& X = downsampled_cloud->getMatrixXfMap().topRows(3);
-    // TODO be able to disable?
     // TODO the combined mask doesn't account for the PCL filter, does that matter?
-    // cout << "test8" << endl;
-    // TODO intr
     Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intr, depth, mask);
-    // cout << "test9" << endl;
     /// CPD step
 
-    MatrixXf G = gaussian_kernel(Y, beta);
-    // to_file("cpp_G.txt", G);
+    // G: (M, M) Guassian kernel matrix 
+    MatrixXf G = gaussian_kernel(original_template, beta);//Y, beta);
+
+    // TY: Y^(t) in Algorithm 1
     Matrix3Xf TY = Y;
     double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
 
     int iterations = 0;
     double error = tolerance + 1; // loop runs the first time
 
+    std::chrono::time_point<std::chrono::system_clock> start, end;
+    start = std::chrono::system_clock::now();
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
@@ -435,84 +540,72 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         int M = Y.cols();
         int D = Y.rows();
 
-        // P(i, j) is the distance squared from template point i to the observed point j
-        MatrixXf P(M, N);
-        for (int i = 0; i < M; ++i)
+        // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
+        // Calculate Eq. (9) (Line 5 in Algorithm 1)
+        // NOTE: Eq. (9) misses M in the denominator
+        MatrixXf P(M, N);  end = std::chrono::system_clock::now(); cout << "526: " << (end-start).count() << endl;
         {
-            for (int j = 0; j < N; ++j)
-            {
-                P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+            for (int i = 0; i < M; ++i) {
+                for (int j = 0; j < N; ++j) {
+                    P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+                }
             }
-        }
 
-        float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-        c *= w / (1 - w);
-        c *= static_cast<double>(M) / N;
+            float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+            c *= w / (1 - w);
+            c *= static_cast<double>(M) / N;
 
-        P = (-P / (2 * sigma2)).array().exp().matrix();
-        // TODO prior
-        // TODO add back in
-        // cout << "P before" << endl;
-        // cout << P << endl;
-        // cout << "Y_emit_prior" << endl;
-        // cout << Y_emit_prior << endl;
-        P.array().colwise() *= Y_emit_prior.array();
-        // cout << "P after" << endl;
-        // cout << P << endl;
-        // if self.params.Y_emit_prior is not None:
-        //      P *= self.params.Y_emit_prior[:, np.newaxis]
+            P = (-P / (2 * sigma2)).array().exp().matrix();
+            P.array().colwise() *= Y_emit_prior.array();
 
-        MatrixXf den = P.colwise().sum().replicate(M, 1);
-        // TODO ignored den[den == 0] = np.finfo(float).eps because seriously
-        den.array() += c;
-        // to_file(std::string("cpp_den_") + std::to_string(iterations) + ".txt", den);
+            RowVectorXf den = P.colwise().sum();
+            den.array() += c;
 
-        P = P.cwiseQuotient(den);
-        // to_file(std::string("cpp_P_") + std::to_string(iterations) + ".txt", P);
+            P = P.array().rowwise() / den.array();
+        }  end = std::chrono::system_clock::now(); cout << "545: " << (end-start).count() << endl;
+        // Fast Gaussian Transformation to calculate Pt1, P1, PX
+        double bandwidth = 0.3;
+        // fgt::Direct direct(Y, bandwidth);
+
 
         // Maximization step
-        MatrixXf Pt1 = P.colwise().sum();
-        MatrixXf P1 = P.rowwise().sum();
-        float Np = P1.sum();
+        VectorXf Pt1 = P.colwise().sum(); end = std::chrono::system_clock::now(); cout << "548: " << (end-start).count() << endl;
+        VectorXf P1 = P.rowwise().sum(); end = std::chrono::system_clock::now(); cout << "549: " << (end-start).count() << endl;
+        float Np = P1.sum(); end = std::chrono::system_clock::now(); cout << "550: " << (end-start).count() << endl;
         
         // This is the code to use if you are not using LLE
-        // MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M);
-        // MatrixXf B = (P * X.transpose()) - P1.asDiagonal() * Y.transpose();
-        // MatrixXf W = A.colPivHouseholderQr().solve(B);
-        float lambda = start_lambda * std::pow(annealing_factor, iterations + 1);
-        MatrixXf A = (P1.asDiagonal() * G) 
+        // NOTE: lambda means gamma here
+        // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
+        // Corresponding to Eq. (18) in the paper
+        float lambda = start_lambda;// * std::pow(annealing_factor, iterations + 1);
+        MatrixXf p1d = P1.asDiagonal(); end = std::chrono::system_clock::now(); cout << "557: " << (end-start).count() << endl;
+        MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
-            + sigma2 * lambda * (m_lle * G);
-        MatrixXf p1d = P1.asDiagonal();
-        MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose();
-        MatrixXf W = A.colPivHouseholderQr().solve(B);
-        // to_file("cpp_m_lle.txt", m_lle);
-        // to_file(std::string("cpp_A_") + std::to_string(iterations) + ".txt", A);
-        // to_file(std::string("cpp_B_") + std::to_string(iterations) + ".txt", B);
-        // to_file(std::string("cpp_W_") + std::to_string(iterations) + ".txt", W);
+            + sigma2 * lambda * (m_lle * G); end = std::chrono::system_clock::now();cout << "560: " << (end-start).count() << endl;
+        MatrixXf B = (P * X.transpose()) - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;
+        MatrixXf W = A.householderQr().solve(B); end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
 
-        TY = Y + (G * W).transpose();
-        // to_file(std::string("cpp_TY_") + std::to_string(iterations) + ".txt", TY);
+        TY = Y + (G * W).transpose(); end = std::chrono::system_clock::now(); cout << "564: " << (end-start).count() << endl;
 
-        MatrixXf xPxtemp = (X.array() * X.array()).colwise().sum();
-        MatrixXf xPxMat = Pt1 * xPxtemp.transpose();
-        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
-        double xPx = xPxMat.sum();
-        MatrixXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
-        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
-        double yPy = yPyMat.sum();
-        double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum();
-        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D);
+        // Corresponding to Eq. (19) in the paper
+        VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
+//        float xPx = (Pt1 * xPxtemp.transpose())(0,0);
+        double xPx = Pt1.dot(xPxtemp); end = std::chrono::system_clock::now();cout << "569: " << (end-start).count() << endl;
+//        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
+//        double xPx = xPxMat.sum();
+        VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+//        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
+//        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
+        double yPy = P1.dot(yPytemp); end = std::chrono::system_clock::now();cout << "575: " << (end-start).count() << endl;
+        double trPXY = (TY.array() * (P * X.transpose()).transpose().array()).sum(); end = std::chrono::system_clock::now();cout << "576: " << (end-start).count() << endl;
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); end = std::chrono::system_clock::now();cout << "577: " << (end-start).count() << endl;
 
         if (sigma2 <= 0)
         {
             sigma2 = tolerance / 10;
         }
+
         error = std::abs(sigma2 - qprev);
-
-        // TODO do I need to care about the callback?
-
         iterations++;
     }
     return TY;
@@ -524,9 +617,17 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& mask,
         const PointCloud<PointXYZ>::Ptr template_cloud,
         const Matrix2Xi& template_edges,
+        bool interation_constrain,
         const std::vector<CDCPD::FixedPoint>& fixed_points
         )
 {
+    // rgb: CV_8U3C rgb image
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation
+    // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
+    // template_edges: (2, K) matrix corresponding to E in the paper
+    // fixed_points: fixed points during the tracking
+
     assert(rgb.type() == CV_8UC3);
     assert(depth.type() == CV_16U);
     assert(mask.type() == CV_8U);
@@ -534,21 +635,34 @@ CDCPD::Output CDCPD::operator()(
     assert(P_matrix.rows == 3 && P_matrix.cols == 4);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
+    int recovery_knn_k = 12; // TODO configure this?
+    float recovery_cost_threshold = 0.5; // TODO configure this?
+
+#ifdef DEBUG
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
 
     // Useful utility for outputting an Eigen matrix to a file
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
-        std::ofstream(fname) << mat.format(np_fmt);
+        std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
     };
+#endif
 
     // We'd like an Eigen version of the P matrix
     Eigen::MatrixXf P_eigen(3, 4);
     cv::cv2eigen(P_matrix, P_eigen);
-    // cout << "test1" << endl;
 
-    // For testing purposes, compute the whole cloud, though it's not really necessary TODO
+    // TODO: For testing purposes, compute the whole cloud, though it's not really necessary
+    // ENHANCE: debug macro to remove entire_cloud
+    // ENHANCE: pixel_coords is not used
+    // entire_cloud: pointer to the entire point cloud
+    // cloud: pointer to the point clouds selected
+    // pixel_coords: pixel coordinate corresponds to the point in the cloud
     Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
-    auto [entire_cloud, cloud, pixel_coords]
+    auto [
+#ifdef ENTIRE
+            entire_cloud,
+#endif
+                    cloud, pixel_coords]
         = point_clouds_from_images(
                 depth,
                 rgb,
@@ -557,32 +671,40 @@ CDCPD::Output CDCPD::operator()(
                 last_lower_bounding_box - bounding_box_extend,
                 last_upper_bounding_box + bounding_box_extend);
     cout << "Points in filtered: " << cloud->width << endl;
-    // cout << "test2" << endl;
 
-    cv::Mat points_mat;
-    // cout << "test3" << endl;
+    // intr: intrinsics of the camera
     Eigen::Matrix3f intr = P_eigen.leftCols(3);
 
-    /// VoxelGrid filter
+    /// VoxelGrid filter downsampling
     PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
+
     pcl::VoxelGrid<PointXYZ> sor;
     cout << "Points in cloud before leaf: " << cloud->width << endl;
     sor.setInputCloud(cloud);
     sor.setLeafSize(0.02f, 0.02f, 0.02f);
     sor.filter(*cloud_downsampled);
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
-    // cout << "test7" << endl;
-
-    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, template_cloud->getMatrixXfMap().topRows(3), depth, mask, intr);
+    const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
+    const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
+#ifdef ENTIRE
+    const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
+#endif
+    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
+    to_file(workingDir + "/cpp_downsample.txt", X);
+    to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
+    to_file(workingDir + "/cpp_TY.txt", TY);
+#endif
 
     // Next step: optimization.
-    // TODO is really 1.0?
-    to_file("/home/steven/catkin/cpp_TY.txt", TY);
-    // cout << original_template << endl;
-    Optimizer opt(original_template, 1.0);
+    // ???: most likely not 1.0
+    Optimizer opt(original_template, Y, 1.00);
 
-    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points); // TODO perhaps optionally disable optimization?
-    to_file("/home/steven/catkin/cpp_Y_opt.txt", Y_opt);
+    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, interation_constrain); // TODO perhaps optionally disable optimization?
+#ifdef DEBUG
+    to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
+#endif
 
     // If we're doing tracking recovery, do that now
     if (use_recovery)
@@ -591,8 +713,6 @@ CDCPD::Output CDCPD::operator()(
         cout << "cost" << endl;
         cout << cost << endl;
 
-        int recovery_knn_k = 12; // TODO configure this?
-        float recovery_cost_threshold = 0.5; // TODO configure this?
         if (cost > recovery_cost_threshold && template_matcher.size() > recovery_knn_k)
         {
             float best_cost = cost;
@@ -613,7 +733,6 @@ CDCPD::Output CDCPD::operator()(
                     best_cost = proposal_cost;
                 }
             }
-
             Y_opt = final_tracking_result;
         }
         else
@@ -621,6 +740,7 @@ CDCPD::Output CDCPD::operator()(
             template_matcher.add_template(cloud_downsampled, Y_opt);
         }
     }
+    cout << "matcher size: " << template_matcher.size() << endl;
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
@@ -629,7 +749,9 @@ CDCPD::Output CDCPD::operator()(
     PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
 
     return CDCPD::Output {
+#ifdef ENTIRE
         entire_cloud,
+#endif
         cloud, 
         cloud_downsampled,
         template_cloud,
