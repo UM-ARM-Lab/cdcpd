@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>cdcpd</name>
+  <version>0.0.1</version>
+  <description>
+    TODO
+  </description>
+  <url type="repository">https://github.com/UM-ARM-Lab/cdcpd</url>
+  <maintainer email="dmcconac@umich.edu">Dale McConachie</maintainer>
+  <author email="chicheng@umich.edu">Cheng Chi</author>
+  <author email="dmcconac@umich.edu">Dale McConachie</author>
+  <author email="anveepnaik@gmail.com">Anvee Naik</author>
+  <author email="spschul@umich.edu">Steven Schulte</author>
+  <author email="yixuanwa@umich.edu">Yixuan Wang</author>
+  <license>BSD</license>
+  <!-- This is required by REP-136. -->
+  <exec_depend>catkin</exec_depend>
+  <buildtool_depend>cmake</buildtool_depend>
+  <export>
+    <build_type>cmake</build_type>
+  </export>
+</package>
+
