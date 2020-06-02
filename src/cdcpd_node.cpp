@@ -256,8 +256,14 @@ int main(int argc, char* argv[])
 #ifdef CYL9
     bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_9.bag", rosbag::bagmode::Read);
 #endif
-#ifndef CYLINDER_INTER
+#ifdef NORMAL
     bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal.bag", rosbag::bagmode::Read);
+#endif
+#ifdef NMCLOTH1
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth1.bag", rosbag::bagmode::Read);
+#endif
+#ifdef NMCLOTH2
+    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth2.bag", rosbag::bagmode::Read);
 #endif
 
     std::vector<std::string> topics;
@@ -333,7 +339,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    CDCPD cdcpd(template_cloud, P_mat);
+    CDCPD cdcpd(template_cloud, P_mat, false);
 #ifdef COMP
     CDCPD cdcpd_without_constrain(template_cloud, P_mat);
 #endif
@@ -429,7 +435,7 @@ int main(int argc, char* argv[])
 #else
         // Purple
         cv::Mat hsv_mask;
-        cv::inRange(color_hsv, cv::Scalar(210, 0.2, 0.4), cv::Scalar(250, 0.6, 0.8), hsv_mask);
+        cv::inRange(color_hsv, cv::Scalar(210, 0.1, 0.4), cv::Scalar(250, 0.5, 0.8), hsv_mask);
 #endif
 
 #ifdef DEBUG
@@ -506,10 +512,6 @@ int main(int argc, char* argv[])
         marker.scale.x = 0.05*2;
         marker.scale.y = 0.05*2;
         marker.scale.z = 0.21;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
 #endif
 
 #ifdef CYL5
@@ -524,10 +526,6 @@ int main(int argc, char* argv[])
         marker.scale.x = 0.05*2;
         marker.scale.y = 0.05*2;
         marker.scale.z = 0.21;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
 #endif
 
 #ifdef CYL6
@@ -542,10 +540,6 @@ int main(int argc, char* argv[])
         marker.scale.x = 0.05*2;
         marker.scale.y = 0.05*2;
         marker.scale.z = 0.21;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
 #endif
 
 #ifdef CYL7
@@ -560,10 +554,6 @@ int main(int argc, char* argv[])
         marker.scale.x = 0.05*2;
         marker.scale.y = 0.05*2;
         marker.scale.z = 0.21;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
 #endif
 
 #ifdef CYL8
@@ -578,10 +568,6 @@ int main(int argc, char* argv[])
         marker.scale.x = 0.05*2;
         marker.scale.y = 0.05*2;
         marker.scale.z = 0.21;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
 #endif
 
 #ifdef CYL9
@@ -596,11 +582,12 @@ int main(int argc, char* argv[])
         marker.scale.x = 0.05*2;
         marker.scale.y = 0.05*2;
         marker.scale.z = 0.21;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
+#endif
+
+        marker.color.a = 0.5; // Don't forget to set the alpha!
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-#endif
 
         //only if using a MESH_RESOURCE marker type:
         marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";

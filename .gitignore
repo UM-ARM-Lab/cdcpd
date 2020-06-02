@@ -8,3 +8,7 @@ tags
 
 # Compiled python files
 *.pyc
+
+# CLion artifacts
+cmake-build-debug
+.idea
