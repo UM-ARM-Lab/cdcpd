@@ -1,17 +1,18 @@
 #include <algorithm>
-#include "cdcpd/optimizer.h"
 #include <cassert>
 #include <chrono>
 #include <string>
 #include <Eigen/Dense>
-#include "opencv2/imgcodecs.hpp" // TODO remove after not writing images
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/core/eigen.hpp"
+#include <opencv2/imgcodecs.hpp> // TODO remove after not writing images
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/core/eigen.hpp>
 #include <opencv2/rgbd.hpp>
 #include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
 #include <fgt.hpp>
+
+#include "cdcpd/optimizer.h"
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/past_template_matcher.h"
 
@@ -99,7 +100,7 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
     assert(cloud->height == 1);
     // adjacencies: save index of adjacent points
     MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
-    // B: save weight W_ij 
+    // B: save weight W_ij
     MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
     MatrixXf v = VectorXf::Ones(lle_neighbors);
     // algorithm: see https://cs.nyu.edu/~roweis/lle/algorithm.html
@@ -130,9 +131,9 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
         B.row(i) = w / w.sum();
     }
     MatrixXf graph = MatrixXf::Zero(cloud->width, cloud->width);
-    for (size_t i = 0; i < graph.rows(); ++i)
+    for (ssize_t i = 0; i < graph.rows(); ++i)
     {
-        for (size_t j = 0; j < lle_neighbors; ++j)
+        for (ssize_t j = 0; j < lle_neighbors; ++j)
         {
             graph(i, adjacencies(i, j)) = B(i, j);
         }
@@ -160,7 +161,7 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
 
 CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
              const Mat& _P_matrix,
-             bool _use_recovery) : 
+             bool _use_recovery) :
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     P_matrix(_P_matrix),
@@ -185,7 +186,7 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
  * Return a non-normalized probability that each of the tracked vertices produced any detected point.
  * Implement Eq. (7) in the paper
  */
-Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices, 
+Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
                                  const Eigen::Matrix3f& intrinsics,
                                  const cv::Mat& depth,
                                  const cv::Mat& mask,
@@ -293,7 +294,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
  * image_depth - vertex_depth, not vice-versa. There's also no normalization.
  * Calculate Eq. (22) in the paper
  */
-float smooth_free_space_cost(const Matrix3Xf vertices, 
+float smooth_free_space_cost(const Matrix3Xf vertices,
                                  const Eigen::Matrix3f& intrinsics,
                                  const cv::Mat& depth,
                                  const cv::Mat& mask,
@@ -384,9 +385,8 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
 }
 
 // TODO return both point clouds
-// TODO based on the implementation here: 
-// https://github.com/ros-perception/image_pipeline/blob/ \
-// melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
+// TODO based on the implementation here:
+// https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
 // Note that we expect that cx, cy, fx, fy are in the appropriate places in P
 std::tuple<
 #ifdef ENTIRE
@@ -442,27 +442,20 @@ point_clouds_from_images(const cv::Mat& depth_image,
     auto unfiltered_iter = unfiltered_cloud->begin();
 #endif
 
-    float infinity = std::numeric_limits<float>::infinity();
-    for (int v = 0; v < unfiltered_cloud->height; ++v, depth_row += row_step, rgb += rgb_skip)
+    for (uint32_t v = 0; v < unfiltered_cloud->height; ++v, depth_row += row_step, rgb += rgb_skip)
     {
-        for (int u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step
 #ifdef ENTIRE
-                ,++unfiltered_iter
+        for (uint32_t u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step, ++unfiltered_iter)
+#else
+        for (uint32_t u = 0; u < unfiltered_cloud->width; ++u, rgb += rgb_step)
 #endif
-                )
         {
             uint16_t depth = depth_row[u];
 
             // Assume depth = 0 is the standard was to note invalid
-            if (depth == 0)
+            if (depth != 0)
             {
-#ifdef ENTIRE
-                unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
-#endif
-            }
-            else
-            {
-                float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x;// * pixel_len * depth * unit_scaling * constant_x;
+                float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x; // * pixel_len * depth * unit_scaling * constant_x;
                 float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y; // * pixel_len * depth * unit_scaling * constant_y;
                 float z = float(depth) * unit_scaling;
                 // Add to unfiltered cloud
@@ -475,7 +468,6 @@ point_clouds_from_images(const cv::Mat& depth_image,
                 unfiltered_iter->g = rgb[1];
                 unfiltered_iter->b = rgb[2];
 #endif
-
 
                 cv::Point2i pixel = cv::Point2i(u, v);
                 Eigen::Array<float, 3, 1> point(x, y, z);
@@ -491,6 +483,12 @@ point_clouds_from_images(const cv::Mat& depth_image,
                     cout << "Point ignored because it was outside the boundaries." << endl;
                 }
             }
+#ifdef ENTIRE
+            else
+            {
+                unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
+            }
+#endif
         }
     }
 //    assert(unfiltered_iter == unfiltered_cloud->end());
@@ -519,7 +517,7 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
     Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intr, depth, mask);
     /// CPD step
 
-    // G: (M, M) Guassian kernel matrix 
+    // G: (M, M) Guassian kernel matrix
     MatrixXf G = gaussian_kernel(original_template, beta);//Y, beta);
 
     // TY: Y^(t) in Algorithm 1
@@ -572,7 +570,7 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         VectorXf Pt1 = P.colwise().sum(); end = std::chrono::system_clock::now(); cout << "548: " << (end-start).count() << endl;
         VectorXf P1 = P.rowwise().sum(); end = std::chrono::system_clock::now(); cout << "549: " << (end-start).count() << endl;
         float Np = P1.sum(); end = std::chrono::system_clock::now(); cout << "550: " << (end-start).count() << endl;
-        
+
         // This is the code to use if you are not using LLE
         // NOTE: lambda means gamma here
         // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
@@ -635,7 +633,7 @@ CDCPD::Output CDCPD::operator()(
     assert(P_matrix.rows == 3 && P_matrix.cols == 4);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
-    int recovery_knn_k = 12; // TODO configure this?
+    size_t recovery_knn_k = 12; // TODO configure this?
     float recovery_cost_threshold = 0.5; // TODO configure this?
 
 #ifdef DEBUG
@@ -752,7 +750,7 @@ CDCPD::Output CDCPD::operator()(
 #ifdef ENTIRE
         entire_cloud,
 #endif
-        cloud, 
+        cloud,
         cloud_downsampled,
         template_cloud,
         cpd_out

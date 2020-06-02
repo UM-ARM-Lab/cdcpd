@@ -9,10 +9,10 @@
 #include <pcl/features/vfh.h>
 #include <pcl/features/normal_3d.h>
 
-PastTemplateMatcher::PastTemplateMatcher(int _sample_size) :
+PastTemplateMatcher::PastTemplateMatcher(size_t _sample_size) :
     matcher(cv::makePtr<cv::flann::KDTreeIndexParams>(5), cv::makePtr<cv::flann::SearchParams>(50)),
     gen(rd()),
-    index_generator(0, _sample_size - 1), 
+    index_generator(0, _sample_size - 1),
     sample_size(_sample_size) {}
 
 size_t PastTemplateMatcher::size()
