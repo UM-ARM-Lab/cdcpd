@@ -1,16 +1,22 @@
 cmake_minimum_required(VERSION 3.5)
-project(cdcpd VERSION 0.1
+project(cdcpd VERSION 0.1.0
     DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
     LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(libcdcpd SHARED
-    src/cdcpd.cpp
-    src/optimizer.cpp
-    src/past_template_matcher.cpp
-)
+# https://blog.kitware.com/cmake-and-the-default-build-type/
+set(default_build_type "Release")
+#set(default_build_type "RelWithDebInfo")
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(WARNING "Setting build type to '${default_build_type}' as none was specified.")
+    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+        STRING "Choose the type of build." FORCE)
+    # Set the possible values of build type for cmake-gui
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
@@ -18,40 +24,46 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
+find_package(FAISS REQUIRED)
 find_package(Fgt REQUIRED)
-set(FAISS_INCLUDE_DIRS "/home/deformtrack/local/src/faiss")
-set(LOCAL_LIBS "/home/deformtrack/local/lib")
 
-find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization kdtree features)
+find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features)
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
-target_include_directories(libcdcpd PUBLIC 
+### The library itself
+add_library(cdcpd SHARED
+    src/cdcpd.cpp
+    src/optimizer.cpp
+    src/past_template_matcher.cpp
+)
+
+target_include_directories(cdcpd PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
-target_include_directories(libcdcpd SYSTEM PUBLIC 
+target_include_directories(cdcpd SYSTEM PUBLIC 
     ${PCL_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS})
+target_include_directories(cdcpd SYSTEM PRIVATE 
+    ${GUROBI_INCLUDE_DIRS}
     ${FAISS_INCLUDE_DIRS})
-target_include_directories(libcdcpd SYSTEM PRIVATE 
-    ${GUROBI_INCLUDE_DIRS})
 
-target_link_libraries(libcdcpd PUBLIC
+target_link_libraries(cdcpd PUBLIC
     ${PCL_LIBRARIES}
     ${OpenCV_LIBS}
-    Eigen3::Eigen
-    ${LOCAL_LIBS}/libfaiss.a
+    Eigen3::Eigen)
+target_link_libraries(cdcpd PRIVATE
+    ${GUROBI_LIBRARIES}
+    ${FAISS_LIBRARY}
     Fgt::Library-C++)
-target_link_libraries(libcdcpd PRIVATE
-    ${GUROBI_LIBRARIES})
-target_compile_definitions(libcdcpd PUBLIC ${PCL_DEFINITIONS})
+target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
+target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -g)
 
-add_library(cdcpd::libcdcpd ALIAS libcdcpd)
-
+add_library(cdcpd::cdcpd ALIAS cdcpd)
 
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
-install(TARGETS libcdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
+install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES
 	include/cdcpd/cdcpd.h 
 	include/cdcpd/optimizer.h 
@@ -60,13 +72,7 @@ install(FILES
 	include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 
-set_target_properties(libcdcpd
-    PROPERTIES
-        OUTPUT_NAME "cdcpd"
-)
-### 
-### ### Installation
-### install(TARGETS libcdcpd 
+### install(TARGETS cdcpd 
 ###     EXPORT cdcpd-targets 
 ###     LIBRARY DESTINATION lib/${PROJECT_NAME}
 ###     INCLUDES DESTINATION include/${PROJECT_NAME})

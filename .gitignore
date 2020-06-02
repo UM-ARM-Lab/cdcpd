@@ -8,6 +8,9 @@
 *.egg-info
 *.swp
 *DS_Store
+tags
+
+# CLion artifacts
 build
 install
 CMakeCache.txt

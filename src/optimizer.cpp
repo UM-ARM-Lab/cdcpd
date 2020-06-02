@@ -176,8 +176,8 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 #endif
     try
     {
-        const size_t num_vectors = (size_t) Y.cols();
-        const size_t num_vars = 3 * num_vectors;
+        const ssize_t num_vectors = Y.cols();
+        const ssize_t num_vars = 3 * num_vectors;
 
         GRBEnv& env = getGRBEnv();
 
@@ -198,7 +198,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Add the edge constraints
         // ???: why multiply stretch_lambda twice
         {
-            for (size_t i = 0; i < E.cols(); ++i)
+            for (ssize_t i = 0; i < E.cols(); ++i)
             {
                 model.addQConstr(
                             buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
@@ -215,7 +215,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         if (interation_constrain)
         {
             cout << "added constrain" << endl;
-            for (size_t i = 0; i < num_vectors; ++i) {
+            for (ssize_t i = 0; i < num_vectors; ++i) {
                 model.addConstr(
                         (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
                                 (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
@@ -256,7 +256,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Build the objective function
         {
             GRBQuadExpr objective_fn(0);
-            for (size_t i = 0; i < num_vectors; ++i)
+            for (ssize_t i = 0; i < num_vectors; ++i)
             {
                 const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
                 const auto expr1 = vars[i * 3 + 1] - Y_copy(1, i);
@@ -276,7 +276,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
             {
                 // std::cout << "Y" << std::endl;
                 // std::cout << Y << std::endl;
-                for (size_t i = 0; i < num_vectors; i++)
+                for (ssize_t i = 0; i < num_vectors; i++)
                 {
                     Y_opt(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
                     Y_opt(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
