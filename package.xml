@@ -65,6 +65,7 @@
   <exec_depend>roscpp</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <depend>cdcpd</depend>
+  <depend>arc_utilities</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

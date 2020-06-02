@@ -1,23 +1,24 @@
 #include <string>
 #include <vector>
-#include <ros/ros.h>
-#include "cdcpd_ros/kinect_sub.h"
 #include <thread>
 #include <chrono>
+#include <map>
 
-#include "opencv2/core.hpp"
-#include "opencv2/highgui.hpp"
-#include "opencv2/imgcodecs.hpp"
-#include "opencv2/imgproc/imgproc.hpp"
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+#include <ros/ros.h>
+#include <ros/package.h>
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
-#include <map>
 #include <pcl/point_types.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
-#include <rosbag/bag.h>
-#include <rosbag/view.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/simple_filter.h>
 #include <message_filters/time_synchronizer.h>
@@ -29,7 +30,9 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
-#include "cdcpd/cdcpd.h"
+#include <arc_utilities/ros_helpers.hpp>
+#include <cdcpd/cdcpd.h>
+#include "cdcpd_ros/kinect_sub.h"
 
 using std::cout;
 using std::endl;
@@ -44,27 +47,6 @@ std::vector<cv::Mat> depth_images;
 
 // auto constexpr PARAM_NAME_WIDTH = 40;
 //
-// template <typename T>
-// inline T GetParam(const ros::NodeHandle& nh,
-//                   const std::string& param_name,
-//                   const T& default_val)
-// {
-//     T param_val;
-//     if (nh.getParam(param_name, param_val))
-//     {
-//         ROS_INFO_STREAM_NAMED("params",
-//                 "Retrieving " << std::left << std::setw(PARAM_NAME_WIDTH)
-//                 << param_name << " as " << param_val);
-//     }
-//     else
-//     {
-//         param_val = default_val;
-//         ROS_WARN_STREAM_NAMED("params",
-//                 "Defaulting " << std::left << std::setw(PARAM_NAME_WIDTH)
-//                 << param_name << " to " << param_val);
-//     }
-//     return param_val;
-// }
 
 // void callback_fn(cv::Mat, cv::Mat, cv::Matx33d)
 // {
@@ -238,6 +220,10 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
+    auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal.bag");
+    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
+    bag.open(folder + bagfile + ".bag", rosbag::bagmode::Read);
+/*
 #ifdef CYL4
     bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_4.bag", rosbag::bagmode::Read);
 #endif
@@ -265,6 +251,7 @@ int main(int argc, char* argv[])
 #ifdef NMCLOTH2
     bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth2.bag", rosbag::bagmode::Read);
 #endif
+*/
 
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
