@@ -9,6 +9,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/rgbd.hpp>
+#include <opencv2/core/core.hpp>
 
 #include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree_flann.h>
@@ -29,6 +30,7 @@ using std::vector;
 using std::cout;
 using std::endl;
 using cv::Mat;
+using cv::Vec3b;
 using Eigen::ArrayXf;
 using Eigen::ArrayXd;
 using Eigen::MatrixXf;
@@ -475,9 +477,9 @@ point_clouds_from_images(const cv::Mat& depth_image,
                 unfiltered_iter->x = x;
                 unfiltered_iter->y = y;
                 unfiltered_iter->z = z;
-                unfiltered_iter->r = rgb_image.at<uchar>(v, u)[0];
-                unfiltered_iter->g = rgb_image.at<uchar>(v, u)[1];
-                unfiltered_iter->b = rgb_image.at<uchar>(v, u)[2];
+                unfiltered_iter->r = rgb_image.at<Vec3b>(v, u)[0];
+                unfiltered_iter->g = rgb_image.at<Vec3b>(v, u)[1];
+                unfiltered_iter->b = rgb_image.at<Vec3b>(v, u)[2];
 #endif
 
                 // cv::Point2i pixel = cv::Point2i(u, v);

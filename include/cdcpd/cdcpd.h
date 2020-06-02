@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CDCPD_H
+#define CDCPD_H
 
 #include <opencv2/core.hpp>
 #include <pcl/point_types.h>
@@ -14,9 +15,13 @@
 // #define ENTIRE
 // #endif
 
-#ifndef ROPE
-#define ROPE
-#endif
+// #ifndef ROPE
+// #define ROPE
+// #endif
+
+// #ifndef NORMAL
+// #define NORMAL
+// #endif
 
 // #ifndef COMP
 //#define COMP
@@ -29,6 +34,10 @@
 //#ifndef CYL9
 //#define CYL9
 //#endif
+
+#ifndef NMCLOTH2
+#define NMCLOTH2
+#endif
 
 class CDCPD {
 public:
@@ -101,3 +110,6 @@ private:
     const int max_iterations;
     bool use_recovery;
 }; 
+
+#endif
+
