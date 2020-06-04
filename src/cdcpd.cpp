@@ -280,7 +280,6 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
     // ???: why cv::normalize is needed
     cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
-    imwrite(workingDir + "/mask.png", mask);
     // ENHANCE: rm unused dist_copr
     cv::Mat dist_copy = dist_img.clone();
     imwrite(workingDir + "/dist_img.png", dist_copy * 255.0);
@@ -526,7 +525,6 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
     // intr: (3, 3) intrinsic matrix of the camera
 
     const Matrix3Xf& X = downsampled_cloud->getMatrixXfMap().topRows(3);
-    // TODO the combined mask doesn't account for the PCL filter, does that matter?
     Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intr, depth, mask);
     /// CPD step
 
@@ -554,58 +552,60 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         // Calculate Eq. (9) (Line 5 in Algorithm 1)
         // NOTE: Eq. (9) misses M in the denominator
         
-        // MatrixXf P(M, N); // end = std::chrono::system_clock::now(); cout << "526: " << (end-start).count() << endl;
-        // {
-        //     for (int i = 0; i < M; ++i) {
-        //         for (int j = 0; j < N; ++j) {
-        //             P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
-        //         }
-        //     }
+        MatrixXf P(M, N); // end = std::chrono::system_clock::now(); cout << "526: " << (end-start).count() << endl;
+        {
+            for (int i = 0; i < M; ++i) {
+                for (int j = 0; j < N; ++j) {
+                    P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+                }
+            }
 
-        //     float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-        //     c *= w / (1 - w);
-        //     c *= static_cast<double>(M) / N;
+            float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+            c *= w / (1 - w);
+            c *= static_cast<double>(M) / N;
 
-        //     P = (-P / (2 * sigma2)).array().exp().matrix();
-        //     P.array().colwise() *= Y_emit_prior.array();
+            P = (-P / (2 * sigma2)).array().exp().matrix();
+            P.array().colwise() *= Y_emit_prior.array();
 
-        //     RowVectorXf den = P.colwise().sum();
-        //     den.array() += c;
+            RowVectorXf den = P.colwise().sum();
+            den.array() += c;
 
-        //     P = P.array().rowwise() / den.array();
-        // }  //end = std::chrono::system_clock::now(); cout << "545: " << (end-start).count() << endl;
+            P = P.array().rowwise() / den.array();
+        }  //end = std::chrono::system_clock::now(); cout << "545: " << (end-start).count() << endl;
         
         // Fast Gaussian Transformation to calculate Pt1, P1, PX
         
-        double bandwidth = std::sqrt(2.0 * sigma2);
-        double epsilon = 1e-4;
-        fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //cout << "575\n";
-        fgt::Matrix X_fgt = X.transpose().cast<double>(); //cout << "576\n";
-        fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //cout << "577\n";
-        VectorXd kt1 = fgt1.compute(X_fgt); //cout << "578\n";// M*1 vector
+        // double bandwidth = std::sqrt(2.0 * sigma2);
+        // double epsilon = 1e-4;
+        // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //cout << "575\n";
+        // fgt::Matrix X_fgt = X.transpose().cast<double>(); //cout << "576\n";
+        // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //cout << "577\n";
+        // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //cout << "578\n";// N*1 vector
         
-        float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-            c *= w / (1 - w);
-            c *= static_cast<double>(M) / N;
-        ArrayXd a = 1 / (kt1.array() + c); // M*1 array
+        // float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+        // c *= w / (1 - w);
+        // c *= static_cast<double>(M) / N;
+        // ArrayXd a = 1 / (kt1.array() + c); // N*1 array
 
-        VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
+        // VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
 
-        fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //cout << "587\n";
-        VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //cout << "588\n";
+        // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //cout << "587\n";
+        // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //cout << "588\n";
+        // P1 = P1.array()*Y_emit_prior.array();
 
-        MatrixXd PX_fgt(TY.rows(), TY.cols());
-        for (size_t i = 0; i < TY.rows(); ++i) {
-            // ArrayXd Xi = X_fgt.col(i).array();
-            ArrayXd aXarray = X_fgt.col(i).array() * a;
-            fgt::Vector aX = fgt::Vector(aXarray);  //cout << "594\n";
-            PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX));
-        }
-        MatrixXf PX = PX_fgt.cast<float>();
+        // MatrixXd PX_fgt(TY.rows(), TY.cols());
+        // for (size_t i = 0; i < TY.rows(); ++i) {
+        //     // ArrayXd Xi = X_fgt.col(i).array();
+        //     ArrayXd aXarray = X_fgt.col(i).array() * a;
+        //     fgt::Vector aX = fgt::Vector(aXarray);  //cout << "594\n";
+        //     PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX)).array() * Y_emit_prior.array().cast<double>();
+        // }
+        // MatrixXf PX = PX_fgt.cast<float>();
+        MatrixXf PX = (P * X.transpose()).transpose();
 
-        // Maximization step
-        // VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); cout << "548: " << (end-start).count() << endl;
-        // VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); cout << "549: " << (end-start).count() << endl;
+        // // Maximization step
+        VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); cout << "548: " << (end-start).count() << endl;
+        VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); cout << "549: " << (end-start).count() << endl;
         float Np = P1.sum(); //end = std::chrono::system_clock::now(); cout << "550: " << (end-start).count() << endl;
         
         // This is the code to use if you are not using LLE
@@ -692,7 +692,7 @@ CDCPD::Output CDCPD::operator()(
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
     // pixel_coords: pixel coordinate corresponds to the point in the cloud
-    Eigen::Vector3f bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
+    Eigen::Vector3f bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
     auto [
 #ifdef ENTIRE
             entire_cloud,

@@ -24,20 +24,16 @@
 // #endif
 
 // #ifndef COMP
-//#define COMP
-//#endif
+// #define COMP
+// #endif
 
-//#ifndef CYLINDER_INTER
-//#define CYLINDER_INTER
-//#endif
+// #ifndef CYLINDER_INTER
+// #define CYLINDER_INTER
+// #endif
 
-//#ifndef CYL9
-//#define CYL9
-//#endif
-
-#ifndef NMCLOTH2
-#define NMCLOTH2
-#endif
+// #ifndef CYL_CLOTH4
+// #define CYL_CLOTH4
+// #endif
 
 class CDCPD {
 public:

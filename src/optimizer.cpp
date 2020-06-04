@@ -74,6 +74,30 @@ float cylinder_radius = 0.05;
 float cylinder_height = 0.21;
 #endif
 
+#ifdef CYL_CLOTH1
+// interaction_cloth1.bag
+Vector3f cylinder_orien(0.009859699816896, 0.043357983138650, 0.170135231471733);
+Vector3f cylinder_center(-0.114121248950204, -0.180876677250917, 1.384255148567173);
+float cylinder_radius = 0.05;
+float cylinder_height = 0.21;
+#endif
+
+#ifdef CYL_CLOTH3
+// interaction_cloth3.bag
+Vector3f cylinder_orien(0.009859699816896, 0.043357983138650, 0.170135231471733);
+Vector3f cylinder_center(-0.134121248950204, -0.110876677250917, 1.384255148567173);
+float cylinder_radius = 0.05;
+float cylinder_height = 0.21;
+#endif
+
+#ifdef CYL_CLOTH4
+// interaction_cloth3.bag
+Vector3f cylinder_orien(0.009859699816896, 0.043357983138650, 0.170135231471733);
+Vector3f cylinder_center(-0.134121248950204, -0.110876677250917, 1.384255148567173);
+float cylinder_radius = 0.05;
+float cylinder_height = 0.21;
+#endif
+
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
 // where Q is [ I, -I
@@ -169,6 +193,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 {
     // Y: Y^t in Eq. (21)
     // E: E in Eq. (21)
+
     Matrix3Xf Y_opt(Y.rows(), Y.cols());
     GRBVar* vars = nullptr;
 #ifdef CYLINDER_INTER
