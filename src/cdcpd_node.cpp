@@ -96,6 +96,9 @@ void callback(const sensor_msgs::Image::ConstPtr &rgb_img,
 
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float height, int num_width, int num_height)
 {
+    float left_bottom_y = 0.0f;
+    float left_bottom_x = 0.0f;
+    float z = 1.45f;
     Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
     Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
 
@@ -106,9 +109,9 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
         {
             // cout << j << endl;
             int index = j * num_height + i;
-            vertices(0, index) = static_cast<float>(i) * height / static_cast<float>(num_height - 1);
-            vertices(1, index) = static_cast<float>(j) * width / static_cast<float>(num_width - 1);
-            vertices(2, index) = 0.1f;
+            vertices(0, index) = static_cast<float>(j) * width / static_cast<float>(num_width - 1)+left_bottom_x;
+            vertices(1, index) = static_cast<float>(i) * height / static_cast<float>(num_height - 1)+left_bottom_y;
+            vertices(2, index) = z;
             if (i + 1 < num_height)
             {
                 int next_index = j * num_height + i + 1;
@@ -220,7 +223,7 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
-    auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal.bag");
+    auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
     auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
     bag.open(folder + bagfile + ".bag", rosbag::bagmode::Read);
 /*
@@ -415,19 +418,25 @@ int main(int argc, char* argv[])
         // Red
         cv::Mat mask1;
         cv::Mat mask2;
+        cv::Mat hsv_mask;
         cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
         cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
-        cv::Mat hsv_mask;
         bitwise_or(mask1, mask2, hsv_mask);
 #else
         // Purple
         cv::Mat hsv_mask;
-        cv::inRange(color_hsv, cv::Scalar(210, 0.1, 0.4), cv::Scalar(250, 0.5, 0.8), hsv_mask);
+        // cv::inRange(color_hsv, cv::Scalar(210, 0.0, 0.4), cv::Scalar(250, 0.5, 0.8), hsv_mask);
+        // cv::inRange(color_hsv, cv::Scalar(50, 0.1, 0.2), cv::Scalar(70, 0.3, 0.6), hsv_mask);
+        cv::Mat mask1;
+        cv::Mat mask2;
+        cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
+        cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+        bitwise_or(mask1, mask2, hsv_mask);
 #endif
 
 #ifdef DEBUG
         to_file(workingDir + "/cpp_mask.txt", hsv_mask);
-        cv::imwrite("hsv_mask.png", hsv_mask);
+        cv::imwrite(workingDir + "/hsv_mask.png", hsv_mask);
 #endif
 
         // Without the grippers vs with the grippers
@@ -566,6 +575,48 @@ int main(int argc, char* argv[])
         marker.pose.orientation.y = -0.0009;
         marker.pose.orientation.z = 0.0046;
         marker.pose.orientation.w = 0.9822;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+#endif
+
+#ifdef CYL_CLOTH1
+        // interation_cloth1.bag
+        marker.pose.position.x = -0.114121248950204;
+        marker.pose.position.y = -0.180876677250917;
+        marker.pose.position.z = 1.384255148567173;
+        marker.pose.orientation.x = -0.1267;
+        marker.pose.orientation.y = 0.0142;
+        marker.pose.orientation.z = -0.1107;
+        marker.pose.orientation.w = 0.9857;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+#endif
+
+#ifdef CYL_CLOTH3
+        // interation_cloth1.bag
+        marker.pose.position.x = -0.134121248950204;
+        marker.pose.position.y = -0.110876677250917;
+        marker.pose.position.z = 1.384255148567173;
+        marker.pose.orientation.x = -0.1267;
+        marker.pose.orientation.y = 0.0142;
+        marker.pose.orientation.z = -0.1107;
+        marker.pose.orientation.w = 0.9857;
+        marker.scale.x = 0.05*2;
+        marker.scale.y = 0.05*2;
+        marker.scale.z = 0.21;
+#endif
+
+#ifdef CYL_CLOTH4
+        // interation_cloth1.bag
+        marker.pose.position.x = -0.134121248950204;
+        marker.pose.position.y = -0.110876677250917;
+        marker.pose.position.z = 1.384255148567173;
+        marker.pose.orientation.x = -0.1267;
+        marker.pose.orientation.y = 0.0142;
+        marker.pose.orientation.z = -0.1107;
+        marker.pose.orientation.w = 0.9857;
         marker.scale.x = 0.05*2;
         marker.scale.y = 0.05*2;
         marker.scale.z = 0.21;
