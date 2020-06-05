@@ -3,6 +3,7 @@
 
 #include <opencv2/core.hpp>
 #include <pcl/point_types.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/io/pcd_io.h>
 
 #include "cdcpd/past_template_matcher.h"
@@ -34,6 +35,14 @@
 // #ifndef CYL_CLOTH4
 // #define CYL_CLOTH4
 // #endif
+
+Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
+                                     int lle_neighbors,
+                                     double reg);
+
+Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+                                  int lle_neighbors,
+                                  double reg);
 
 class CDCPD {
 public:

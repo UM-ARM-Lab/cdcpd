@@ -27,7 +27,7 @@ find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
 find_package(Fgt REQUIRED)
 
-find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features)
+find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
