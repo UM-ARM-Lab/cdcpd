@@ -105,7 +105,7 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
     // ENHANCE: use tapkee lib to accelarate
     // kdtree: kdtree from Y^0
     // lle_neighbors: parameter for lle calculation
-    // reg: regularization term (seems unnecessary)
+    // reg: regularization term (necessary when lle_neighbor > dimension)
     PointCloud<PointXYZ>::ConstPtr cloud = kdtree.getInputCloud();
     assert(cloud->height == 1);
     // adjacencies: save index of adjacent points
