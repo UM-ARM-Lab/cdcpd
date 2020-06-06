@@ -111,6 +111,67 @@ double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
     return reg;
 }
 
+void test_lle() {
+    // test LLE
+    PointCloud::Ptr init(new PointCloud);
+    for (int i = 0; i < 100; ++i)
+    {
+        init->push_back(PointXYZ(float(i), 0.0f, 0.0f));
+    }
+
+    pcl::KdTreeFLANN<PointXYZ> kdtree;
+    kdtree.setInputCloud (init);
+    // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+    MatrixXf L = barycenter_kneighbors_graph(kdtree, 12, 0.001);
+
+    // strech
+    PointCloud::Ptr strech(new PointCloud);
+    for (int i = 0; i < 100; ++i)
+    {
+        strech->push_back(PointXYZ(1.1f*float(i), 0.0f, 0.0f));
+    }
+    cout << "strech regularization: ";
+    cout << calculate_lle_reg(L, *strech) << endl;
+
+    // compress
+    PointCloud::Ptr comp(new PointCloud);
+    for (int i = 0; i < 100; ++i)
+    {
+        comp->push_back(PointXYZ(0.9f*float(i), 0.0f, 0.0f));
+    }
+    cout << "compress regularization: ";
+    cout << calculate_lle_reg(L, *comp) << endl;
+
+
+    // bending
+    PointCloud::Ptr bend(new PointCloud);
+    for (int i = 0; i < 50; ++i)
+    {
+        bend->push_back(PointXYZ(float(i), 0.0f, 0.0f));
+    }
+    for (int i = 0; i < 50; ++i)
+    {
+        bend->push_back(PointXYZ(50.0f, float(i), 0.0f));
+    }
+    cout << "bending regularization: ";
+    cout << calculate_lle_reg(L, *bend) << endl;
+
+    // circle
+    PointCloud::Ptr circle(new PointCloud);
+    for (int i = 0; i < 100; ++i)
+    {
+        circle->push_back(PointXYZ(float(cos(double(i)/double(100.0)*M_PI/2)), float(sin(double(i)/double(100.0)*M_PI/2)), 0.0f));
+    }
+    cout << "circle regularization: ";
+    cout << calculate_lle_reg(L, *circle) << endl;
+
+    // original
+    cout << "original regularization: ";
+    cout << calculate_lle_reg(L, *init) << endl;
+
+    exit(1);
+}
+
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float height, int num_width, int num_height)
 {
     float left_bottom_y = 0.0f;
@@ -151,67 +212,7 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
 
 int main(int argc, char* argv[])
 {
-    // test LLE
-    PointCloud::Ptr init(new PointCloud);
-    for (int i = 0; i < 100; ++i)
-    {
-        init->push_back(PointXYZ(float(i), 0.0f, 0.0f));
-    }
-
-    MatrixXf M = locally_linear_embedding(init, 12, 0.0);
-    pcl::KdTreeFLANN<PointXYZ> kdtree;
-    kdtree.setInputCloud (init);
-    // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-    MatrixXf L = barycenter_kneighbors_graph(kdtree, 12, 0.0);
-
-    // strech
-    PointCloud::Ptr strech(new PointCloud);
-    for (int i = 0; i < 100; ++i)
-    {
-        strech->push_back(PointXYZ(1.1f*float(i), 0.0f, 0.0f));
-    }
-    cout << "strech regularization: ";
-    cout << (strech->getMatrixXfMap().transpose() * M * strech->getMatrixXfMap()).trace() << endl;
-    cout << "manually: ";
-    cout << calculate_lle_reg(L, *strech) << endl;
-
-    // compress
-    PointCloud::Ptr comp(new PointCloud);
-    for (int i = 0; i < 100; ++i)
-    {
-        comp->push_back(PointXYZ(0.9f*float(i), 0.0f, 0.0f));
-    }
-    cout << "compress regularization: ";
-    cout << (comp->getMatrixXfMap().transpose() * M * comp->getMatrixXfMap()).trace() << endl;
-    cout << "manually: ";
-    cout << calculate_lle_reg(L, *comp) << endl;
-
-
-    // bending
-    PointCloud::Ptr bend(new PointCloud);
-    for (int i = 0; i < 50; ++i)
-    {
-        bend->push_back(PointXYZ(float(i), 0.0f, 0.0f));
-    }
-    for (int i = 0; i < 50; ++i)
-    {
-        bend->push_back(PointXYZ(50.0f, float(i), 0.0f));
-    }
-    cout << "bending regularization: ";
-    cout << (bend->getMatrixXfMap().transpose() * M * bend->getMatrixXfMap()).trace() << endl;
-    cout << "manually: ";
-    cout << calculate_lle_reg(L, *bend) << endl;
-
-
-    // original
-    cout << "original regularization: ";
-    cout << (init->getMatrixXfMap().transpose() * M * init->getMatrixXfMap()).trace() << endl;
-    cout << "manually: ";
-    cout << calculate_lle_reg(L, *init) << endl;
-
-    exit(1);
-
-
+    test_lle();
     // ENHANCE: more smart way to get Y^0 and E
     ros::init(argc, argv, "cdcpd_ros_node");
     cout << "Starting up..." << endl;
