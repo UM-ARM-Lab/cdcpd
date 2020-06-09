@@ -183,6 +183,34 @@ std::tuple<Matrix3Xf, Matrix3Xf>
 }
 #endif
 
+std::tuple<Matrix3Xf, Matrix3Xf>
+    nearest_points_line_segments(const Matrix3Xf& last_template, const Matrix2Xi& E) {
+    // find the nearest points on the line segments
+    // refer to the website https://math.stackexchange.com/questions/846054/closest-points-on-two-line-segments
+    Matrix3Xf startPts(3, E.cols()*E.cols()); // Matrix: 3 * M^2: startPts(E*cols()*i + j) is the nearest point on edge i w.r.t. j
+    Matrix3Xf endPts(3, E.cols()*E.cols()); // Matrix: 3 * M^2: endPts(E*cols()*i + j) is the nearest point on edge j w.r.t. i
+    for (int i = 0; i < E.cols(); ++i)
+    {
+        Vector3f P1 = last_template.col(E(0, i));
+        Vector3f P2 = last_template.col(E(1, i));
+        for (int j = 0; j < E.col(); ++i)
+        {
+            Vector3f P3 = last_template.col(E(0, j));
+            Vector3f P4 = last_template.col(E(1, j));
+
+            float R21 = (P2-P1).squaredNorm();
+            float R22 = (P4-P3).squaredNorm();
+            float D4321 = (P4-P3).dot(P2-P1);
+            float D3121 = (P3-P1).dot(P2-P1);
+            float D4331 = (P4-P3).dot(P3-P1);
+
+            // TODO: complete it
+            //       check the correctness
+            //       run it
+        }
+    }
+}
+
 // TODO do setup here
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
     : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
