@@ -51,22 +51,22 @@ using pcl::PointXYZRGB;
 
 std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 
-void test_nearest_line() {
-    Matrix3Xf Y(3, 4);
-    Y(0, 0) = 0.0f; Y(0, 1) = 1.0f; Y(0, 2) = 1.0f; Y(0, 3) = 0.0f;
-    Y(1, 0) = 1.0f; Y(1, 1) = 0.0f; Y(1, 2) = 1.0f; Y(1, 3) = 0.0f;
-    Y(2, 0) = 0.0f; Y(2, 1) = 0.0f; Y(2, 2) = 0.0f; Y(2, 3) = 0.0f;
-    Matrix2Xi E(2, 3);
-    E(0, 0) = 0; E(0, 1) = 1; E(0, 2) = 2;
-    E(1, 0) = 1; E(1, 1) = 2; E(1, 2) = 3;
-    auto [startPts, endPts] = nearest_points_line_segments(Y, E);
-    cout << "startPts" << endl;
-    cout << startPts << endl << endl;
-    cout << "endPts" << endl;
-    cout << endPts << endl << endl;
+// void test_nearest_line() {
+//     Matrix3Xf Y(3, 4);
+//     Y(0, 0) = 0.0f; Y(0, 1) = 0.0f; Y(0, 2) = 0.0f; Y(0, 3) = 0.0f;
+//     Y(1, 0) = 1.0f; Y(1, 1) = 2.0f; Y(1, 2) = 3.0f; Y(1, 3) = 5.0f;
+//     Y(2, 0) = 0.0f; Y(2, 1) = 0.0f; Y(2, 2) = 0.0f; Y(2, 3) = 0.0f;
+//     Matrix2Xi E(2, 3);
+//     E(0, 0) = 0; E(0, 1) = 1; E(0, 2) = 2;
+//     E(1, 0) = 1; E(1, 1) = 2; E(1, 2) = 3;
+//     auto [startPts, endPts] = nearest_points_line_segments(Y, E);
+//     cout << "startPts" << endl;
+//     cout << startPts << endl << endl;
+//     cout << "endPts" << endl;
+//     cout << endPts << endl << endl;
 
-    exit(1);
-}
+//     exit(1);
+// }
 
 PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
@@ -669,7 +669,8 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& mask,
         const PointCloud<PointXYZ>::Ptr template_cloud,
         const Matrix2Xi& template_edges,
-        bool interation_constrain,
+        const bool self_intersection,
+        const bool interation_constrain,
         const std::vector<CDCPD::FixedPoint>& fixed_points
         )
 {
@@ -753,7 +754,7 @@ CDCPD::Output CDCPD::operator()(
     // ???: most likely not 1.0
     Optimizer opt(original_template, Y, 1.00);
 
-    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, interation_constrain); // TODO perhaps optionally disable optimization?
+    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
 #ifdef DEBUG
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
 #endif

@@ -15,8 +15,8 @@
 // std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
 // nearest_points_and_normal(const Eigen::Matrix3Xf& last_template);
 
-std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-    nearest_points_line_segments(const Eigen::Matrix3Xf& last_template, const Eigen::Matrix2Xi& E);
+// std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
+//    nearest_points_line_segments(const Eigen::Matrix3Xf& last_template, const Eigen::Matrix2Xi& E);
 
 class Optimizer
 {
@@ -26,6 +26,7 @@ public:
     Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf& Y,
                                 const Eigen::Matrix2Xi& E,
                                 const std::vector<CDCPD::FixedPoint>& fixed_points,
+                                const bool self_intersection = true,
                                 const bool interation_constrain = true);
 private:
     bool all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>& fixed_points) const;

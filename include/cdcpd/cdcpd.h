@@ -16,17 +16,17 @@
 // #define ENTIRE
 // #endif
 
-// #ifndef ROPE
-// #define ROPE
-// #endif
+#ifndef ROPE
+#define ROPE
+#endif
 
 // #ifndef NORMAL
 // #define NORMAL
 // #endif
 
-// #ifndef COMP
-// #define COMP
-// #endif
+#ifndef COMP
+#define COMP
+#endif
 
 // #ifndef CYLINDER_INTER
 // #define CYLINDER_INTER
@@ -68,14 +68,15 @@ public:
           bool _use_recovery = true);
 
     Output operator()(
-         const cv::Mat& rgb, // RGB image
-         const cv::Mat& depth, // Depth image
-         const cv::Mat& mask,
-         const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-         const Eigen::Matrix2Xi& template_edges,
-         bool interation_constrain = true,
-         const std::vector<FixedPoint>& fixed_points = std::vector<FixedPoint>()
-         );
+        const cv::Mat& rgb, // RGB image
+        const cv::Mat& depth, // Depth image
+        const cv::Mat& mask,
+        const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+        const Eigen::Matrix2Xi& template_edges,
+        const bool self_intersection = true,
+        const bool interation_constrain = true,
+        const std::vector<FixedPoint>& fixed_points = std::vector<FixedPoint>()
+        );
 
 private:
     Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices,
