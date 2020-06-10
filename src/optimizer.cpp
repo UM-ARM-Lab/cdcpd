@@ -9,6 +9,8 @@ using Eigen::Vector3f;
 #include <iostream>
 using std::cout;
 using std::endl;
+using std::min;
+using std::max;
 
 #ifdef CYL1
 // interaction_cylinder.bag
@@ -187,16 +189,25 @@ std::tuple<Matrix3Xf, Matrix3Xf>
     nearest_points_line_segments(const Matrix3Xf& last_template, const Matrix2Xi& E) {
     // find the nearest points on the line segments
     // refer to the website https://math.stackexchange.com/questions/846054/closest-points-on-two-line-segments
-    Matrix3Xf startPts(3, E.cols()*E.cols()); // Matrix: 3 * M^2: startPts(E*cols()*i + j) is the nearest point on edge i w.r.t. j
-    Matrix3Xf endPts(3, E.cols()*E.cols()); // Matrix: 3 * M^2: endPts(E*cols()*i + j) is the nearest point on edge j w.r.t. i
+    Matrix3Xf startPts(3, E.cols()*E.cols()); // Matrix: 3 * E^2: startPts.col(E*cols()*i + j) is the nearest point on edge i w.r.t. j
+    Matrix3Xf endPts(3, E.cols()*E.cols()); // Matrix: 3 * E^2: endPts.col(E*cols()*i + j) is the nearest point on edge j w.r.t. i
     for (int i = 0; i < E.cols(); ++i)
     {
         Vector3f P1 = last_template.col(E(0, i));
         Vector3f P2 = last_template.col(E(1, i));
-        for (int j = 0; j < E.col(); ++i)
+        cout << "P1:" << endl;
+        cout << P1 << endl << endl;
+        cout << "P2:" << endl;
+        cout << P2 << endl << endl;
+        for (int j = 0; j < E.cols(); ++j)
         {
             Vector3f P3 = last_template.col(E(0, j));
             Vector3f P4 = last_template.col(E(1, j));
+            
+            cout << "P3:" << endl;
+            cout << P3 << endl << endl;
+            cout << "P4:" << endl;
+            cout << P4 << endl << endl;
 
             float R21 = (P2-P1).squaredNorm();
             float R22 = (P4-P3).squaredNorm();
@@ -204,11 +215,26 @@ std::tuple<Matrix3Xf, Matrix3Xf>
             float D3121 = (P3-P1).dot(P2-P1);
             float D4331 = (P4-P3).dot(P3-P1);
 
+            cout << "original s:" << (-D4321*D4331+D3121*R22)/(R21*R22-D4321*D4321) << endl;
+            cout << "original t:" << (D4321*D3121-D4331*R21)/(R21*R22-D4321*D4321) << endl;
+
+            float s = min(max((-D4321*D4331+D3121*R22)/(R21*R22-D4321*D4321), 0.0f), 1.0f);
+            float t = min(max((D4321*D3121-D4331*R21)/(R21*R22-D4321*D4321), 0.0f), 1.0f);
+            
+            cout << "s: " << s << endl;
+            cout << "t: " << t << endl;
+
+            for (int dim = 0; dim < 3; ++dim)
+            {
+                startPts(dim, E.cols()*i+j) = (1-s)*P1(dim)+s*P2(dim);
+                endPts(dim, E.cols()*i+j) = (1-t)*P3(dim)+t*P4(dim);
+            }
             // TODO: complete it
             //       check the correctness
             //       run it
         }
     }
+    return {startPts, endPts};
 }
 
 // TODO do setup here
@@ -264,9 +290,10 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 
         // Add interaction constraints
 
-#ifdef CYLINDER_INTER
+
         if (interation_constrain)
         {
+#ifdef CYLINDER_INTER
             cout << "added constrain" << endl;
             for (ssize_t i = 0; i < num_vectors; ++i) {
                 model.addConstr(
@@ -274,8 +301,8 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                                 (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
                                 (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0, "interaction constrain for point " +std::to_string(i));
             }
-        }
 #endif
+        }
 
 
         Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?

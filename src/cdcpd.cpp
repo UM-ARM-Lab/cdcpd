@@ -51,6 +51,23 @@ using pcl::PointXYZRGB;
 
 std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 
+void test_nearest_line() {
+    Matrix3Xf Y(3, 4);
+    Y(0, 0) = 0.0f; Y(0, 1) = 1.0f; Y(0, 2) = 1.0f; Y(0, 3) = 0.0f;
+    Y(1, 0) = 1.0f; Y(1, 1) = 0.0f; Y(1, 2) = 1.0f; Y(1, 3) = 0.0f;
+    Y(2, 0) = 0.0f; Y(2, 1) = 0.0f; Y(2, 2) = 0.0f; Y(2, 3) = 0.0f;
+    Matrix2Xi E(2, 3);
+    E(0, 0) = 0; E(0, 1) = 1; E(0, 2) = 2;
+    E(1, 0) = 1; E(1, 1) = 2; E(1, 2) = 3;
+    auto [startPts, endPts] = nearest_points_line_segments(Y, E);
+    cout << "startPts" << endl;
+    cout << startPts << endl << endl;
+    cout << "endPts" << endl;
+    cout << endPts << endl << endl;
+
+    exit(1);
+}
+
 PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
     PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);

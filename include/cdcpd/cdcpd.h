@@ -36,6 +36,8 @@
 // #define CYL_CLOTH4
 // #endif
 
+void test_nearest_line();
+
 Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
                                      int lle_neighbors,
                                      double reg);
