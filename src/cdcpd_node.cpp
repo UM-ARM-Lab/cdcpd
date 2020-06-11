@@ -212,7 +212,8 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
 
 int main(int argc, char* argv[])
 {
-    test_lle();
+    // test_nearest_line();
+    // test_lle();
     // ENHANCE: more smart way to get Y^0 and E
     ros::init(argc, argv, "cdcpd_ros_node");
     cout << "Starting up..." << endl;
@@ -221,11 +222,11 @@ int main(int argc, char* argv[])
 
     // initial connectivity model of rope
     int points_on_rope = 50;
-    float rope_length = 1.0;
+    float rope_length = 0.95f;
     MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
     template_vertices.setZero();
-    template_vertices.row(1).setLinSpaced(points_on_rope, -rope_length, 0);
-    template_vertices.row(2).array() += 1.0f;
+    template_vertices.row(0).setLinSpaced(points_on_rope, -rope_length/2, rope_length/2);
+    template_vertices.row(2).array() += 1.4f;
     MatrixXi template_edges(2, points_on_rope - 1);
     template_edges(0, 0) = 0;
     template_edges(1, template_edges.cols() - 1) = points_on_rope - 1;
@@ -410,7 +411,7 @@ int main(int argc, char* argv[])
 
     CDCPD cdcpd(template_cloud, P_mat, false);
 #ifdef COMP
-    CDCPD cdcpd_without_constrain(template_cloud, P_mat);
+    CDCPD cdcpd_without_constrain(template_cloud, P_mat, false);
 #endif
 
     bag.close();
@@ -525,13 +526,13 @@ int main(int argc, char* argv[])
 #endif
         if (use_grippers)
         {
-            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, true, {left_gripper, right_gripper});
+            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, true, false, {left_gripper, right_gripper});
         }
         else
         {
-            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges);
+            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, true, false);
 #ifdef COMP
-            out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false);
+            out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
 #endif
         }
 
