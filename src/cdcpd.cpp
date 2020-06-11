@@ -198,11 +198,11 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(0.5), // TODO make configurable?
-    beta(1), // TODO make configurable?
+    alpha(25), // TODO make configurable?
+    beta(0.5), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
-    start_lambda(1.0), // TODO make configurable?
+    start_lambda(5.0), // TODO make configurable?
     annealing_factor(0.6), // TODO make configurable?
     max_iterations(100), // TODO make configurable?
     use_recovery(_use_recovery)
