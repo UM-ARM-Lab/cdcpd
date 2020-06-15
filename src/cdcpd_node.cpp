@@ -293,8 +293,9 @@ int main(int argc, char* argv[])
     ros::Publisher right_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/right_gripper_prior", 1);
     ros::Publisher cylinder_pub = ph.advertise<visualization_msgs::Marker>( "cylinder", 0 );
     ros::Publisher order_pub = ph.advertise<visualization_msgs::Marker>("order", 10);
-
-
+#ifdef COMP
+    ros::Publisher order_without_constrain_pub = ph.advertise<visualization_msgs::Marker>("order_without_constrain", 10);
+#endif
 
     BagSubscriber<sensor_msgs::Image> rgb_sub, depth_sub;
 
@@ -324,9 +325,6 @@ int main(int argc, char* argv[])
 #endif
 #ifdef CYL9
     bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_9.bag", rosbag::bagmode::Read);
-#endif
-#ifdef NORMAL
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal.bag", rosbag::bagmode::Read);
 #endif
 #ifdef NMCLOTH1
     bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth1.bag", rosbag::bagmode::Read);
@@ -409,9 +407,9 @@ int main(int argc, char* argv[])
         }
     }
 
-    CDCPD cdcpd(template_cloud, P_mat, false);
+    CDCPD cdcpd(template_cloud, template_edges, P_mat, false);
 #ifdef COMP
-    CDCPD cdcpd_without_constrain(template_cloud, P_mat, false);
+    CDCPD cdcpd_without_constrain(template_cloud, template_edges, P_mat, false);
 #endif
 
     bag.close();
@@ -450,7 +448,7 @@ int main(int argc, char* argv[])
     CDCPD::FixedPoint right_gripper = { right_pos, 0 };
 
     std::string stepper;
-    ros::Rate rate(15); // 5 hz, maybe allow changes, or mimicking bag?
+    ros::Rate rate(30); // 5 hz, maybe allow changes, or mimicking bag?
 
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend())
     {
@@ -526,11 +524,11 @@ int main(int argc, char* argv[])
 #endif
         if (use_grippers)
         {
-            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, true, false, {left_gripper, right_gripper});
+            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, true, false, {left_gripper, right_gripper});
         }
         else
         {
-            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, template_edges, true, false);
+            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, true, false);
 #ifdef COMP
             out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
 #endif
@@ -723,9 +721,23 @@ int main(int argc, char* argv[])
         order.pose.orientation.w = 1.0;
         order.id = 1;
         order.scale.x = 0.002;
-        order.color.b = 1.0;
+        order.color.r = 1.0;
         order.color.a = 1.0;
         auto pc_iter = out.gurobi_output->begin();
+
+#ifdef COMP
+        visualization_msgs::Marker order_without_constrain;
+        order_without_constrain.header.frame_id = frame_id;
+        order_without_constrain.header.stamp = ros::Time();
+        order_without_constrain.ns = "line_order_comp";
+        order_without_constrain.action = visualization_msgs::Marker::ADD;
+        order_without_constrain.pose.orientation.w = 1.0;
+        order_without_constrain.id = 2;
+        order_without_constrain.scale.x = 0.002;
+        order_without_constrain.color.b = 1.0;
+        order_without_constrain.color.a = 1.0;
+        auto pc_iter_comp = out_without_constrain.gurobi_output->begin();
+#endif
 
 #ifdef ROPE
 
@@ -739,6 +751,18 @@ int main(int argc, char* argv[])
 
             order.points.push_back(p);
         }
+
+#ifdef COMP
+        order_without_constrain.type = visualization_msgs::Marker::LINE_STRIP;
+        for (int i = 0; i < points_on_rope; ++i, ++pc_iter_comp) {
+            geometry_msgs::Point p;
+            p.x = pc_iter_comp->x;
+            p.y = pc_iter_comp->y;
+            p.z = pc_iter_comp->z;
+
+            order_without_constrain.points.push_back(p);
+        }
+#endif
 
 #else
 
@@ -808,9 +832,81 @@ int main(int argc, char* argv[])
                 }
             }
         }
+
+#ifdef COMP
+        order_without_constrain.type = visualization_msgs::Marker::LINE_LIST;
+        for (int row = 0; row < cloth_height_num; ++row) {
+            for (int col = 0; col < cloth_width_num; ++col) {
+                if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
+                    geometry_msgs::Point cur;
+                    geometry_msgs::Point right;
+                    geometry_msgs::Point below;
+                    int cur_ind = col*cloth_height_num + row;
+                    int right_ind = cur_ind + cloth_height_num;
+                    int below_ind = cur_ind + 1;
+
+                    cur.x = (pc_iter_comp+cur_ind)->x;
+                    cur.y = (pc_iter_comp+cur_ind)->y;
+                    cur.z = (pc_iter_comp+cur_ind)->z;
+
+                    right.x = (pc_iter_comp+right_ind)->x;
+                    right.y = (pc_iter_comp+right_ind)->y;
+                    right.z = (pc_iter_comp+right_ind)->z;
+
+                    below.x = (pc_iter_comp+below_ind)->x;
+                    below.y = (pc_iter_comp+below_ind)->y;
+                    below.z = (pc_iter_comp+below_ind)->z;
+
+                    order_without_constrain.points.push_back(cur);
+                    order_without_constrain.points.push_back(right);
+
+                    order_without_constrain.points.push_back(cur);
+                    order_without_constrain.points.push_back(below);
+                }
+                else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
+                    geometry_msgs::Point cur;
+                    geometry_msgs::Point right;
+                    int cur_ind = col*cloth_height_num + row;
+                    int right_ind = cur_ind + cloth_height_num;
+
+                    cur.x = (pc_iter_comp+cur_ind)->x;
+                    cur.y = (pc_iter_comp+cur_ind)->y;
+                    cur.z = (pc_iter_comp+cur_ind)->z;
+
+                    right.x = (pc_iter_comp+right_ind)->x;
+                    right.y = (pc_iter_comp+right_ind)->y;
+                    right.z = (pc_iter_comp+right_ind)->z;
+
+                    order_without_constrain.points.push_back(cur);
+                    order_without_constrain.points.push_back(right);
+                }
+                else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
+                    geometry_msgs::Point cur;
+                    geometry_msgs::Point below;
+                    int cur_ind = col*cloth_height_num + row;
+                    int below_ind = cur_ind + 1;
+
+                    cur.x = (pc_iter_comp+cur_ind)->x;
+                    cur.y = (pc_iter_comp+cur_ind)->y;
+                    cur.z = (pc_iter_comp+cur_ind)->z;
+
+                    below.x = (pc_iter_comp+below_ind)->x;
+                    below.y = (pc_iter_comp+below_ind)->y;
+                    below.z = (pc_iter_comp+below_ind)->z;
+
+                    order_without_constrain.points.push_back(cur);
+                    order_without_constrain.points.push_back(below);
+                }
+            }
+        }
+#endif
+
 #endif
 
         order_pub.publish(order);
+#ifdef COMP
+        order_without_constrain_pub.publish(order_without_constrain);
+#endif
 
         auto time = ros::Time::now();
 #ifdef ENTIRE
