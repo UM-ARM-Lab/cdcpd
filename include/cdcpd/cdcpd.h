@@ -12,20 +12,20 @@
 // #define DEBUG
 // #endif
 
-// #ifndef ENTIRE
-// #define ENTIRE
-// #endif
-
-#ifndef ROPE
-#define ROPE
+#ifndef ENTIRE
+#define ENTIRE
 #endif
 
-// #ifndef NORMAL
-// #define NORMAL
+// #ifndef ROPE
+// #define ROPE
 // #endif
 
-#ifndef COMP
-#define COMP
+// #ifndef COMP
+// #define COMP
+// #endif
+
+#ifndef CPDLOG
+#define CPDLOG
 #endif
 
 // #ifndef CYLINDER_INTER
@@ -80,10 +80,9 @@ public:
 
 private:
     Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices,
-                                            const Eigen::Matrix3f& intrinsics,
                                             const cv::Mat& depth,
                                             const cv::Mat& mask,
-                                            float k=1e1); // TODO this should be configurable
+                                            float k); // TODO this should be configurable
     // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
     // and not have to pass around intr in here
     Eigen::MatrixXf calcP(const int N,
@@ -108,6 +107,9 @@ private:
     Eigen::Vector3f last_upper_bounding_box;
     const int lle_neighbors;
     Eigen::MatrixXf m_lle;
+#ifdef CPDLOG
+    Eigen::MatrixXf L_lle;
+#endif
     const double tolerance;
     const double alpha;
     const double beta;
@@ -116,6 +118,7 @@ private:
     const double start_lambda;
     const double annealing_factor;
     const int max_iterations;
+    const float kvis;
     bool use_recovery;
 }; 
 

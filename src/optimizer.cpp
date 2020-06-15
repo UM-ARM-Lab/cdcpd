@@ -327,35 +327,35 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 
         if (self_intersection)
         {
-            cout << "added self intersection constrain" << endl;
-            auto [startPts, endPts] = nearest_points_line_segments(last_template, E);
-            for (int row = 0; row < E.cols(); ++row)
-            {
-                Vector3f P1 = last_template.col(E(0, row));
-                Vector3f P2 = last_template.col(E(1, row));
-                for (int col = 0; col < E.cols(); ++col)
-                {
-                    float s = startPts(3, row*E.cols() + col);
-                    float t = endPts(3, row*E.cols() + col);
-                    Vector3f P3 = last_template.col(E(0, col));
-                    Vector3f P4 = last_template.col(E(1, col));
-                    float l = (endPts.col(row*E.cols() + col).topRows(3) - startPts.col(row*E.cols() + col).topRows(3)).norm();
-                    if (!P1.isApprox(P3) && !P1.isApprox(P4) && !P2.isApprox(P3) && !P2.isApprox(P4) && l <= 0.10) {
-                        // model.addConstr((vars[E(0, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
-                        //                 (vars[E(0, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
-                        //                 (vars[E(0, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
-                        // model.addConstr((vars[E(1, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
-                        //                 (vars[E(1, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
-                        //                 (vars[E(1, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
-                        model.addConstr(((vars[E(0, col)*3 + 0]*(1-t) + vars[E(1, col)*3 + 0]*t) - (vars[E(0, row)*3 + 0]*(1-s) + vars[E(1, row)*3 + 0]*s))
-                                            *(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
-                                        ((vars[E(0, col)*3 + 1]*(1-t) + vars[E(1, col)*3 + 1]*t) - (vars[E(0, row)*3 + 1]*(1-s) + vars[E(1, row)*3 + 1]*s))
-                                            *(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
-                                        ((vars[E(0, col)*3 + 2]*(1-t) + vars[E(1, col)*3 + 2]*t) - (vars[E(0, row)*3 + 2]*(1-s) + vars[E(1, row)*3 + 2]*s))
-                                            *(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0.005 * 0.005);
-                    }
-                }
-            }
+            // cout << "added self intersection constrain" << endl;
+            // auto [startPts, endPts] = nearest_points_line_segments(last_template, E);
+            // for (int row = 0; row < E.cols(); ++row)
+            // {
+            //     Vector3f P1 = last_template.col(E(0, row));
+            //     Vector3f P2 = last_template.col(E(1, row));
+            //     for (int col = 0; col < E.cols(); ++col)
+            //     {
+            //         float s = startPts(3, row*E.cols() + col);
+            //         float t = endPts(3, row*E.cols() + col);
+            //         Vector3f P3 = last_template.col(E(0, col));
+            //         Vector3f P4 = last_template.col(E(1, col));
+            //         float l = (endPts.col(row*E.cols() + col).topRows(3) - startPts.col(row*E.cols() + col).topRows(3)).norm();
+            //         if (!P1.isApprox(P3) && !P1.isApprox(P4) && !P2.isApprox(P3) && !P2.isApprox(P4) && l <= 0.02) {
+            //             // model.addConstr((vars[E(0, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
+            //             //                 (vars[E(0, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
+            //             //                 (vars[E(0, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
+            //             // model.addConstr((vars[E(1, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
+            //             //                 (vars[E(1, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
+            //             //                 (vars[E(1, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
+            //             model.addConstr(((vars[E(0, col)*3 + 0]*(1-t) + vars[E(1, col)*3 + 0]*t) - (vars[E(0, row)*3 + 0]*(1-s) + vars[E(1, row)*3 + 0]*s))
+            //                                 *(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
+            //                             ((vars[E(0, col)*3 + 1]*(1-t) + vars[E(1, col)*3 + 1]*t) - (vars[E(0, row)*3 + 1]*(1-s) + vars[E(1, row)*3 + 1]*s))
+            //                                 *(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
+            //                             ((vars[E(0, col)*3 + 2]*(1-t) + vars[E(1, col)*3 + 2]*t) - (vars[E(0, row)*3 + 2]*(1-s) + vars[E(1, row)*3 + 2]*s))
+            //                                 *(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0.005 * 0.005);
+            //         }
+            //     }
+            // }
         }
 
 

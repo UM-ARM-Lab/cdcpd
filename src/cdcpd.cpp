@@ -68,6 +68,77 @@ std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 //     exit(1);
 // }
 
+double calculate_lle_reg(const MatrixXf& L, const Matrix3Xf pts_matrix) {
+    double reg = 0;
+    for (int ind = 0; ind < L.rows(); ++ind)
+    {
+        Matrix3Xf lle_pt(3,1);
+        lle_pt(0,0) = 0; lle_pt(1,0) = 0; lle_pt(2,0) = 0;
+        for (int nb_ind = 0; nb_ind < L.cols(); ++nb_ind)
+        {
+            lle_pt = lle_pt + L(ind, nb_ind) * pts_matrix.col(nb_ind);
+        }
+        reg += (lle_pt - pts_matrix.col(ind)).squaredNorm();
+    }
+    return reg;
+}
+
+double calculate_prob_reg(const Matrix3Xf& X, const Matrix3Xf& TY, const MatrixXf& G, const MatrixXf& W, const double sigma2, const VectorXf Y_emit_prior) {
+    int M = TY.cols();
+    int N = X.cols();
+    int D = X.rows();
+    MatrixXf P(M, N); // end = std::chrono::system_clock::now(); cout << "526: " << (end-start).count() << endl;
+    for (int i = 0; i < M; ++i) {
+        for (int j = 0; j < N; ++j) {
+            P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+        }
+    }
+
+    float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+    float w = 0.1;
+    c *= w / (1 - w);
+    c *= static_cast<double>(M) / N;
+
+    P = (-P / (2 * sigma2)).array().exp().matrix();
+    P.array().colwise() *= Y_emit_prior.array();
+
+    RowVectorXf den = P.colwise().sum();
+    den.array() += c;
+
+    P = P.array().rowwise() / den.array();
+
+    double reg = 0.0;
+    for (int i = 0; i < M; ++i)
+    {
+        for (int j = 0; j < N; ++j)
+        {
+            reg += P(i,j)*((X.col(j) - (TY.col(i) + (G*W).transpose().col(i))).squaredNorm());
+        }
+    }
+    reg = reg/(2*sigma2);
+    reg = reg + P.sum()*3.0*log(sigma2)/2.0;
+    return reg;
+}
+
+double calculate_prob_reg(const Matrix3Xf& X, const Matrix3Xf& TY, const MatrixXf& G, const MatrixXf& W, const double sigma2, const VectorXf Y_emit_prior, const MatrixXf& P) {
+    int M = TY.cols();
+    int N = X.cols();
+    int D = X.rows();
+
+    double reg = 0.0;
+    Matrix3Xf Y = TY + (G*W).transpose();
+    for (int i = 0; i < M; ++i)
+    {
+        for (int j = 0; j < N; ++j)
+        {
+            reg += P(i,j)*((X.col(j) - Y.col(i))).squaredNorm();
+        }
+    }
+    reg = reg/(2*sigma2);
+    reg = reg + P.sum()*3.0*log(sigma2)/2.0;
+    return reg;
+}
+
 PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
     PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
@@ -198,15 +269,20 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(25), // TODO make configurable?
-    beta(0.5), // TODO make configurable?
+    alpha(0.5), // TODO make configurable?
+    beta(1.0), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
-    start_lambda(5.0), // TODO make configurable?
+    start_lambda(1.0), // TODO make configurable?
     annealing_factor(0.6), // TODO make configurable?
     max_iterations(100), // TODO make configurable?
+    kvis(1e1),
     use_recovery(_use_recovery)
 {
+    pcl::KdTreeFLANN<PointXYZ> kdtree;
+    kdtree.setInputCloud (template_cloud);
+    // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+    MatrixXf L = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
 }
 
 /*
@@ -214,7 +290,6 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
  * Implement Eq. (7) in the paper
  */
 Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
-                                 const Eigen::Matrix3f& intrinsics,
                                  const cv::Mat& depth,
                                  const cv::Mat& mask,
                                  float k)
@@ -542,7 +617,7 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
     // intr: (3, 3) intrinsic matrix of the camera
 
     const Matrix3Xf& X = downsampled_cloud->getMatrixXfMap().topRows(3);
-    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, intr, depth, mask);
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
     /// CPD step
 
     // G: (M, M) Guassian kernel matrix
@@ -557,6 +632,12 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
 
     std::chrono::time_point<std::chrono::system_clock> start, end;
     start = std::chrono::system_clock::now();
+
+#ifdef CPDLOG
+    cout << "\nCPD loop\n";
+    cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << endl;
+#endif
+
     while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
@@ -656,6 +737,17 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         {
             sigma2 = tolerance / 10;
         }
+
+#ifdef CPDLOG
+        double prob_reg = calculate_prob_reg(X, TY, G, W, sigma2, Y_emit_prior, P);
+        double lle_reg = start_lambda / 2 * ((TY*m_lle*TY.transpose()).trace() + 2*(W.transpose()*G*m_lle*TY).trace() + (W.transpose()*G*m_lle*G*W).trace());
+        double cpd_reg = alpha * (W.transpose()*G*W).trace()/2;
+        cout << std::setw(20) << iterations;
+        cout << std::setw(20) << prob_reg;
+        cout << std::setw(20) << cpd_reg;
+        cout << std::setw(20) << lle_reg << endl;
+#endif
+
 
         error = std::abs(sigma2 - qprev);
         iterations++;
