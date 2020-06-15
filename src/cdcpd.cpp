@@ -68,6 +68,19 @@ std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 //     exit(1);
 // }
 
+double abs_derivative(double x) {
+    double eps = 0.000000001;
+    if (x < eps && x > -eps) {
+        return 0.0;
+    }
+    else if (x > eps) {
+        return 1.0;
+    }
+    else if (x < -eps) {
+        return -1.0;
+    }
+}
+
 double calculate_lle_reg(const MatrixXf& L, const Matrix3Xf pts_matrix) {
     double reg = 0;
     for (int ind = 0; ind < L.rows(); ++ind)
@@ -257,14 +270,14 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
     return M;
 }
 
-void Qconstructor(Matrix2Xi& E, vector<MatrixXi>& Q, int M) {
+void Qconstructor(const Matrix2Xi& E, vector<MatrixXf>& Q, int M) {
     for (int i = 0; i < E.cols(); ++i)
     {
-        MatrixXi Qi(M, M);
-        Qi(E(0, i), E(0, i)) = 1;
-        Qi(E(1, i), E(1, i)) = 1;
-        Qi(E(0, i), E(1, i)) = -1;
-        Qi(E(1, i), E(0, i)) = -1;
+        MatrixXf Qi = MatrixXf::Zero(M, M);
+        Qi(E(0, i), E(0, i)) = 1.0f;
+        Qi(E(1, i), E(1, i)) = 1.0f;
+        Qi(E(0, i), E(1, i)) = -1.0f;
+        Qi(E(1, i), E(0, i)) = -1.0f;
         Q.push_back(Qi);
     }
 }
@@ -285,12 +298,13 @@ CDCPD::CDCPD(
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(0.5), // TODO make configurable?
+    alpha(50), // TODO make configurable?
     beta(1.0), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
     start_lambda(1.0), // TODO make configurable?
     annealing_factor(0.6), // TODO make configurable?
+    k(10.0),
     max_iterations(100), // TODO make configurable?
     kvis(1e1),
     use_recovery(_use_recovery)
@@ -733,7 +747,15 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();cout << "560: " << (end-start).count() << endl;
-        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;
+        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;        
+        for (int i = 0; i < template_edges.cols(); ++i)
+        {
+            MatrixXf eit = Y*Q[i]*Y.transpose();
+            MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
+            double delta = abs_derivative(eit.trace()-ei0.trace());
+            A = A + k*sigma2*delta*Q[i]*G;
+            B = B - k*sigma2*delta*Q[i]*Y.transpose();
+        }
         MatrixXf W = A.householderQr().solve(B); //end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
 
         TY = Y + (G * W).transpose();// end = std::chrono::system_clock::now(); cout << "564: " << (end-start).count() << endl;

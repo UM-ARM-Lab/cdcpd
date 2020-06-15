@@ -16,17 +16,17 @@
 #define ENTIRE
 #endif
 
-// #ifndef ROPE
-// #define ROPE
-// #endif
+#ifndef ROPE
+#define ROPE
+#endif
 
 // #ifndef COMP
 // #define COMP
 // #endif
 
-#ifndef CPDLOG
-#define CPDLOG
-#endif
+// #ifndef CPDLOG
+// #define CPDLOG
+// #endif
 
 // #ifndef CYLINDER_INTER
 // #define CYLINDER_INTER
@@ -102,7 +102,7 @@ private:
 
     PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
-    const Eigen::Matrix2Xi template_edges,
+    const Eigen::Matrix2Xi template_edges;
 
     // P_matrix: (3, 4) camera matrix
     const cv::Mat P_matrix;
@@ -120,10 +120,11 @@ private:
     const double initial_sigma_scale;
     const double start_lambda;
     const double annealing_factor;
+    const double k;
     const int max_iterations;
     const float kvis;
     bool use_recovery;
-    std::vector<Eigen::MatrixXi> Q;
+    std::vector<Eigen::MatrixXf> Q;
 }; 
 
 #endif
