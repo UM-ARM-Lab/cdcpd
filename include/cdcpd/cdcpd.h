@@ -63,16 +63,18 @@ public:
         int template_index;
     };
 
-    CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
-          const cv::Mat& _P_matrix,
-          bool _use_recovery = true);
+    CDCPD(
+        pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+        const Eigen::Matrix2Xi& _template_edges,
+        const cv::Mat& _P_matrix,
+        bool _use_recovery = true
+        );
 
     Output operator()(
         const cv::Mat& rgb, // RGB image
         const cv::Mat& depth, // Depth image
         const cv::Mat& mask,
         const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-        const Eigen::Matrix2Xi& template_edges,
         const bool self_intersection = true,
         const bool interation_constrain = true,
         const std::vector<FixedPoint>& fixed_points = std::vector<FixedPoint>()
@@ -100,6 +102,7 @@ private:
 
     PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
+    const Eigen::Matrix2Xi template_edges,
 
     // P_matrix: (3, 4) camera matrix
     const cv::Mat P_matrix;
@@ -120,6 +123,7 @@ private:
     const int max_iterations;
     const float kvis;
     bool use_recovery;
+    std::vector<Eigen::MatrixXi> Q;
 }; 
 
 #endif

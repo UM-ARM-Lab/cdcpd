@@ -257,11 +257,27 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
     return M;
 }
 
-CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
-             const Mat& _P_matrix,
-             bool _use_recovery) :
+void Qconstructor(Matrix2Xi& E, vector<MatrixXi>& Q, int M) {
+    for (int i = 0; i < E.cols(); ++i)
+    {
+        MatrixXi Qi(M, M);
+        Qi(E(0, i), E(0, i)) = 1;
+        Qi(E(1, i), E(1, i)) = 1;
+        Qi(E(0, i), E(1, i)) = -1;
+        Qi(E(1, i), E(0, i)) = -1;
+        Q.push_back(Qi);
+    }
+}
+
+CDCPD::CDCPD(
+            PointCloud<PointXYZ>::ConstPtr template_cloud,
+            const Matrix2Xi& _template_edges,
+            const Mat& _P_matrix,
+            bool _use_recovery
+            ):
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
+    template_edges(_template_edges),
     P_matrix(_P_matrix),
     last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?
     last_upper_bounding_box(6.0, 6.0, 6.0), // TODO make configurable?
@@ -283,6 +299,8 @@ CDCPD::CDCPD(PointCloud<PointXYZ>::ConstPtr template_cloud,
     kdtree.setInputCloud (template_cloud);
     // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
     MatrixXf L = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+
+    Qconstructor(template_edges, Q, original_template.cols());
 }
 
 /*
@@ -760,7 +778,6 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& depth,
         const cv::Mat& mask,
         const PointCloud<PointXYZ>::Ptr template_cloud,
-        const Matrix2Xi& template_edges,
         const bool self_intersection,
         const bool interation_constrain,
         const std::vector<CDCPD::FixedPoint>& fixed_points
