@@ -304,6 +304,11 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 
     rosbag::Bag bag;
+
+
+    const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
+    const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
+    const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
     auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
     bag.open(folder + bagfile + ".bag", rosbag::bagmode::Read);
@@ -407,9 +412,9 @@ int main(int argc, char* argv[])
         }
     }
 
-    CDCPD cdcpd(template_cloud, template_edges, P_mat, false);
+    CDCPD cdcpd(template_cloud, template_edges, P_mat, false, alpha, lambda, k_spring);
 #ifdef COMP
-    CDCPD cdcpd_without_constrain(template_cloud, template_edges, P_mat, false);
+    CDCPD cdcpd_without_constrain(template_cloud, template_edges, P_mat, false, alpha, lambda, k_spring);
 #endif
 
     bag.close();
