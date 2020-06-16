@@ -67,7 +67,10 @@ public:
         pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
         const Eigen::Matrix2Xi& _template_edges,
         const cv::Mat& _P_matrix,
-        bool _use_recovery = true
+        const bool _use_recovery = true,
+        const double alpha = 0.5,
+        const double lambda = 1.0,
+        const double k = 100.0
         );
 
     Output operator()(

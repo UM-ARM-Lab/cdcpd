@@ -286,7 +286,10 @@ CDCPD::CDCPD(
             PointCloud<PointXYZ>::ConstPtr template_cloud,
             const Matrix2Xi& _template_edges,
             const Mat& _P_matrix,
-            bool _use_recovery
+            const bool _use_recovery,
+            const double _alpha,
+            const double _lambda,
+            const double _k
             ):
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
@@ -298,13 +301,13 @@ CDCPD::CDCPD(
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(50), // TODO make configurable?
+    alpha(_alpha), // TODO make configurable?
     beta(1.0), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
-    start_lambda(1.0), // TODO make configurable?
+    start_lambda(_lambda), // TODO make configurable?
     annealing_factor(0.6), // TODO make configurable?
-    k(10.0),
+    k(_k),
     max_iterations(100), // TODO make configurable?
     kvis(1e1),
     use_recovery(_use_recovery)
