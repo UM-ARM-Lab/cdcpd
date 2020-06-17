@@ -69,16 +69,17 @@ std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
 // }
 
 double abs_derivative(double x) {
-    double eps = 0.000000001;
-    if (x < eps && x > -eps) {
-        return 0.0;
-    }
-    else if (x > eps) {
-        return 1.0;
-    }
-    else if (x < -eps) {
-        return -1.0;
-    }
+    return x;
+    // double eps = 0.000000001;
+    // if (x < eps && x > -eps) {
+    //     return 0.0;
+    // }
+    // else if (x > eps) {
+    //     return 1.0;
+    // }
+    // else if (x < -eps) {
+    //     return -1.0;
+    // }
 }
 
 double calculate_lle_reg(const MatrixXf& L, const Matrix3Xf pts_matrix) {
@@ -282,12 +283,124 @@ void Qconstructor(const Matrix2Xi& E, vector<MatrixXf>& Q, int M) {
     }
 }
 
+void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const MatrixXf& G, const MatrixXf& L, const double sigma2, const double alpha, const double lambda, MatrixXf& W) {
+    GRBEnv& env = getGRBEnv();
+    env.set(GRB_IntParam_OutputFlag, 0);
+    GRBModel model(env);
+    model.set("ScaleFlag", "2");
+
+    const ssize_t num_vars = 3 * X.cols();
+        
+    // Note that variable bound is important, without a bound, Gurobi defaults to 0, which is clearly unwanted
+    const std::vector<double> lb(num_vars, -GRB_INFINITY);
+    const std::vector<double> ub(num_vars, GRB_INFINITY);
+    vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int) num_vars);
+    model.update();
+
+    GRBQuadExpr objective_fn(0);
+    for (ssize_t m = 0; m < Y.cols(); ++m)
+    {
+        for (ssize_t n = 0; n < X.cols(); ++n)
+        {
+            auto GWx(0);
+            auto GWy(0);
+            auto GWz(0);
+            for (ssize_t i = 0; i < Y.cols(); ++i)
+            {
+                GWx += G(m, i)*vars[i * 3 + 0];
+                GWy += G(m, i)*vars[i * 3 + 1];
+                GWz += G(m, i)*vars[i * 3 + 2];
+            }
+            auto diffx = X(0, n) - (Y(0, m) + GWx);
+            auto diffy = X(1, n) - (Y(1, m) + GWy);
+            auto diffz = X(2, n) - (Y(2, m) + GWz);
+            objective_fn += (P(m, n) /sigma2) * (diffx * diffx + diffy * diffy + diffz * diffz);
+        }
+    }
+
+    for (ssize_t d = 0; d < 3; ++d)
+    {
+        for (ssize_t m = 0; m < Y.cols(); ++m)
+        {
+            auto WTG(0);
+            for (ssize_t i = 0; i < Y.cols(); ++i)
+            {
+                WTG += G(m, i)*vars[i * 3 + d];
+            }
+            auto WTGW = WTG * vars[m * 3 + d];
+            objective_fn += (alpha/2)*WTGW;
+        }
+    }
+
+    for (int m = 0; m < Y.cols(); ++m)
+    {
+        auto Tmx(0);
+        auto Tmy(0);
+        auto Tmz(0);
+        auto Tix(0);
+        auto Tiy(0);
+        auto Tiz(0);
+        for (ssize_t i = 0; i < Y.cols(); ++i)
+        {
+            Tmx += G(m, i)*vars[i * 3 + 0];
+            Tmy += G(m, i)*vars[i * 3 + 1];
+            Tmz += G(m, i)*vars[i * 3 + 2];
+        }
+        Tmx += Y(0, m);
+        Tmy += Y(1, m);
+        Tmz += Y(2, m);
+        for (ssize_t i = 0; i < L.cols(); ++i)
+        {
+            if (L(m, i) < 0.00000001 && L(m, i) > -0.00000001) {
+                for (ssize_t j = 0; j < Y.cols(); ++j)
+                {
+                    Tix += L(m, i)*G(m, j)*vars[j * 3 + 0];
+                    Tiy += L(m, i)*G(m, j)*vars[j * 3 + 1];
+                    Tiz += L(m, i)*G(m, j)*vars[j * 3 + 2];
+                }
+                Tix += L(m, i)*Y(0, i);
+                Tiy += L(m, i)*Y(1, i);
+                Tiz += L(m, i)*Y(2, i);
+            }
+        }
+        auto diffx = Tmx - Tix;
+        auto diffy = Tmy - Tiy;
+        auto diffz = Tmz - Tiz;
+        objective_fn += (lambda/2) * (diffx * diffx + diffy * diffy + diffz * diffz);
+    }
+    model.setObjective(objective_fn, GRB_MINIMIZE);
+    model.update();
+
+    // Find the optimal solution, and extract it
+    {
+        model.optimize();
+        if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL)
+        {
+            // std::cout << "Y" << std::endl;
+            // std::cout << Y << std::endl;
+            for (ssize_t i = 0; i < Y.cols(); i++)
+            {
+                W(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
+                W(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
+                W(2, i) = vars[i * 3 + 2].get(GRB_DoubleAttr_X);
+            }
+        }
+        else
+        {
+            std::cout << "Status: " << model.get(GRB_IntAttr_Status) << std::endl;
+            exit(-1);
+        }
+    }
+    delete[] vars;
+}
+
 CDCPD::CDCPD(
             PointCloud<PointXYZ>::ConstPtr template_cloud,
             const Matrix2Xi& _template_edges,
             const Mat& _P_matrix,
             const bool _use_recovery,
             const double _alpha,
+            const double _beta,
             const double _lambda,
             const double _k
             ):
@@ -302,7 +415,7 @@ CDCPD::CDCPD(
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
     alpha(_alpha), // TODO make configurable?
-    beta(1.0), // TODO make configurable?
+    beta(_beta), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
     start_lambda(_lambda), // TODO make configurable?
@@ -315,7 +428,7 @@ CDCPD::CDCPD(
     pcl::KdTreeFLANN<PointXYZ> kdtree;
     kdtree.setInputCloud (template_cloud);
     // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-    MatrixXf L = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+    L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
 
     Qconstructor(template_edges, Q, original_template.cols());
 }
@@ -750,16 +863,31 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();cout << "560: " << (end-start).count() << endl;
-        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;        
-        for (int i = 0; i < template_edges.cols(); ++i)
-        {
-            MatrixXf eit = Y*Q[i]*Y.transpose();
-            MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
-            double delta = abs_derivative(eit.trace()-ei0.trace());
-            A = A + k*sigma2*delta*Q[i]*G;
-            B = B - k*sigma2*delta*Q[i]*Y.transpose();
-        }
-        MatrixXf W = A.householderQr().solve(B); //end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
+        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;
+        MatrixXf W = A.householderQr().solve(B);
+        MatrixXf lastW = W;
+
+        int W_int = 0;
+        cout << std::setw(20) << "W solver loop";
+        cout << std::setw(20) << "W difference" << endl;
+        while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
+            lastW = W;
+            MatrixXf A_new = A;
+            MatrixXf B_new = B;
+            for (int i = 0; i < template_edges.cols(); ++i)
+            {
+                MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
+                MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
+                double delta = abs_derivative(eit.trace()-ei0.trace());
+                // double delta = -1.0;
+                A_new = A_new + k*sigma2*delta*Q[i]*G;
+                B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
+            }
+            W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
+            cout << std::setw(20) << W_int;
+            cout << std::setw(20) << (W-lastW).squaredNorm() << endl;
+            W_int++;
+        }   
 
         TY = Y + (G * W).transpose();// end = std::chrono::system_clock::now(); cout << "564: " << (end-start).count() << endl;
 

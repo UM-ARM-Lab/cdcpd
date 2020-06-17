@@ -69,6 +69,7 @@ public:
         const cv::Mat& _P_matrix,
         const bool _use_recovery = true,
         const double alpha = 0.5,
+        const double beta = 1.0,
         const double lambda = 1.0,
         const double k = 100.0
         );
@@ -113,9 +114,7 @@ private:
     Eigen::Vector3f last_upper_bounding_box;
     const int lle_neighbors;
     Eigen::MatrixXf m_lle;
-#ifdef CPDLOG
     Eigen::MatrixXf L_lle;
-#endif
     const double tolerance;
     const double alpha;
     const double beta;
