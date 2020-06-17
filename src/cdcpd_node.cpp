@@ -222,7 +222,7 @@ int main(int argc, char* argv[])
 
     // initial connectivity model of rope
     int points_on_rope = 50;
-    float rope_length = 0.95f;
+    float rope_length = 0.9f;
     MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
     template_vertices.setZero();
     template_vertices.row(0).setLinSpaced(points_on_rope, -rope_length/2, rope_length/2);
@@ -309,35 +309,10 @@ int main(int argc, char* argv[])
     const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
+    const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
     auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
     bag.open(folder + bagfile + ".bag", rosbag::bagmode::Read);
-/*
-#ifdef CYL4
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_4.bag", rosbag::bagmode::Read);
-#endif
-#ifdef CYL5
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_5.bag", rosbag::bagmode::Read);
-#endif
-#ifdef CYL6
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_6.bag", rosbag::bagmode::Read);
-#endif
-#ifdef CYL7
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_7.bag", rosbag::bagmode::Read);
-#endif
-#ifdef CYL8
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_8.bag", rosbag::bagmode::Read);
-#endif
-#ifdef CYL9
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/interaction_cylinder_9.bag", rosbag::bagmode::Read);
-#endif
-#ifdef NMCLOTH1
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth1.bag", rosbag::bagmode::Read);
-#endif
-#ifdef NMCLOTH2
-    bag.open("/home/deformtrack/catkin_ws/src/cdcpd_test/dataset/normal_cloth2.bag", rosbag::bagmode::Read);
-#endif
-*/
 
     std::vector<std::string> topics;
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
@@ -357,7 +332,7 @@ int main(int argc, char* argv[])
 
     for(rosbag::MessageInstance const m: view)
     {
-        cout << "topic: " << m.getTopic() << endl;
+        // cout << "topic: " << m.getTopic() << endl;
         if (m.getTopic() == topics[0])
         {
             sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
@@ -402,8 +377,8 @@ int main(int argc, char* argv[])
                     P_mat.at<double>(row, col) = info_msg_tmp.P[row*4+col];
                 }
             }
-            cout << "P matrix: " << endl;
-            cout << P_mat << endl << endl;
+            // cout << "P matrix: " << endl;
+            // cout << P_mat << endl << endl;
         }
         else
         {
@@ -412,9 +387,9 @@ int main(int argc, char* argv[])
         }
     }
 
-    CDCPD cdcpd(template_cloud, template_edges, P_mat, false, alpha, lambda, k_spring);
+    CDCPD cdcpd(template_cloud, template_edges, P_mat, false, alpha, beta, lambda, k_spring);
 #ifdef COMP
-    CDCPD cdcpd_without_constrain(template_cloud, template_edges, P_mat, false, alpha, lambda, k_spring);
+    CDCPD cdcpd_without_constrain(template_cloud, template_edges, P_mat, false, alpha, beta, lambda, k_spring);
 #endif
 
     bag.close();
@@ -457,6 +432,20 @@ int main(int argc, char* argv[])
 
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend())
     {
+        // if(kbhit())
+        // {
+        //     interprete key;
+        // }
+        // if (!pause)
+        // {
+        //     pause;
+        // }
+        // else
+        // {
+        //     rate.sleep();
+        // }
+
+
         if (stepper != "r") {
             cin >> stepper;
         }
