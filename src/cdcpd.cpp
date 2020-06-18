@@ -24,6 +24,7 @@
 // TODO rm
 #include <iostream>
 #include <fstream>
+#include <random>
 // end TODO
 
 using std::vector;
@@ -311,7 +312,7 @@ CDCPD::CDCPD(
     annealing_factor(0.6), // TODO make configurable?
     k(_k),
     max_iterations(100), // TODO make configurable?
-    kvis(1e1),
+    kvis(1e3),
     use_recovery(_use_recovery)
 {
     pcl::KdTreeFLANN<PointXYZ> kdtree;
@@ -641,20 +642,44 @@ point_clouds_from_images(const cv::Mat& depth_image,
         // pixel_coords };
 }
 
-Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
+void sample_X_points(const Matrix3Xf& Y, const VectorXf& Y_emit_prior, const double sigma2, PointCloud<PointXYZ>::Ptr& cloud) {
+    int N = 40;
+    for (int m = 0; m < Y.cols(); ++m)
+    {
+        int num_pts = int(float(N)*(1.0f-Y_emit_prior(m)));
+        std::default_random_engine generator;
+        std::normal_distribution<double> distrib_x(Y(0, m), sigma2);
+        std::normal_distribution<double> distrib_y(Y(1, m), sigma2);
+        std::normal_distribution<double> distrib_z(Y(2, m), sigma2);
+        
+        for (int i = 0; i < num_pts; ++i)
+        {
+            double x = distrib_x(generator);
+            double y = distrib_y(generator);
+            double z = distrib_z(generator);
+
+            cloud->push_back(PointXYZ(x, y, z));
+        }
+    }
+}
+
+Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
                      const Matrix3Xf& Y,
                      const cv::Mat& depth,
-                     const cv::Mat& mask,
-                     const Matrix3f& intr)
+                     const cv::Mat& mask)
 {
     // downsampled_cloud: PointXYZ pointer to downsampled point clouds
     // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
     // mask: CV_8U mask for segmentation label
-    // intr: (3, 3) intrinsic matrix of the camera
 
-    const Matrix3Xf& X = downsampled_cloud->getMatrixXfMap().topRows(3);
-    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
+    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
+    Eigen::VectorXf Y_emit_prior(Y.cols());
+    for (int i = 0; i < Y.cols(); ++i)
+    {
+        Y_emit_prior(i) = 1.0f;
+    }
+
     /// CPD step
 
     // G: (M, M) Guassian kernel matrix
@@ -752,29 +777,29 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
             + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();cout << "560: " << (end-start).count() << endl;
         MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;
         MatrixXf W = A.householderQr().solve(B);
-        MatrixXf lastW = W;
+        // MatrixXf lastW = W;
 
-        int W_int = 0;
-        cout << std::setw(20) << "W solver loop";
-        cout << std::setw(20) << "W difference" << endl;
-        while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
-            lastW = W;
-            MatrixXf A_new = A;
-            MatrixXf B_new = B;
-            for (int i = 0; i < template_edges.cols(); ++i)
-            {
-                MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
-                MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
-                double delta = abs_derivative(eit.trace()-ei0.trace());
-                // double delta = -1.0;
-                A_new = A_new + k*sigma2*delta*Q[i]*G;
-                B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
-            }
-            W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
-            cout << std::setw(20) << W_int;
-            cout << std::setw(20) << (W-lastW).squaredNorm() << endl;
-            W_int++;
-        }
+        // int W_int = 0;
+        // cout << std::setw(20) << "W solver loop";
+        // cout << std::setw(20) << "W difference" << endl;
+        // while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
+        //     lastW = W;
+        //     MatrixXf A_new = A;
+        //     MatrixXf B_new = B;
+        //     for (int i = 0; i < template_edges.cols(); ++i)
+        //     {
+        //         MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
+        //         MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
+        //         double delta = abs_derivative(eit.trace()-ei0.trace());
+        //         // double delta = -1.0;
+        //         A_new = A_new + k*sigma2*delta*Q[i]*G;
+        //         B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
+        //     }
+        //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
+        //     cout << std::setw(20) << W_int;
+        //     cout << std::setw(20) << (W-lastW).squaredNorm() << endl;
+        //     W_int++;
+        // }
 
         // MatrixXf W(M, D);
         // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
@@ -882,6 +907,12 @@ CDCPD::Output CDCPD::operator()(
 
     /// VoxelGrid filter downsampling
     PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
+    const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+    double sigma2 = 0.002;
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
+    cout << "P_vis:" << endl;
+    cout << Y_emit_prior << endl << endl;
+    sample_X_points(Y, Y_emit_prior, sigma2, cloud);
 
     pcl::VoxelGrid<PointXYZ> sor;
     cout << "Points in cloud before leaf: " << cloud->width << endl;
@@ -889,12 +920,13 @@ CDCPD::Output CDCPD::operator()(
     sor.setLeafSize(0.02f, 0.02f, 0.02f);
     sor.filter(*cloud_downsampled);
     cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
-    const Matrix3Xf& X = cloud_downsampled->getMatrixXfMap().topRows(3);
-    const Matrix3Xf& Y = template_cloud->getMatrixXfMap().topRows(3);
+    Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
+    // Add points to X according to the previous template
+
 #ifdef ENTIRE
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
 #endif
-    Eigen::Matrix3Xf TY = cpd(cloud_downsampled, Y, depth, mask, intr);
+    Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
 #ifdef DEBUG
     to_file(workingDir + "/cpp_entire_cloud.txt", entire);
     to_file(workingDir + "/cpp_downsample.txt", X);
@@ -928,7 +960,7 @@ CDCPD::Output CDCPD::operator()(
             // TODO there's potentially a lot of copying going on here. We should be able to avoid that.
             for (const Matrix3Xf& templ : matched_templates)
             {
-                Matrix3Xf proposed_recovery = cpd(cloud_downsampled, templ, depth, mask, intr);
+                Matrix3Xf proposed_recovery = cpd(cloud_downsampled->getMatrixXfMap().topRows(3), templ, depth, mask);
                 // TODO if we end up being able to disable optimization, we should not call this
                 proposed_recovery = opt(proposed_recovery, template_edges, fixed_points);
                 float proposal_cost = smooth_free_space_cost(proposed_recovery, intr, depth, mask);

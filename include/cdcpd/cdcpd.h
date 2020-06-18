@@ -98,11 +98,10 @@ private:
                           const Eigen::Matrix3Xf& X,
                           const Eigen::Matrix3Xf& TY,
                           const Eigen::Matrix3Xf& Y_emit_prior);
-    Eigen::Matrix3Xf cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
+    Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf& X,
                          const Eigen::Matrix3Xf& Y,
                          const cv::Mat& depth,
-                         const cv::Mat& mask,
-                         const Eigen::Matrix3f& intr);
+                         const cv::Mat& mask);
 
     PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
@@ -127,6 +126,7 @@ private:
     const float kvis;
     bool use_recovery;
     std::vector<Eigen::MatrixXf> Q;
+    double last_sigma2;
 }; 
 
 #endif
