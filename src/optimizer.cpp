@@ -101,6 +101,8 @@ float cylinder_radius = 0.05;
 float cylinder_height = 0.21;
 #endif
 
+
+
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
 // where Q is [ I, -I
@@ -259,7 +261,131 @@ std::tuple<MatrixXf, MatrixXf>
     return {startPts, endPts};
 }
 
-// TODO do setup here
+void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const MatrixXf& G, const MatrixXf& L, const double sigma2, const double alpha, const double lambda, MatrixXf& W) {
+    try {
+    GRBEnv& env = getGRBEnv();
+    env.set(GRB_IntParam_OutputFlag, 0);
+    GRBModel model(env);
+    model.set("ScaleFlag", "2");
+    model.set("NonConvex", "2");
+
+    GRBVar* vars = nullptr;
+
+    const ssize_t num_vars = 3 * X.cols();
+        
+    // Note that variable bound is important, without a bound, Gurobi defaults to 0, which is clearly unwanted
+    const std::vector<double> lb(num_vars, -GRB_INFINITY);
+    const std::vector<double> ub(num_vars, GRB_INFINITY);
+    vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int) num_vars);
+    model.update();
+
+    GRBQuadExpr objective_fn(0);
+    for (ssize_t m = 0; m < Y.cols(); ++m)
+    {
+        for (ssize_t n = 0; n < X.cols(); ++n)
+        {
+            GRBLinExpr GWx(0);
+            GRBLinExpr GWy(0);
+            GRBLinExpr GWz(0);
+            for (ssize_t i = 0; i < Y.cols(); ++i)
+            {
+                GWx += G(m, i)*vars[i * 3 + 0];
+                GWy += G(m, i)*vars[i * 3 + 1];
+                GWz += G(m, i)*vars[i * 3 + 2];
+            }
+            auto diffx = X(0, n) - (Y(0, m) + GWx);
+            auto diffy = X(1, n) - (Y(1, m) + GWy);
+            auto diffz = X(2, n) - (Y(2, m) + GWz);
+            objective_fn += (P(m, n) /sigma2) * (diffx * diffx + diffy * diffy + diffz * diffz);
+        }
+    }
+
+    for (ssize_t d = 0; d < 3; ++d)
+    {
+        for (ssize_t m = 0; m < Y.cols(); ++m)
+        {
+            GRBLinExpr WTG(0);
+            for (ssize_t i = 0; i < Y.cols(); ++i)
+            {
+                WTG += G(m, i)*vars[i * 3 + d];
+            }
+            auto WTGW = WTG * vars[m * 3 + d];
+            objective_fn += (alpha/2)*WTGW;
+        }
+    }
+
+    for (int m = 0; m < Y.cols(); ++m)
+    {
+        GRBLinExpr Tmx(0);
+        GRBLinExpr Tmy(0);
+        GRBLinExpr Tmz(0);
+        GRBLinExpr Tix(0);
+        GRBLinExpr Tiy(0);
+        GRBLinExpr Tiz(0);
+        for (ssize_t i = 0; i < Y.cols(); ++i)
+        {
+            Tmx += G(m, i)*vars[i * 3 + 0];
+            Tmy += G(m, i)*vars[i * 3 + 1];
+            Tmz += G(m, i)*vars[i * 3 + 2];
+        }
+        Tmx += Y(0, m);
+        Tmy += Y(1, m);
+        Tmz += Y(2, m);
+        for (ssize_t i = 0; i < L.cols(); ++i)
+        {
+            if (L(m, i) < 0.00000001 && L(m, i) > -0.00000001) {
+                for (ssize_t j = 0; j < Y.cols(); ++j)
+                {
+                    Tix += L(m, i)*G(m, j)*vars[j * 3 + 0];
+                    Tiy += L(m, i)*G(m, j)*vars[j * 3 + 1];
+                    Tiz += L(m, i)*G(m, j)*vars[j * 3 + 2];
+                }
+                Tix += L(m, i)*Y(0, i);
+                Tiy += L(m, i)*Y(1, i);
+                Tiz += L(m, i)*Y(2, i);
+            }
+        }
+        auto diffx = Tmx - Tix;
+        auto diffy = Tmy - Tiy;
+        auto diffz = Tmz - Tiz;
+        objective_fn += (lambda/2) * (diffx * diffx + diffy * diffy + diffz * diffz);
+    }
+    model.setObjective(objective_fn, GRB_MINIMIZE);
+    model.update();
+
+    // Find the optimal solution, and extract it
+    {
+        model.optimize();
+        if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL)
+        {
+            // std::cout << "Y" << std::endl;
+            // std::cout << Y << std::endl;
+            for (ssize_t i = 0; i < Y.cols(); i++)
+            {
+                W(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
+                W(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
+                W(2, i) = vars[i * 3 + 2].get(GRB_DoubleAttr_X);
+            }
+        }
+        else
+        {
+            std::cout << "Status: " << model.get(GRB_IntAttr_Status) << std::endl;
+            exit(-1);
+        }
+    }
+    delete[] vars;
+}
+    catch(GRBException& e)
+    {
+        std::cout << "Error code = " << e.getErrorCode() << std::endl;
+        std::cout << e.getMessage() << std::endl;
+    }
+    catch(...)
+    {
+        std::cout << "Exception during optimization" << std::endl;
+    }
+}
+
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
     : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
 {

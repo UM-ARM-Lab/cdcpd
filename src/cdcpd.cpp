@@ -283,117 +283,6 @@ void Qconstructor(const Matrix2Xi& E, vector<MatrixXf>& Q, int M) {
     }
 }
 
-void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const MatrixXf& G, const MatrixXf& L, const double sigma2, const double alpha, const double lambda, MatrixXf& W) {
-    GRBEnv& env = getGRBEnv();
-    env.set(GRB_IntParam_OutputFlag, 0);
-    GRBModel model(env);
-    model.set("ScaleFlag", "2");
-
-    const ssize_t num_vars = 3 * X.cols();
-        
-    // Note that variable bound is important, without a bound, Gurobi defaults to 0, which is clearly unwanted
-    const std::vector<double> lb(num_vars, -GRB_INFINITY);
-    const std::vector<double> ub(num_vars, GRB_INFINITY);
-    vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int) num_vars);
-    model.update();
-
-    GRBQuadExpr objective_fn(0);
-    for (ssize_t m = 0; m < Y.cols(); ++m)
-    {
-        for (ssize_t n = 0; n < X.cols(); ++n)
-        {
-            auto GWx(0);
-            auto GWy(0);
-            auto GWz(0);
-            for (ssize_t i = 0; i < Y.cols(); ++i)
-            {
-                GWx += G(m, i)*vars[i * 3 + 0];
-                GWy += G(m, i)*vars[i * 3 + 1];
-                GWz += G(m, i)*vars[i * 3 + 2];
-            }
-            auto diffx = X(0, n) - (Y(0, m) + GWx);
-            auto diffy = X(1, n) - (Y(1, m) + GWy);
-            auto diffz = X(2, n) - (Y(2, m) + GWz);
-            objective_fn += (P(m, n) /sigma2) * (diffx * diffx + diffy * diffy + diffz * diffz);
-        }
-    }
-
-    for (ssize_t d = 0; d < 3; ++d)
-    {
-        for (ssize_t m = 0; m < Y.cols(); ++m)
-        {
-            auto WTG(0);
-            for (ssize_t i = 0; i < Y.cols(); ++i)
-            {
-                WTG += G(m, i)*vars[i * 3 + d];
-            }
-            auto WTGW = WTG * vars[m * 3 + d];
-            objective_fn += (alpha/2)*WTGW;
-        }
-    }
-
-    for (int m = 0; m < Y.cols(); ++m)
-    {
-        auto Tmx(0);
-        auto Tmy(0);
-        auto Tmz(0);
-        auto Tix(0);
-        auto Tiy(0);
-        auto Tiz(0);
-        for (ssize_t i = 0; i < Y.cols(); ++i)
-        {
-            Tmx += G(m, i)*vars[i * 3 + 0];
-            Tmy += G(m, i)*vars[i * 3 + 1];
-            Tmz += G(m, i)*vars[i * 3 + 2];
-        }
-        Tmx += Y(0, m);
-        Tmy += Y(1, m);
-        Tmz += Y(2, m);
-        for (ssize_t i = 0; i < L.cols(); ++i)
-        {
-            if (L(m, i) < 0.00000001 && L(m, i) > -0.00000001) {
-                for (ssize_t j = 0; j < Y.cols(); ++j)
-                {
-                    Tix += L(m, i)*G(m, j)*vars[j * 3 + 0];
-                    Tiy += L(m, i)*G(m, j)*vars[j * 3 + 1];
-                    Tiz += L(m, i)*G(m, j)*vars[j * 3 + 2];
-                }
-                Tix += L(m, i)*Y(0, i);
-                Tiy += L(m, i)*Y(1, i);
-                Tiz += L(m, i)*Y(2, i);
-            }
-        }
-        auto diffx = Tmx - Tix;
-        auto diffy = Tmy - Tiy;
-        auto diffz = Tmz - Tiz;
-        objective_fn += (lambda/2) * (diffx * diffx + diffy * diffy + diffz * diffz);
-    }
-    model.setObjective(objective_fn, GRB_MINIMIZE);
-    model.update();
-
-    // Find the optimal solution, and extract it
-    {
-        model.optimize();
-        if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL)
-        {
-            // std::cout << "Y" << std::endl;
-            // std::cout << Y << std::endl;
-            for (ssize_t i = 0; i < Y.cols(); i++)
-            {
-                W(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
-                W(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
-                W(2, i) = vars[i * 3 + 2].get(GRB_DoubleAttr_X);
-            }
-        }
-        else
-        {
-            std::cout << "Status: " << model.get(GRB_IntAttr_Status) << std::endl;
-            exit(-1);
-        }
-    }
-    delete[] vars;
-}
-
 CDCPD::CDCPD(
             PointCloud<PointXYZ>::ConstPtr template_cloud,
             const Matrix2Xi& _template_edges,
@@ -854,11 +743,9 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
         VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); cout << "549: " << (end-start).count() << endl;
         float Np = P1.sum(); //end = std::chrono::system_clock::now(); cout << "550: " << (end-start).count() << endl;
         
-        // This is the code to use if you are not using LLE
         // NOTE: lambda means gamma here
-        // ENHANCE: some terms in the equation are not changed during the loop, which can be calculated out of the loop
         // Corresponding to Eq. (18) in the paper
-        float lambda = start_lambda;// * std::pow(annealing_factor, iterations + 1);
+        float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); cout << "557: " << (end-start).count() << endl;
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
@@ -887,7 +774,10 @@ Matrix3Xf CDCPD::cpd(pcl::PointCloud<pcl::PointXYZ>::ConstPtr downsampled_cloud,
             cout << std::setw(20) << W_int;
             cout << std::setw(20) << (W-lastW).squaredNorm() << endl;
             W_int++;
-        }   
+        }
+
+        // MatrixXf W(M, D);
+        // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
 
         TY = Y + (G * W).transpose();// end = std::chrono::system_clock::now(); cout << "564: " << (end-start).count() << endl;
 

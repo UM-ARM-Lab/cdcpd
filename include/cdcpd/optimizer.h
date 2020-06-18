@@ -18,6 +18,8 @@
 // std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
 //    nearest_points_line_segments(const Eigen::Matrix3Xf& last_template, const Eigen::Matrix2Xi& E);
 
+void Wsolver(const Eigen::MatrixXf& P, const Eigen::Matrix3Xf& X, const Eigen::Matrix3Xf& Y, const Eigen::MatrixXf& G, const Eigen::MatrixXf& L, const double sigma2, const double alpha, const double lambda, Eigen::MatrixXf& W);
+
 class Optimizer
 {
 public:
