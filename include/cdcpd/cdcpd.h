@@ -36,6 +36,10 @@
 // #define CYL_CLOTH4
 // #endif
 
+#ifndef SIMULATION
+#define SIMULATION
+#endif
+
 // void test_nearest_line();
 
 Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,

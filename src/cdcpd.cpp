@@ -50,7 +50,11 @@ using pcl::PointCloud;
 using pcl::PointXYZ;
 using pcl::PointXYZRGB;
 
+#ifdef SIMULATION
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result";
+#else
 std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
+#endif
 
 // void test_nearest_line() {
 //     Matrix3Xf Y(3, 4);
@@ -333,8 +337,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
                                  float k)
 {
     // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
-    // intrinsics: (3, 3) intrinsic matrix of the camera
-    // depth_image: CV_16U depth image
+    // depth: CV_16U depth image
     // mask: CV_8U mask for segmentation
     // k: k_vis in the paper
 
@@ -346,7 +349,6 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
 
     // save matrices
     to_file(workingDir + "/cpp_verts.txt", vertices);
-    to_file(workingDir + "/cpp_intrinsics.txt", intrinsics);
 #endif
 
     // Project the vertices to get their corresponding pixel coordinate
@@ -556,7 +558,11 @@ point_clouds_from_images(const cv::Mat& depth_image,
     // assert(P.rows() == 3 && P.cols() == 4);
     // Assume unit_scaling is the standard Kinect 1mm
     float unit_scaling = 0.001;
+#ifdef SIMULATION
+    float pixel_len = 0.0000222222;
+#else
     float pixel_len = 0.0002645833;
+#endif
     float constant_x = 1 / (P(0, 0) * pixel_len);
     float constant_y = 1 / (P(1, 1) * pixel_len);
     float center_x = P(0, 2);
@@ -565,6 +571,7 @@ point_clouds_from_images(const cv::Mat& depth_image,
     Eigen::Array<float, 3, 1> lower_bounding_box = lower_bounding_box_vec.array();
     Eigen::Array<float, 3, 1> upper_bounding_box = upper_bounding_box_vec.array();
 
+    cout << "depth(0, 0): " << depth_image.at<float>(0, 0) << endl;
     // ENHANCE: change the way to get access to depth image and rgb image to be more readable
     // from "depth_row += row_step" to ".at<>()"
     /*
@@ -592,7 +599,12 @@ point_clouds_from_images(const cv::Mat& depth_image,
         for (uint32_t u = 0; u < depth_image.cols; ++u)
 #endif
         {
+#ifdef SIMULATION
+            float depth = depth_image.at<float>(v, u);
+            // float depth = float(depth_temp)/255.0f*(8000.0f-3000.0f)+3000.0f;
+#else
             uint16_t depth = depth_image.at<uint16_t>(v, u);
+#endif
 
             // Assume depth = 0 is the standard was to note invalid
             if (depth != 0)
@@ -859,7 +871,11 @@ CDCPD::Output CDCPD::operator()(
     // fixed_points: fixed points during the tracking
 
     assert(rgb.type() == CV_8UC3);
+#ifdef SIMULATION
+    assert(depth.type() == CV_32F);
+#else
     assert(depth.type() == CV_16U);
+#endif
     assert(mask.type() == CV_8U);
     assert(P_matrix.type() == CV_64F);
     assert(P_matrix.rows == 3 && P_matrix.cols == 4);
@@ -909,10 +925,11 @@ CDCPD::Output CDCPD::operator()(
     PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
     const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
     double sigma2 = 0.002;
+    // TODO: check whether the change is needed here for unit conversion
     Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
-    cout << "P_vis:" << endl;
-    cout << Y_emit_prior << endl << endl;
-    sample_X_points(Y, Y_emit_prior, sigma2, cloud);
+    // cout << "P_vis:" << endl;
+    // cout << Y_emit_prior << endl << endl;
+    // sample_X_points(Y, Y_emit_prior, sigma2, cloud);
 
     pcl::VoxelGrid<PointXYZ> sor;
     cout << "Points in cloud before leaf: " << cloud->width << endl;
@@ -926,6 +943,7 @@ CDCPD::Output CDCPD::operator()(
 #ifdef ENTIRE
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
 #endif
+    // TODO: check whether the change is needed here for unit conversion
     Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
 #ifdef DEBUG
     to_file(workingDir + "/cpp_entire_cloud.txt", entire);
@@ -946,6 +964,7 @@ CDCPD::Output CDCPD::operator()(
     // If we're doing tracking recovery, do that now
     if (use_recovery)
     {
+        // TODO: check whether the change is needed here for unit conversion
         float cost = smooth_free_space_cost(Y_opt, intr, depth, mask);
         cout << "cost" << endl;
         cout << cost << endl;
