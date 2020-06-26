@@ -57,7 +57,11 @@ std::vector<cv::Mat> depth_images;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
+#ifdef SIMULATION
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result";
+#else
 std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
+#endif
 
 void clean_file(const std::string& fname) {
     std::ofstream ofs(fname, std::ofstream::out);
@@ -86,11 +90,11 @@ public:
 void callback(const sensor_msgs::Image::ConstPtr &rgb_img,
               const sensor_msgs::Image::ConstPtr &depth_img)
 {
-    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::BGR8);
+    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::TYPE_8UC3);
     cv::Mat color_image = rgb_ptr->image.clone();
     color_images.push_back(color_image);
 
-    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_16UC1);
+    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_32FC1);
     cv::Mat depth_image = depth_ptr->image.clone();
     depth_images.push_back(depth_image);
 }
@@ -311,13 +315,24 @@ int main(int argc, char* argv[])
     const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
+#ifdef SIMULATION
+    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
+#else
     auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
+#endif
     bag.open(folder + bagfile + ".bag", rosbag::bagmode::Read);
 
     std::vector<std::string> topics;
+#ifdef SIMULATION
+    topics.push_back(std::string("image_color_rect"));
+    topics.push_back(std::string("image_depth_rect"));
+    topics.push_back(std::string("camera_info"));
+    topics.push_back(std::string("groud_truth"));
+#else
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
     topics.push_back(std::string("/kinect2/qhd/camera_info"));
+#endif
 
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
@@ -355,7 +370,6 @@ int main(int argc, char* argv[])
         {
             sensor_msgs::CameraInfo::ConstPtr info_msg = m.instantiate<sensor_msgs::CameraInfo>();
             // the following is similar to https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
-            // Check if the input image has to be resized
             sensor_msgs::CameraInfo info_msg_tmp = *info_msg;
             if (!depth_images.empty() && !color_images.empty() && (depth_images.back().cols != color_images.back().cols || depth_images.back().rows != color_images.back().rows))
             {
@@ -363,10 +377,10 @@ int main(int argc, char* argv[])
                 info_msg_tmp.width = depth_images.back().cols;
                 info_msg_tmp.height = depth_images.back().rows;
                 float ratio = float(depth_images.back().cols)/float(color_images.back().cols);
-                info_msg_tmp.K[0] *= ratio;
-                info_msg_tmp.K[2] *= ratio;
-                info_msg_tmp.K[4] *= ratio;
-                info_msg_tmp.K[5] *= ratio;
+                // info_msg_tmp.K[0] *= ratio;
+                // info_msg_tmp.K[2] *= ratio;
+                // info_msg_tmp.K[4] *= ratio;
+                // info_msg_tmp.K[5] *= ratio;
                 info_msg_tmp.P[0] *= ratio;
                 info_msg_tmp.P[2] *= ratio;
                 info_msg_tmp.P[5] *= ratio;
@@ -379,6 +393,10 @@ int main(int argc, char* argv[])
             }
             // cout << "P matrix: " << endl;
             // cout << P_mat << endl << endl;
+        }
+        else if (m.getTopic() == topics[3])
+        {
+
         }
         else
         {
@@ -396,6 +414,9 @@ int main(int argc, char* argv[])
 
     auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
+
+    cout << "rgb images size: " << color_images.size() << endl;
+    cout << "depth images size: " << depth_images.size() << endl;
 
     // Let's also grab the gripper positions. Note that in practice, you'd do this in real time.
     geometry_msgs::TransformStamped leftTS;
