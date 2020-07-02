@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.9)
 project(cdcpd VERSION 0.1.0
     DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
     LANGUAGES CXX)
@@ -58,6 +58,13 @@ target_link_libraries(cdcpd PRIVATE
     Fgt::Library-C++)
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
 target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -g)
+
+# Set to private to not force downstream libraries to link against OpenMP
+# https://cliutils.gitlab.io/modern-cmake/chapters/packages/OpenMP.html
+# https://stackoverflow.com/a/51448364
+find_package(OpenMP REQUIRED)
+target_link_libraries(cdcpd PRIVATE OpenMP::OpenMP_CXX)
+
 
 add_library(cdcpd::cdcpd ALIAS cdcpd)
 
