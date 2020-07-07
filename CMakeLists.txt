@@ -140,35 +140,34 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -Wconversion -Werror -Wshadow")
-
-## Declare a C++ executable
-## With catkin_make all packages are built within a single CMake context
-## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}
-  include/${PROJECT_NAME}/kinect_sub.h
   src/${PROJECT_NAME}/kinect_sub.cpp
   src/cdcpd_node.cpp
 )
-
-## Rename C++ executable without prefix
-## The above recommended prefix causes long target names, the following renames the
-## target back to the shorter version for ease of user use
-## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
 set_target_properties(${PROJECT_NAME} PROPERTIES 
     OUTPUT_NAME node PREFIX ""
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES)
-
-## Add cmake target dependencies of the executable
-## same as for the library above
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ${catkin_LIBRARIES}
   cdcpd::cdcpd
 )
+target_compile_options(${PROJECT_NAME} PRIVATE -O3 -Wall -Wextra -Wconversion -Wshadow)
+
+# add_executable(${PROJECT_NAME}_bagfile
+#   src/cdcpd_bagfile.cpp
+# )
+# set_target_properties(${PROJECT_NAME}_bagfile PROPERTIES 
+#     OUTPUT_NAME bagfile PREFIX ""
+#     CXX_STANDARD 17
+#     CXX_STANDARD_REQUIRED YES)
+# add_dependencies(${PROJECT_NAME}_bagfile ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# target_link_libraries(${PROJECT_NAME} PRIVATE
+#   ${catkin_LIBRARIES}
+#   cdcpd::cdcpd
+# )
+# target_compile_options(${PROJECT_NAME}_bagfile PRIVATE -O3 -Wall -Wextra -Wconversion -Werror -Wshadow)
 
 #############
 ## Install ##
