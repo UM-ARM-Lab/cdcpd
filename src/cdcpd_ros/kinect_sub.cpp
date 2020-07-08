@@ -13,11 +13,14 @@ KinectSub::KinectSub(const std::function<void(cv::Mat, cv::Mat, cv::Matx33d)>& _
     options.nh.setCallbackQueue(&callbackQueue);
     options.pnh.setCallbackQueue(&callbackQueue);
 
-    // TODO: when creating these subscribers, both the rgb and depth try to
-    //       create a `cdcpd_node/compressed/set_parameters` service, this is
-    //       presumably not an issue for now, but it is messy
-    ROS_INFO("Ignore the 'Tried to advertise a service that is already advertised'"
-             " ... message, see cpp file.");
+    if (_options.hints.getTransport() == "compressed")
+    {
+        // TODO: when creating these subscribers, both the rgb and depth try to
+        //       create a `cdcpd_node/compressed/set_parameters` service, this is
+        //       presumably not an issue for now, but it is messy
+        ROS_INFO("Ignore the 'Tried to advertise a service that is already advertised'"
+                " ... message, see cpp file.");
+    }
     it = std::make_unique<image_transport::ImageTransport>(options.nh);
     rgb_sub = std::make_unique<image_transport::SubscriberFilter>(
             *it, options.rgb_topic, options.queue_size, options.hints);
@@ -40,64 +43,50 @@ void KinectSub::imageCb(const sensor_msgs::ImageConstPtr& rgb_msg,
     cv_bridge::CvImagePtr cv_rgb_ptr;
     try
     {
-        cv_rgb_ptr = cv_bridge::toCvCopy(rgb_msg, sensor_msgs::image_encodings::BGR8);
+        cv_rgb_ptr = cv_bridge::toCvCopy(rgb_msg, sensor_msgs::image_encodings::RGB8);
     }
     catch (cv_bridge::Exception& e)
     {
-        ROS_ERROR("cv_bridge exception: %s", e.what());
+        ROS_ERROR("RGB cv_bridge exception: %s", e.what());
         return;
     }
 
     cv_bridge::CvImagePtr cv_depth_ptr;
-    if ("16UC1" == depth_msg->encoding)
+    try
     {
-        try
-        {
-            cv_depth_ptr = cv_bridge::toCvCopy(depth_msg, sensor_msgs::image_encodings::TYPE_16UC1); // MONO16?
-        }
-        catch (cv_bridge::Exception& e)
-        {
-            ROS_ERROR("cv_bridge exception: %s", e.what());
-            return;
-        }
+        cv_depth_ptr = cv_bridge::toCvCopy(depth_msg, depth_msg->encoding);
     }
-    else if ("32FC1" == depth_msg->encoding)
+    catch (cv_bridge::Exception& e)
     {
-        try
-        {
-            cv_depth_ptr = cv_bridge::toCvCopy(depth_msg, sensor_msgs::image_encodings::TYPE_32FC1);
-        }
-        catch (cv_bridge::Exception& e)
-        {
-            ROS_ERROR("cv_bridge exception: %s", e.what());
-            return;
-        }
+        ROS_ERROR("Depth cv_bridge exception: %s", e.what());
+        return;
+    }
 
+    if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1)
+    {
         cv::Mat convertedDepthImg(cv_depth_ptr->image.size(), CV_16UC1);
 
         const int V = cv_depth_ptr->image.size().height;
         const int U = cv_depth_ptr->image.size().width;
 
-        //#pragma omp parallel for
         for (int v = 0; v < V; ++v)
         {
             for (int u = 0; u < U; ++u)
             {
                 convertedDepthImg.at<uint16_t>(v, u) =
-                        depth_image_proc::DepthTraits<uint16_t>::fromMeters(cv_depth_ptr->image.at<float>(v, u));
+                        depth_image_proc::DepthTraits<uint16_t>::fromMeters(
+                            cv_depth_ptr->image.at<float>(v, u));
             }
         }
 
-        cv_depth_ptr->encoding = "16UC1";
+        cv_depth_ptr->encoding = sensor_msgs::image_encodings::TYPE_16UC1;
         cv_depth_ptr->image = convertedDepthImg;
     }
 
-    image_geometry::PinholeCameraModel cameraModel;
-    cameraModel.fromCameraInfo(cam_msg);
-
-    // TODO: make the extern callback take the camera info as well
     if (externCallback)
     {
+        image_geometry::PinholeCameraModel cameraModel;
+        cameraModel.fromCameraInfo(cam_msg);
         externCallback(cv_rgb_ptr->image, cv_depth_ptr->image, cameraModel.fullIntrinsicMatrix());
     }
 }

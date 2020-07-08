@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 #include <tf2_ros/transform_listener.h>
@@ -8,6 +9,7 @@
 
 #include <arc_utilities/ros_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+
 #include <cdcpd/cdcpd.h>
 #include "cdcpd_ros/kinect_sub.h"
 
@@ -47,8 +49,11 @@ PointCloud::Ptr makeCloud(Eigen::Matrix3Xf const& points)
 
 cv::Mat ropeHsvMask(cv::Mat rgb)
 {
+    cv::Mat rgb_f;
+    rgb.convertTo(rgb_f, CV_32FC3);
+    rgb_f /= 255.0; // get RGB 0.0-1.0
     cv::Mat color_hsv;
-    cvtColor(rgb, color_hsv, CV_RGB2HSV);
+    cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
 
     cv::Mat mask1;
     cv::Mat mask2;
@@ -66,25 +71,23 @@ int main(int argc, char* argv[])
     auto nh = ros::NodeHandle();
     auto ph = ros::NodeHandle("~");
 
+    #ifndef ROPE
+    static_assert("This node is only designed for rope right now");
+    #endif
+
     // Publsihers for the data, some visualizations, others consumed by other nodes
     auto original_publisher = nh.advertise<PointCloud> ("cdcpd/original", 1);
     auto masked_publisher = nh.advertise<PointCloud> ("cdcpd/masked", 1);
     auto downsampled_publisher = nh.advertise<PointCloud> ("cdcpd/downsampled", 1);
     auto template_publisher = nh.advertise<PointCloud> ("cdcpd/template", 1);
-    auto cpd_iters_publisher = nh.advertise<PointCloud> ("cdcpd/cpd_iters", 1);
     auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
-    auto output_without_constrain_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_constrain", 1);
-    auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
-    auto right_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/right_gripper_prior", 1);
-    auto cylinder_pub = nh.advertise<vm::Marker>("cdcpd/cylinder", 0);
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 
     // TF objects for getting gripper positions
     auto tf_buffer = tf2_ros::Buffer();
     auto tf_listener = tf2_ros::TransformListener(tf_buffer);
 
-    // ENHANCE: more smart way to get Y^0 and E
-    // initial connectivity model of rope
+    // Initial connectivity model of rope
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
     auto const length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
     auto const [template_vertices, template_edges] = makeRopeTemplate(num_points, length);
@@ -140,12 +143,90 @@ int main(int argc, char* argv[])
                                             << " to " << right_tf_name << ": " << ex.what());
         }
 
+        // Perform and record the update
         auto hsv_mask = ropeHsvMask(rgb);
-        // auto const out = cdcpd(rgb, depth, hsv_mask, cam, template_cloud, true, false, fixed_points);
+        auto out = cdcpd(rgb, depth, hsv_mask, cam, template_cloud, true, false, fixed_points);
+        template_cloud = out.gurobi_output;
+
+        // Update the frame ids
+        {
+            #ifdef ENTIRE
+            out.original_cloud->header.frame_id = kinect_tf_name;
+            #endif
+            out.masked_point_cloud->header.frame_id = kinect_tf_name;
+            out.downsampled_cloud->header.frame_id = kinect_tf_name;
+            out.cpd_output->header.frame_id = kinect_tf_name;
+            out.gurobi_output->header.frame_id = kinect_tf_name;
+            #ifdef COMP
+            out_without_constrain.gurobi_output->header.frame_id = kinect_tf_name;
+            #endif
+        }
+
+        // Add timestamp information
+        {
+            auto time = ros::Time::now();
+            #ifdef ENTIRE
+            pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
+            #endif
+            pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
+            pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
+            pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
+            pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
+            #ifdef COMP
+            pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
+            #endif
+        }
+
+        // Publish the point clouds
+        {
+            #ifdef ENTIRE
+            original_publisher.publish(out.original_cloud);
+            #endif
+            masked_publisher.publish(out.masked_point_cloud);
+            downsampled_publisher.publish(out.downsampled_cloud);
+            template_publisher.publish(out.cpd_output);
+            output_publisher.publish(out.gurobi_output);
+            #ifdef COMP
+            output_without_constrain_publisher.publish(out_without_constrain.gurobi_output);
+            #endif
+        }
+
+        // Publish markers indication the order of the points
+        {
+            auto rope_marker_fn = [&] (PointCloud::ConstPtr cloud, std::string const& ns)
+            {
+                vm::Marker order;
+                order.header.frame_id = kinect_tf_name;
+                order.header.stamp = ros::Time();
+                order.ns = ns;
+                order.action = visualization_msgs::Marker::ADD;
+                order.pose.orientation.w = 1.0;
+                order.id = 1;
+                order.scale.x = 0.002;
+                order.color.r = 1.0;
+                order.color.a = 1.0;
+
+                for (auto pc_iter = cloud->begin(); pc_iter != cloud->end(); ++pc_iter)
+                {
+                    geometry_msgs::Point p;
+                    p.x = pc_iter->x;
+                    p.y = pc_iter->y;
+                    p.z = pc_iter->z;
+                    order.points.push_back(p);
+                }
+                return order;
+            };
+
+            auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
+            order_pub.publish(rope_marker);
+        }
     };
 
     auto const options = KinectSub::SubscriptionOptions(kinect_name + "/" + kinect_channel);
     KinectSub sub(callback, options);
+
+    ROS_INFO("Spinning...");
+    ros::waitForShutdown();
 
     return EXIT_SUCCESS;
 }

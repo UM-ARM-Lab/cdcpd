@@ -32,7 +32,7 @@ class KinectSub
             SubscriptionOptions(const std::string& prefix = "kinect2_victor_head/hd")
                 : nh()
                 , pnh("~")
-                , hints("compressed", ros::TransportHints(), pnh)
+                , hints("raw", ros::TransportHints(), pnh)
                 , queue_size(1)
                 , topic_prefix(prefix)
                 , rgb_topic(topic_prefix + "/image_color_rect")

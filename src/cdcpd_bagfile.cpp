@@ -42,11 +42,14 @@ using Eigen::Matrix3Xf;
 using pcl::PointXYZ;
 namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
+namespace sm = sensor_msgs;
 
 using namespace cv;
+using namespace std::chrono_literals;
 
-std::vector<cv::Mat> color_images;
-std::vector<cv::Mat> depth_images;
+std::vector<sm::Image::ConstPtr> color_images;
+std::vector<sm::Image::ConstPtr> depth_images;
+std::vector<sm::CameraInfo::ConstPtr> camera_infos;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
@@ -74,24 +77,39 @@ public:
     }
 };
 
-void callback(const sensor_msgs::Image::ConstPtr &rgb_img,
-              const sensor_msgs::Image::ConstPtr &depth_img)
+void callback(
+    const sm::Image::ConstPtr &rgb_img,
+    const sm::Image::ConstPtr &depth_img,
+    const sm::CameraInfo::ConstPtr &cam_info)
+{
+    color_images.push_back(rgb_img);
+    depth_images.push_back(depth_img);
+    camera_infos.push_back(cam_info);
+}
+
+std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
+    const sm::Image::ConstPtr &rgb_img,
+    const sm::Image::ConstPtr &depth_img,
+    const sm::CameraInfo::ConstPtr &cam_info)
 {
     #ifdef SIMULATION
-    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::TYPE_8UC3);
+    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sm::image_encodings::TYPE_8UC3);
     #else
-    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::BGR8);
+    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sm::image_encodings::BGR8);
     #endif
     cv::Mat color_image = rgb_ptr->image.clone();
-    color_images.push_back(color_image);
 
     #ifdef SIMULATION
-    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_32FC1);
+    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sm::image_encodings::TYPE_32FC1);
     #else
-    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_16UC1);
+    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sm::image_encodings::TYPE_16UC1);
     #endif
     cv::Mat depth_image = depth_ptr->image.clone();
-    depth_images.push_back(depth_image);
+
+    image_geometry::PinholeCameraModel cameraModel;
+    cameraModel.fromCameraInfo(cam_info);
+
+    return { color_image, depth_image, cameraModel.fullIntrinsicMatrix() };
 }
 
 double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
@@ -216,7 +234,7 @@ int main(int argc, char* argv[])
     // test_nearest_line();
     // test_lle();
     // ENHANCE: more smart way to get Y^0 and E
-    ros::init(argc, argv, "cdcpd_node");
+    ros::init(argc, argv, "cdcpd_bagfile");
     cout << "Starting up..." << endl;
 
     #ifdef ROPE
@@ -281,7 +299,7 @@ int main(int argc, char* argv[])
     auto masked_publisher = nh.advertise<PointCloud> ("cdcpd/masked", 1);
     auto downsampled_publisher = nh.advertise<PointCloud> ("cdcpd/downsampled", 1);
     auto template_publisher = nh.advertise<PointCloud> ("cdcpd/template", 1);
-    auto cpd_iters_publisher = nh.advertise<PointCloud> ("cdcpd/cpd_iters", 1);
+    // auto cpd_iters_publisher = nh.advertise<PointCloud> ("cdcpd/cpd_iters", 1);
     auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
     auto output_without_constrain_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_constrain", 1);
     auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
@@ -289,7 +307,8 @@ int main(int argc, char* argv[])
     auto cylinder_pub = nh.advertise<vm::Marker>("cdcpd/cylinder", 0);
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 
-    BagSubscriber<sensor_msgs::Image> rgb_sub, depth_sub;
+    BagSubscriber<sm::Image> rgb_sub, depth_sub;
+    BagSubscriber<sm::CameraInfo> info_sub;
 
     cout << "Making buffer" << endl;
     tf2_ros::Buffer tfBuffer;
@@ -299,9 +318,6 @@ int main(int argc, char* argv[])
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
-    // comes from the /kinect2/qhd/camera_info channel.
-    cv::Matx33d intrinsics;
-    bool intrinsics_recorded = false;
 
     std::vector<std::string> topics;
     #ifdef SIMULATION
@@ -315,12 +331,6 @@ int main(int argc, char* argv[])
     topics.push_back(std::string("/kinect2/qhd/camera_info"));
     #endif
 
-    // Used to republish the images at the current timestamp
-    image_transport::ImageTransport it(nh);
-    auto color_pub = it.advertise(topics[0], 1);
-    auto depth_pub = it.advertise(topics[1], 1);
-    auto ci_pub = nh.advertise<sensor_msgs::CameraInfo>(topics[2], 1);
-
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
     #ifdef SIMULATION
     auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
@@ -332,59 +342,47 @@ int main(int argc, char* argv[])
 
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
-    auto sync = message_filters::TimeSynchronizer<sensor_msgs::Image, sensor_msgs::Image>(rgb_sub, depth_sub, 25);
-    sync.registerCallback(boost::bind(&callback, _1, _2));
+    auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
+        rgb_sub, depth_sub, info_sub, 25);
+    sync.registerCallback(boost::bind(&callback, _1, _2, _3));
+
     for(rosbag::MessageInstance const& m: view)
     {
         if (m.getTopic() == topics[0])
         {
-            auto i = m.instantiate<sensor_msgs::Image>();
-            if (i != nullptr) {
+            auto i = m.instantiate<sm::Image>();
+            if (i != nullptr)
+            {
                 rgb_sub.newMessage(i);
-                i->header.stamp = ros::Time::now();
-                color_pub.publish(i);
             }
             else
+            {
                 cout << "NULL initiation!" << endl;
+            }
         }
         else if (m.getTopic() == topics[1])
         {
-            auto i = m.instantiate<sensor_msgs::Image>();
-            if (i != nullptr) {
+            auto i = m.instantiate<sm::Image>();
+            if (i != nullptr)
+            {
                 depth_sub.newMessage(i);
-                i->header.stamp = ros::Time::now();
-                depth_pub.publish(i);
             }
             else
+            {
                 cout << "NULL initiation!" << endl;
+            }
         }
         else if (m.getTopic() == topics[2])
         {
-            auto info_msg = *m.instantiate<sensor_msgs::CameraInfo>();
-            info_msg.header.stamp = ros::Time::now();
-            ci_pub.publish(info_msg);
-
-            // the following is similar to https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
-            if (!depth_images.empty() && !color_images.empty() && (depth_images.back().cols != color_images.back().cols || depth_images.back().rows != color_images.back().rows))
+            auto info = m.instantiate<sm::CameraInfo>();
+            if (info != nullptr)
             {
-                cout << "resizing color vs depth images" << endl;
-                info_msg.width = depth_images.back().cols;
-                info_msg.height = depth_images.back().rows;
-                float ratio = float(depth_images.back().cols)/float(color_images.back().cols);
-                info_msg.K[0] *= ratio;
-                info_msg.K[2] *= ratio;
-                info_msg.K[4] *= ratio;
-                info_msg.K[5] *= ratio;
-                info_msg.P[0] *= ratio;
-                info_msg.P[2] *= ratio;
-                info_msg.P[5] *= ratio;
-                info_msg.P[6] *= ratio;
+                info_sub.newMessage(info);
             }
-
-            image_geometry::PinholeCameraModel model;
-            model.fromCameraInfo(info_msg);
-            intrinsics = model.fullIntrinsicMatrix();
-            intrinsics_recorded = true;
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
         }
         #ifdef SIMULATION
         else if (m.getTopic() == topics[3])
@@ -399,21 +397,68 @@ int main(int argc, char* argv[])
         }
     }
     bag.close();
-    if (!intrinsics_recorded)
-    {
-        throw std::runtime_error("Bagfile did not contain any camera intrinsics");
-    }
-
-    CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
-#ifdef COMP
-    CDCPD cdcpd_without_constrain(template_cloud, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
-#endif
 
     auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
+    auto info_iter = camera_infos.cbegin();
 
     cout << "rgb images size: " << color_images.size() << endl;
     cout << "depth images size: " << depth_images.size() << endl;
+    cout << "camera infos size: " << camera_infos.size() << endl;
+
+    // Used to republish the images at the current timestamp for other usage
+    // Exits at the end of the if statement
+    auto const republish_bagfile = ROSHelpers::GetParam<bool>(ph, "republish_bagfile", false);
+    if (republish_bagfile)
+    {
+        cout << "Republishing bag only, and then exiting" << endl;
+
+        image_transport::ImageTransport it(nh);
+        auto color_pub = it.advertise(topics[0], 1);
+        auto depth_pub = it.advertise(topics[1], 1);
+        auto info_pub = nh.advertise<sm::CameraInfo>(topics[2], 1);
+
+        std::string stepper;
+        ros::Rate rate(30); // 30 hz, maybe allow changes, or mimicking bag?
+        while(ros::ok() &&
+            color_iter != color_images.cend() &&
+            depth_iter != depth_images.cend() &&
+            info_iter != camera_infos.cend())
+        {
+            if (stepper != "r")
+            {
+                cout << "Waiting for input, enter 'r' to run without stopping, anything else to step once ... " << std::flush;
+                cin >> stepper;
+            }
+
+            auto time = ros::Time::now();
+
+            auto color_msg = **color_iter;
+            color_msg.header.stamp = time;
+            color_pub.publish(color_msg);
+
+            auto depth_msg = **depth_iter;
+            depth_msg.header.stamp = time;
+            depth_pub.publish(depth_msg);
+
+            auto info_msg = **info_iter;
+            info_msg.header.stamp = time;
+            info_pub.publish(info_msg);
+
+            rate.sleep();
+            ++color_iter;
+            ++depth_iter;
+            ++info_iter;
+        }
+
+        cout << "End of sycnronized bag, terminating." << endl;
+        return EXIT_SUCCESS;
+    }
+
+    CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
+    #ifdef COMP
+    CDCPD cdcpd_without_constrain(template_cloud, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
+    #endif
 
     // Let's also grab the gripper positions. Note that in practice, you'd do this in real time.
     geometry_msgs::TransformStamped leftTS;
@@ -450,7 +495,7 @@ int main(int argc, char* argv[])
 
     std::string stepper;
     ros::Rate rate(30); // 30 hz, maybe allow changes, or mimicking bag?
-    while(color_iter != color_images.cend() && depth_iter != depth_images.cend())
+    while(color_iter != color_images.cend() && depth_iter != depth_images.cend() && info_iter != camera_infos.cend())
     {
         // if(kbhit())
         // {
@@ -465,12 +510,13 @@ int main(int argc, char* argv[])
         //     rate.sleep();
         // }
 
-
-        if (stepper != "r") {
-            cout << "Waiting for input... ";
+        if (stepper != "r")
+        {
+            cout << "Waiting for input, enter 'r' to run without stopping, anything else to step once ... " << std::flush;
             cin >> stepper;
         }
-        else {
+        else
+        {
             rate.sleep();
         }
         if (!ros::ok())
@@ -482,9 +528,10 @@ int main(int argc, char* argv[])
             left_gripper_pub.publish(leftTS);
             right_gripper_pub.publish(rightTS);
         }
-        auto color_image_bgr = *color_iter;
-        auto depth_image = *depth_iter;
-        cout << "Matched" << endl;
+
+        auto [color_image_bgr, depth_image, intrinsics] = toOpenCv(*color_iter, *depth_iter, *info_iter);
+
+
         /// Color filter
         // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
         // The flag isn't tested or implemented
@@ -492,25 +539,25 @@ int main(int argc, char* argv[])
         cv::cvtColor(color_image_bgr, rgb_image, cv::COLOR_BGR2RGB);
         // TODO I'm pretty sure this is an 8-bit image.
 
-#ifdef DEBUG
+        #ifdef DEBUG
         imwrite("rgb.png", rgb_image);
         imwrite("depth.png", depth_image);
-#endif
+        #endif
 
         cv::Mat rgb_f;
         rgb_image.convertTo(rgb_f, CV_32FC3);
         rgb_f /= 255.0; // get RGB 0.0-1.0
         cv::Mat color_hsv;
         cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
-#ifdef DEBUG
+        #ifdef DEBUG
         to_file(workingDir + "/cpp_hsv.txt", color_hsv);
-#endif
+        #endif
 
         // White
         // cv::Scalar low_hsv = cv::Scalar(0.0 * 360.0, 0.0, 0.98);
         // cv::Scalar high_hsv = cv::Scalar(1.0 * 360.0, 0.02, 1.0);
 
-#ifdef ROPE
+        #ifdef ROPE
         // Red
         cv::Mat mask1;
         cv::Mat mask2;
@@ -518,7 +565,7 @@ int main(int argc, char* argv[])
         cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
         cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
         bitwise_or(mask1, mask2, hsv_mask);
-#else
+        #else
         // Purple
         cv::Mat hsv_mask;
         // cv::inRange(color_hsv, cv::Scalar(210, 0.0, 0.4), cv::Scalar(250, 0.5, 0.8), hsv_mask);
@@ -528,414 +575,411 @@ int main(int argc, char* argv[])
         cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
         cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
         bitwise_or(mask1, mask2, hsv_mask);
-#endif
+        #endif
 
-#ifdef DEBUG
+        #ifdef DEBUG
         to_file(workingDir + "/cpp_mask.txt", hsv_mask);
         cv::imwrite(workingDir + "/hsv_mask.png", hsv_mask);
-#endif
+        #endif
 
         auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, false, fixed_points);
         template_cloud = out.gurobi_output;
-#ifdef COMP
+        #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
         template_cloud_without_constrain = out_without_constrain.gurobi_output;
-#endif
+        #endif
 
         auto frame_id = "kinect2_rgb_optical_frame";
-#ifdef ENTIRE
+        #ifdef ENTIRE
         out.original_cloud->header.frame_id = frame_id;
-#endif
+        #endif
         out.masked_point_cloud->header.frame_id = frame_id;
         out.downsampled_cloud->header.frame_id = frame_id;
         out.cpd_output->header.frame_id = frame_id;
         out.gurobi_output->header.frame_id = frame_id;
-#ifdef COMP
+        #ifdef COMP
         out_without_constrain.gurobi_output->header.frame_id = frame_id;
-#endif
+        #endif
 
         // draw cylinder
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = frame_id;
-        marker.header.stamp = ros::Time();
-        marker.ns = "cylinder";
-        marker.id = 0;
-        marker.type = visualization_msgs::Marker::CYLINDER;
-        marker.action = visualization_msgs::Marker::ADD;
+        {
+            vm::Marker marker;
+            marker.header.frame_id = frame_id;
+            marker.header.stamp = ros::Time();
+            marker.ns = "cylinder";
+            marker.id = 0;
+            marker.type = vm::Marker::CYLINDER;
+            marker.action = vm::Marker::ADD;
 
-#ifdef CYL2
-        // interaction_cylinder_2.bag
-        marker.pose.position.x = 0.145124522395497;
-        marker.pose.position.y = -0.152708792314512;
-        marker.pose.position.z = 1.095150852162702;
-        marker.pose.orientation.x = -0.3540;
-        marker.pose.orientation.y = -0.0155;
-        marker.pose.orientation.z = 0.0408;
-        marker.pose.orientation.w = 0.9342;
-        marker.scale.x = 0.033137245873063*2;
-        marker.scale.y = 0.033137245873063*2;
-        marker.scale.z = 0.153739168519654;
-#endif
+            #ifdef CYL2
+            // interaction_cylinder_2.bag
+            marker.pose.position.x = 0.145124522395497;
+            marker.pose.position.y = -0.152708792314512;
+            marker.pose.position.z = 1.095150852162702;
+            marker.pose.orientation.x = -0.3540;
+            marker.pose.orientation.y = -0.0155;
+            marker.pose.orientation.z = 0.0408;
+            marker.pose.orientation.w = 0.9342;
+            marker.scale.x = 0.033137245873063*2;
+            marker.scale.y = 0.033137245873063*2;
+            marker.scale.z = 0.153739168519654;
+            #endif
 
-#ifdef CYL4
-        // interaction_cylinder_4.bag
-        marker.pose.position.x = -0.001783838376740;
-        marker.pose.position.y = -0.202407765852103;
-        marker.pose.position.z = 1.255950979292225;
-        marker.pose.orientation.x = -0.2134;
-        marker.pose.orientation.y = -0.0024;
-        marker.pose.orientation.z = 0.0110;
-        marker.pose.orientation.w = 0.9769;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL4
+            // interaction_cylinder_4.bag
+            marker.pose.position.x = -0.001783838376740;
+            marker.pose.position.y = -0.202407765852103;
+            marker.pose.position.z = 1.255950979292225;
+            marker.pose.orientation.x = -0.2134;
+            marker.pose.orientation.y = -0.0024;
+            marker.pose.orientation.z = 0.0110;
+            marker.pose.orientation.w = 0.9769;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL5
-        // interaction_cylinder_5.bag
-        marker.pose.position.x = -0.007203971514259;
-        marker.pose.position.y = -0.282011643023486;
-        marker.pose.position.z = 1.351697407251410;
-        marker.pose.orientation.x = -0.7884;
-        marker.pose.orientation.y = -0.0193;
-        marker.pose.orientation.z = 0.0150;
-        marker.pose.orientation.w = 0.6147;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL5
+            // interaction_cylinder_5.bag
+            marker.pose.position.x = -0.007203971514259;
+            marker.pose.position.y = -0.282011643023486;
+            marker.pose.position.z = 1.351697407251410;
+            marker.pose.orientation.x = -0.7884;
+            marker.pose.orientation.y = -0.0193;
+            marker.pose.orientation.z = 0.0150;
+            marker.pose.orientation.w = 0.6147;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL6
-        // interation_cylinder_6.bag
-        marker.pose.position.x = -0.025889295027034;
-        marker.pose.position.y = -0.020591825574503;
-        marker.pose.position.z = 1.200787565152055;
-        marker.pose.orientation.x = -0.7852;
-        marker.pose.orientation.y = -0.0016;
-        marker.pose.orientation.z = 0.0013;
-        marker.pose.orientation.w = 0.6193;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL6
+            // interation_cylinder_6.bag
+            marker.pose.position.x = -0.025889295027034;
+            marker.pose.position.y = -0.020591825574503;
+            marker.pose.position.z = 1.200787565152055;
+            marker.pose.orientation.x = -0.7852;
+            marker.pose.orientation.y = -0.0016;
+            marker.pose.orientation.z = 0.0013;
+            marker.pose.orientation.w = 0.6193;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL7
-        // interation_cylinder_7.bag
-        marker.pose.position.x = -0.025889295027034;
-        marker.pose.position.y = -0.020591825574503;
-        marker.pose.position.z = 1.200787565152055;
-        marker.pose.orientation.x = -0.7952;
-        marker.pose.orientation.y = -0.0010;
-        marker.pose.orientation.z = 0.0008;
-        marker.pose.orientation.w = 0.6064;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL7
+            // interation_cylinder_7.bag
+            marker.pose.position.x = -0.025889295027034;
+            marker.pose.position.y = -0.020591825574503;
+            marker.pose.position.z = 1.200787565152055;
+            marker.pose.orientation.x = -0.7952;
+            marker.pose.orientation.y = -0.0010;
+            marker.pose.orientation.z = 0.0008;
+            marker.pose.orientation.w = 0.6064;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL8
-        // interation_cylinder_7.bag
-        marker.pose.position.x = -0.239953252695972;
-        marker.pose.position.y = -0.326861315788172;
-        marker.pose.position.z = 1.459887097878595;
-        marker.pose.orientation.x = -0.1877;
-        marker.pose.orientation.y = -0.0009;
-        marker.pose.orientation.z = 0.0046;
-        marker.pose.orientation.w = 0.9822;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL8
+            // interation_cylinder_7.bag
+            marker.pose.position.x = -0.239953252695972;
+            marker.pose.position.y = -0.326861315788172;
+            marker.pose.position.z = 1.459887097878595;
+            marker.pose.orientation.x = -0.1877;
+            marker.pose.orientation.y = -0.0009;
+            marker.pose.orientation.z = 0.0046;
+            marker.pose.orientation.w = 0.9822;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL9
-        // interation_cylinder_9.bag
-        marker.pose.position.x = -0.239953252695972;
-        marker.pose.position.y = -0.28;
-        marker.pose.position.z = 1.459887097878595;
-        marker.pose.orientation.x = -0.1877;
-        marker.pose.orientation.y = -0.0009;
-        marker.pose.orientation.z = 0.0046;
-        marker.pose.orientation.w = 0.9822;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL9
+            // interation_cylinder_9.bag
+            marker.pose.position.x = -0.239953252695972;
+            marker.pose.position.y = -0.28;
+            marker.pose.position.z = 1.459887097878595;
+            marker.pose.orientation.x = -0.1877;
+            marker.pose.orientation.y = -0.0009;
+            marker.pose.orientation.z = 0.0046;
+            marker.pose.orientation.w = 0.9822;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL_CLOTH1
-        // interation_cloth1.bag
-        marker.pose.position.x = -0.114121248950204;
-        marker.pose.position.y = -0.180876677250917;
-        marker.pose.position.z = 1.384255148567173;
-        marker.pose.orientation.x = -0.1267;
-        marker.pose.orientation.y = 0.0142;
-        marker.pose.orientation.z = -0.1107;
-        marker.pose.orientation.w = 0.9857;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL_CLOTH1
+            // interation_cloth1.bag
+            marker.pose.position.x = -0.114121248950204;
+            marker.pose.position.y = -0.180876677250917;
+            marker.pose.position.z = 1.384255148567173;
+            marker.pose.orientation.x = -0.1267;
+            marker.pose.orientation.y = 0.0142;
+            marker.pose.orientation.z = -0.1107;
+            marker.pose.orientation.w = 0.9857;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL_CLOTH3
-        // interation_cloth1.bag
-        marker.pose.position.x = -0.134121248950204;
-        marker.pose.position.y = -0.110876677250917;
-        marker.pose.position.z = 1.384255148567173;
-        marker.pose.orientation.x = -0.1267;
-        marker.pose.orientation.y = 0.0142;
-        marker.pose.orientation.z = -0.1107;
-        marker.pose.orientation.w = 0.9857;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL_CLOTH3
+            // interation_cloth1.bag
+            marker.pose.position.x = -0.134121248950204;
+            marker.pose.position.y = -0.110876677250917;
+            marker.pose.position.z = 1.384255148567173;
+            marker.pose.orientation.x = -0.1267;
+            marker.pose.orientation.y = 0.0142;
+            marker.pose.orientation.z = -0.1107;
+            marker.pose.orientation.w = 0.9857;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-#ifdef CYL_CLOTH4
-        // interation_cloth1.bag
-        marker.pose.position.x = -0.134121248950204;
-        marker.pose.position.y = -0.110876677250917;
-        marker.pose.position.z = 1.384255148567173;
-        marker.pose.orientation.x = -0.1267;
-        marker.pose.orientation.y = 0.0142;
-        marker.pose.orientation.z = -0.1107;
-        marker.pose.orientation.w = 0.9857;
-        marker.scale.x = 0.05*2;
-        marker.scale.y = 0.05*2;
-        marker.scale.z = 0.21;
-#endif
+            #ifdef CYL_CLOTH4
+            // interation_cloth1.bag
+            marker.pose.position.x = -0.134121248950204;
+            marker.pose.position.y = -0.110876677250917;
+            marker.pose.position.z = 1.384255148567173;
+            marker.pose.orientation.x = -0.1267;
+            marker.pose.orientation.y = 0.0142;
+            marker.pose.orientation.z = -0.1107;
+            marker.pose.orientation.w = 0.9857;
+            marker.scale.x = 0.05*2;
+            marker.scale.y = 0.05*2;
+            marker.scale.z = 0.21;
+            #endif
 
-        marker.color.a = 0.5; // Don't forget to set the alpha!
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
+            marker.color.a = 0.5; // Don't forget to set the alpha!
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.0;
 
-        //only if using a MESH_RESOURCE marker type:
-        marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
-
-#ifdef CYLINDER_INTER
-        cylinder_pub.publish( marker );
-#endif
+            #ifdef CYLINDER_INTER
+            cylinder_pub.publish( marker );
+            #endif
+        }
 
         // draw line order
-        visualization_msgs::Marker order;
-        order.header.frame_id = frame_id;
-        order.header.stamp = ros::Time();
-        order.ns = "line_order";
-        order.action = visualization_msgs::Marker::ADD;
-        order.pose.orientation.w = 1.0;
-        order.id = 1;
-        order.scale.x = 0.002;
-        order.color.r = 1.0;
-        order.color.a = 1.0;
-        auto pc_iter = out.gurobi_output->begin();
+        {
+            vm::Marker order;
+            order.header.frame_id = frame_id;
+            order.header.stamp = ros::Time();
+            order.ns = "line_order";
+            order.action = vm::Marker::ADD;
+            order.pose.orientation.w = 1.0;
+            order.id = 1;
+            order.scale.x = 0.002;
+            order.color.r = 1.0;
+            order.color.a = 1.0;
+            auto pc_iter = out.gurobi_output->begin();
 
-#ifdef COMP
-        visualization_msgs::Marker order_without_constrain;
-        order_without_constrain.header.frame_id = frame_id;
-        order_without_constrain.header.stamp = ros::Time();
-        order_without_constrain.ns = "line_order_comp";
-        order_without_constrain.action = visualization_msgs::Marker::ADD;
-        order_without_constrain.pose.orientation.w = 1.0;
-        order_without_constrain.id = 2;
-        order_without_constrain.scale.x = 0.002;
-        order_without_constrain.color.b = 1.0;
-        order_without_constrain.color.a = 1.0;
-        auto pc_iter_comp = out_without_constrain.gurobi_output->begin();
-#endif
+            #ifdef COMP
+            vm::Marker order_without_constrain;
+            order_without_constrain.header.frame_id = frame_id;
+            order_without_constrain.header.stamp = ros::Time();
+            order_without_constrain.ns = "line_order_comp";
+            order_without_constrain.action = vm::Marker::ADD;
+            order_without_constrain.pose.orientation.w = 1.0;
+            order_without_constrain.id = 2;
+            order_without_constrain.scale.x = 0.002;
+            order_without_constrain.color.b = 1.0;
+            order_without_constrain.color.a = 1.0;
+            auto pc_iter_comp = out_without_constrain.gurobi_output->begin();
+            #endif
 
-#ifdef ROPE
+            #ifdef ROPE
+            // rope order
+            order.type = vm::Marker::LINE_STRIP;
+            for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
+                geometry_msgs::Point p;
+                p.x = pc_iter->x;
+                p.y = pc_iter->y;
+                p.z = pc_iter->z;
+                order.points.push_back(p);
+            }
 
-        // rope order
-        order.type = visualization_msgs::Marker::LINE_STRIP;
-        for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
-            geometry_msgs::Point p;
-            p.x = pc_iter->x;
-            p.y = pc_iter->y;
-            p.z = pc_iter->z;
+            #ifdef COMP
+            order_without_constrain.type = vm::Marker::LINE_STRIP;
+            for (int i = 0; i < points_on_rope; ++i, ++pc_iter_comp) {
+                geometry_msgs::Point p;
+                p.x = pc_iter_comp->x;
+                p.y = pc_iter_comp->y;
+                p.z = pc_iter_comp->z;
 
-            order.points.push_back(p);
-        }
+                order_without_constrain.points.push_back(p);
+            }
+            #endif
+            #else
+            // cloth order
+            order.type = vm::Marker::LINE_LIST;
+            for (int row = 0; row < cloth_height_num; ++row) {
+                for (int col = 0; col < cloth_width_num; ++col) {
+                    if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
+                        geometry_msgs::Point cur;
+                        geometry_msgs::Point right;
+                        geometry_msgs::Point below;
+                        int cur_ind = col*cloth_height_num + row;
+                        int right_ind = cur_ind + cloth_height_num;
+                        int below_ind = cur_ind + 1;
 
-#ifdef COMP
-        order_without_constrain.type = visualization_msgs::Marker::LINE_STRIP;
-        for (int i = 0; i < points_on_rope; ++i, ++pc_iter_comp) {
-            geometry_msgs::Point p;
-            p.x = pc_iter_comp->x;
-            p.y = pc_iter_comp->y;
-            p.z = pc_iter_comp->z;
+                        cur.x = (pc_iter+cur_ind)->x;
+                        cur.y = (pc_iter+cur_ind)->y;
+                        cur.z = (pc_iter+cur_ind)->z;
 
-            order_without_constrain.points.push_back(p);
-        }
-#endif
+                        right.x = (pc_iter+right_ind)->x;
+                        right.y = (pc_iter+right_ind)->y;
+                        right.z = (pc_iter+right_ind)->z;
 
-#else
+                        below.x = (pc_iter+below_ind)->x;
+                        below.y = (pc_iter+below_ind)->y;
+                        below.z = (pc_iter+below_ind)->z;
 
-        // cloth order
-        order.type = visualization_msgs::Marker::LINE_LIST;
-        for (int row = 0; row < cloth_height_num; ++row) {
-            for (int col = 0; col < cloth_width_num; ++col) {
-                if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
-                    geometry_msgs::Point cur;
-                    geometry_msgs::Point right;
-                    geometry_msgs::Point below;
-                    int cur_ind = col*cloth_height_num + row;
-                    int right_ind = cur_ind + cloth_height_num;
-                    int below_ind = cur_ind + 1;
+                        order.points.push_back(cur);
+                        order.points.push_back(right);
 
-                    cur.x = (pc_iter+cur_ind)->x;
-                    cur.y = (pc_iter+cur_ind)->y;
-                    cur.z = (pc_iter+cur_ind)->z;
+                        order.points.push_back(cur);
+                        order.points.push_back(below);
+                    }
+                    else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
+                        geometry_msgs::Point cur;
+                        geometry_msgs::Point right;
+                        int cur_ind = col*cloth_height_num + row;
+                        int right_ind = cur_ind + cloth_height_num;
 
-                    right.x = (pc_iter+right_ind)->x;
-                    right.y = (pc_iter+right_ind)->y;
-                    right.z = (pc_iter+right_ind)->z;
+                        cur.x = (pc_iter+cur_ind)->x;
+                        cur.y = (pc_iter+cur_ind)->y;
+                        cur.z = (pc_iter+cur_ind)->z;
 
-                    below.x = (pc_iter+below_ind)->x;
-                    below.y = (pc_iter+below_ind)->y;
-                    below.z = (pc_iter+below_ind)->z;
+                        right.x = (pc_iter+right_ind)->x;
+                        right.y = (pc_iter+right_ind)->y;
+                        right.z = (pc_iter+right_ind)->z;
 
-                    order.points.push_back(cur);
-                    order.points.push_back(right);
+                        order.points.push_back(cur);
+                        order.points.push_back(right);
+                    }
+                    else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
+                        geometry_msgs::Point cur;
+                        geometry_msgs::Point below;
+                        int cur_ind = col*cloth_height_num + row;
+                        int below_ind = cur_ind + 1;
 
-                    order.points.push_back(cur);
-                    order.points.push_back(below);
-                }
-                else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
-                    geometry_msgs::Point cur;
-                    geometry_msgs::Point right;
-                    int cur_ind = col*cloth_height_num + row;
-                    int right_ind = cur_ind + cloth_height_num;
+                        cur.x = (pc_iter+cur_ind)->x;
+                        cur.y = (pc_iter+cur_ind)->y;
+                        cur.z = (pc_iter+cur_ind)->z;
 
-                    cur.x = (pc_iter+cur_ind)->x;
-                    cur.y = (pc_iter+cur_ind)->y;
-                    cur.z = (pc_iter+cur_ind)->z;
+                        below.x = (pc_iter+below_ind)->x;
+                        below.y = (pc_iter+below_ind)->y;
+                        below.z = (pc_iter+below_ind)->z;
 
-                    right.x = (pc_iter+right_ind)->x;
-                    right.y = (pc_iter+right_ind)->y;
-                    right.z = (pc_iter+right_ind)->z;
-
-                    order.points.push_back(cur);
-                    order.points.push_back(right);
-                }
-                else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
-                    geometry_msgs::Point cur;
-                    geometry_msgs::Point below;
-                    int cur_ind = col*cloth_height_num + row;
-                    int below_ind = cur_ind + 1;
-
-                    cur.x = (pc_iter+cur_ind)->x;
-                    cur.y = (pc_iter+cur_ind)->y;
-                    cur.z = (pc_iter+cur_ind)->z;
-
-                    below.x = (pc_iter+below_ind)->x;
-                    below.y = (pc_iter+below_ind)->y;
-                    below.z = (pc_iter+below_ind)->z;
-
-                    order.points.push_back(cur);
-                    order.points.push_back(below);
+                        order.points.push_back(cur);
+                        order.points.push_back(below);
+                    }
                 }
             }
+
+            #ifdef COMP
+                    order_without_constrain.type = vm::Marker::LINE_LIST;
+                    for (int row = 0; row < cloth_height_num; ++row) {
+                        for (int col = 0; col < cloth_width_num; ++col) {
+                            if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
+                                geometry_msgs::Point cur;
+                                geometry_msgs::Point right;
+                                geometry_msgs::Point below;
+                                int cur_ind = col*cloth_height_num + row;
+                                int right_ind = cur_ind + cloth_height_num;
+                                int below_ind = cur_ind + 1;
+
+                                cur.x = (pc_iter_comp+cur_ind)->x;
+                                cur.y = (pc_iter_comp+cur_ind)->y;
+                                cur.z = (pc_iter_comp+cur_ind)->z;
+
+                                right.x = (pc_iter_comp+right_ind)->x;
+                                right.y = (pc_iter_comp+right_ind)->y;
+                                right.z = (pc_iter_comp+right_ind)->z;
+
+                                below.x = (pc_iter_comp+below_ind)->x;
+                                below.y = (pc_iter_comp+below_ind)->y;
+                                below.z = (pc_iter_comp+below_ind)->z;
+
+                                order_without_constrain.points.push_back(cur);
+                                order_without_constrain.points.push_back(right);
+
+                                order_without_constrain.points.push_back(cur);
+                                order_without_constrain.points.push_back(below);
+                            }
+                            else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
+                                geometry_msgs::Point cur;
+                                geometry_msgs::Point right;
+                                int cur_ind = col*cloth_height_num + row;
+                                int right_ind = cur_ind + cloth_height_num;
+
+                                cur.x = (pc_iter_comp+cur_ind)->x;
+                                cur.y = (pc_iter_comp+cur_ind)->y;
+                                cur.z = (pc_iter_comp+cur_ind)->z;
+
+                                right.x = (pc_iter_comp+right_ind)->x;
+                                right.y = (pc_iter_comp+right_ind)->y;
+                                right.z = (pc_iter_comp+right_ind)->z;
+
+                                order_without_constrain.points.push_back(cur);
+                                order_without_constrain.points.push_back(right);
+                            }
+                            else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
+                                geometry_msgs::Point cur;
+                                geometry_msgs::Point below;
+                                int cur_ind = col*cloth_height_num + row;
+                                int below_ind = cur_ind + 1;
+
+                                cur.x = (pc_iter_comp+cur_ind)->x;
+                                cur.y = (pc_iter_comp+cur_ind)->y;
+                                cur.z = (pc_iter_comp+cur_ind)->z;
+
+                                below.x = (pc_iter_comp+below_ind)->x;
+                                below.y = (pc_iter_comp+below_ind)->y;
+                                below.z = (pc_iter_comp+below_ind)->z;
+
+                                order_without_constrain.points.push_back(cur);
+                                order_without_constrain.points.push_back(below);
+                            }
+                        }
+                    }
+            #endif
+            #endif
+
+            order_pub.publish(order);
+            #ifdef COMP
+            order_without_constrain_pub.publish(order_without_constrain);
+            #endif
         }
-
-#ifdef COMP
-        order_without_constrain.type = visualization_msgs::Marker::LINE_LIST;
-        for (int row = 0; row < cloth_height_num; ++row) {
-            for (int col = 0; col < cloth_width_num; ++col) {
-                if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
-                    geometry_msgs::Point cur;
-                    geometry_msgs::Point right;
-                    geometry_msgs::Point below;
-                    int cur_ind = col*cloth_height_num + row;
-                    int right_ind = cur_ind + cloth_height_num;
-                    int below_ind = cur_ind + 1;
-
-                    cur.x = (pc_iter_comp+cur_ind)->x;
-                    cur.y = (pc_iter_comp+cur_ind)->y;
-                    cur.z = (pc_iter_comp+cur_ind)->z;
-
-                    right.x = (pc_iter_comp+right_ind)->x;
-                    right.y = (pc_iter_comp+right_ind)->y;
-                    right.z = (pc_iter_comp+right_ind)->z;
-
-                    below.x = (pc_iter_comp+below_ind)->x;
-                    below.y = (pc_iter_comp+below_ind)->y;
-                    below.z = (pc_iter_comp+below_ind)->z;
-
-                    order_without_constrain.points.push_back(cur);
-                    order_without_constrain.points.push_back(right);
-
-                    order_without_constrain.points.push_back(cur);
-                    order_without_constrain.points.push_back(below);
-                }
-                else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
-                    geometry_msgs::Point cur;
-                    geometry_msgs::Point right;
-                    int cur_ind = col*cloth_height_num + row;
-                    int right_ind = cur_ind + cloth_height_num;
-
-                    cur.x = (pc_iter_comp+cur_ind)->x;
-                    cur.y = (pc_iter_comp+cur_ind)->y;
-                    cur.z = (pc_iter_comp+cur_ind)->z;
-
-                    right.x = (pc_iter_comp+right_ind)->x;
-                    right.y = (pc_iter_comp+right_ind)->y;
-                    right.z = (pc_iter_comp+right_ind)->z;
-
-                    order_without_constrain.points.push_back(cur);
-                    order_without_constrain.points.push_back(right);
-                }
-                else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
-                    geometry_msgs::Point cur;
-                    geometry_msgs::Point below;
-                    int cur_ind = col*cloth_height_num + row;
-                    int below_ind = cur_ind + 1;
-
-                    cur.x = (pc_iter_comp+cur_ind)->x;
-                    cur.y = (pc_iter_comp+cur_ind)->y;
-                    cur.z = (pc_iter_comp+cur_ind)->z;
-
-                    below.x = (pc_iter_comp+below_ind)->x;
-                    below.y = (pc_iter_comp+below_ind)->y;
-                    below.z = (pc_iter_comp+below_ind)->z;
-
-                    order_without_constrain.points.push_back(cur);
-                    order_without_constrain.points.push_back(below);
-                }
-            }
-        }
-#endif
-
-#endif
-
-        order_pub.publish(order);
-#ifdef COMP
-        order_without_constrain_pub.publish(order_without_constrain);
-#endif
 
         auto time = ros::Time::now();
-#ifdef ENTIRE
+        #ifdef ENTIRE
         pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
-#endif
+        #endif
         pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
         pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
-#ifdef COMP
+        #ifdef COMP
         pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
-#endif
+        #endif
 
-#ifdef ENTIRE
+        #ifdef ENTIRE
         original_publisher.publish(out.original_cloud);
-#endif
+        #endif
         masked_publisher.publish(out.masked_point_cloud);
         downsampled_publisher.publish(out.downsampled_cloud);
         template_publisher.publish(out.cpd_output);
         output_publisher.publish(out.gurobi_output);
-#ifdef COMP
+        #ifdef COMP
         output_without_constrain_publisher.publish(out_without_constrain.gurobi_output);
-#endif
+        #endif
 
         ++color_iter;
         ++depth_iter;
+        ++info_iter;
     }
 
     cout << "Test ended" << endl;
