@@ -90,11 +90,19 @@ public:
 void callback(const sensor_msgs::Image::ConstPtr &rgb_img,
               const sensor_msgs::Image::ConstPtr &depth_img)
 {
+#ifdef SIMULATION
     cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::TYPE_8UC3);
+#else
+    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::BGR8);
+#endif
     cv::Mat color_image = rgb_ptr->image.clone();
     color_images.push_back(color_image);
 
+#ifdef SIMULATION
     cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_32FC1);
+#else
+    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_16UC1);
+#endif
     cv::Mat depth_image = depth_ptr->image.clone();
     depth_images.push_back(depth_image);
 }
@@ -377,10 +385,10 @@ int main(int argc, char* argv[])
                 info_msg_tmp.width = depth_images.back().cols;
                 info_msg_tmp.height = depth_images.back().rows;
                 float ratio = float(depth_images.back().cols)/float(color_images.back().cols);
-                // info_msg_tmp.K[0] *= ratio;
-                // info_msg_tmp.K[2] *= ratio;
-                // info_msg_tmp.K[4] *= ratio;
-                // info_msg_tmp.K[5] *= ratio;
+                info_msg_tmp.K[0] *= ratio;
+                info_msg_tmp.K[2] *= ratio;
+                info_msg_tmp.K[4] *= ratio;
+                info_msg_tmp.K[5] *= ratio;
                 info_msg_tmp.P[0] *= ratio;
                 info_msg_tmp.P[2] *= ratio;
                 info_msg_tmp.P[5] *= ratio;
