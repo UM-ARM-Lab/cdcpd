@@ -15,6 +15,7 @@
 #include <rosbag/view.h>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
+#include <image_geometry/pinhole_camera_model.h>
 #include <pcl/point_types.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -46,15 +47,6 @@ using namespace cv;
 
 std::vector<cv::Mat> color_images;
 std::vector<cv::Mat> depth_images;
-
-// auto constexpr PARAM_NAME_WIDTH = 40;
-//
-
-// void callback_fn(cv::Mat, cv::Mat, cv::Matx33d)
-// {
-//     // TODO
-//     ROS_INFO("Got message!!!!");
-// }
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
@@ -224,7 +216,7 @@ int main(int argc, char* argv[])
     // test_nearest_line();
     // test_lle();
     // ENHANCE: more smart way to get Y^0 and E
-    ros::init(argc, argv, "cdcpd_ros_node");
+    ros::init(argc, argv, "cdcpd_node");
     cout << "Starting up..." << endl;
 
     #ifdef ROPE
@@ -256,7 +248,6 @@ int main(int argc, char* argv[])
     #endif
 
     #ifdef DEBUG
-
     clean_file(workingDir + "/cpp_entire_cloud.txt");
     clean_file(workingDir + "/cpp_downsample.txt");
     clean_file(workingDir + "/cpp_TY.txt");
@@ -264,7 +255,6 @@ int main(int argc, char* argv[])
     clean_file(workingDir + "/cpp_TY-1.txt");
     clean_file(workingDir + "/cpp_hsv.txt");
     clean_file(workingDir + "/cpp_mask.txt");
-
     #endif
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -282,9 +272,6 @@ int main(int argc, char* argv[])
         template_cloud_without_constrain->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
 #endif
-
-    // comes from the default P matrix on the /kinect2/qhd/camera_info channel.
-    cv::Mat P_mat(3, 4, CV_64FC1);
 
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
@@ -308,49 +295,47 @@ int main(int argc, char* argv[])
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
 
-    rosbag::Bag bag;
-
-
     const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
-    auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
-#ifdef SIMULATION
-    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
-#else
-    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
-#endif
-    bag.open(folder + bagfile + ".bag", rosbag::bagmode::Read);
+    // comes from the /kinect2/qhd/camera_info channel.
+    cv::Matx33d intrinsics;
+    bool intrinsics_recorded = false;
 
     std::vector<std::string> topics;
-#ifdef SIMULATION
+    #ifdef SIMULATION
     topics.push_back(std::string("image_color_rect"));
     topics.push_back(std::string("image_depth_rect"));
     topics.push_back(std::string("camera_info"));
     topics.push_back(std::string("groud_truth"));
-#else
+    #else
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
     topics.push_back(std::string("/kinect2/qhd/camera_info"));
-#endif
+    #endif
 
+    // Used to republish the images at the current timestamp
     image_transport::ImageTransport it(nh);
     auto color_pub = it.advertise(topics[0], 1);
     auto depth_pub = it.advertise(topics[1], 1);
     auto ci_pub = nh.advertise<sensor_msgs::CameraInfo>(topics[2], 1);
 
-
+    auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
+    #ifdef SIMULATION
+    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
+    #else
+    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
+    #endif
+    rosbag::Bag bag(folder + bagfile + ".bag", rosbag::bagmode::Read);
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
-    message_filters::TimeSynchronizer<sensor_msgs::Image, sensor_msgs::Image> sync(rgb_sub, depth_sub, 25);
-    sync.registerCallback(boost::bind(&callback, _1, _2));
-
+    // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
-
-    for(rosbag::MessageInstance const m: view)
+    auto sync = message_filters::TimeSynchronizer<sensor_msgs::Image, sensor_msgs::Image>(rgb_sub, depth_sub, 25);
+    sync.registerCallback(boost::bind(&callback, _1, _2));
+    for(rosbag::MessageInstance const& m: view)
     {
-        // cout << "topic: " << m.getTopic() << endl;
         if (m.getTopic() == topics[0])
         {
             auto i = m.instantiate<sensor_msgs::Image>();
@@ -375,52 +360,54 @@ int main(int argc, char* argv[])
         }
         else if (m.getTopic() == topics[2])
         {
-            auto info_msg = m.instantiate<sensor_msgs::CameraInfo>();
-            info_msg->header.stamp = ros::Time::now();
-            auto info_msg_tmp = *info_msg;
+            auto info_msg = *m.instantiate<sensor_msgs::CameraInfo>();
+            info_msg.header.stamp = ros::Time::now();
             ci_pub.publish(info_msg);
 
             // the following is similar to https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
             if (!depth_images.empty() && !color_images.empty() && (depth_images.back().cols != color_images.back().cols || depth_images.back().rows != color_images.back().rows))
             {
-                cout << "resized" << endl;
-                info_msg_tmp.width = depth_images.back().cols;
-                info_msg_tmp.height = depth_images.back().rows;
+                cout << "resizing color vs depth images" << endl;
+                info_msg.width = depth_images.back().cols;
+                info_msg.height = depth_images.back().rows;
                 float ratio = float(depth_images.back().cols)/float(color_images.back().cols);
-                info_msg_tmp.K[0] *= ratio;
-                info_msg_tmp.K[2] *= ratio;
-                info_msg_tmp.K[4] *= ratio;
-                info_msg_tmp.K[5] *= ratio;
-                info_msg_tmp.P[0] *= ratio;
-                info_msg_tmp.P[2] *= ratio;
-                info_msg_tmp.P[5] *= ratio;
-                info_msg_tmp.P[6] *= ratio;
+                info_msg.K[0] *= ratio;
+                info_msg.K[2] *= ratio;
+                info_msg.K[4] *= ratio;
+                info_msg.K[5] *= ratio;
+                info_msg.P[0] *= ratio;
+                info_msg.P[2] *= ratio;
+                info_msg.P[5] *= ratio;
+                info_msg.P[6] *= ratio;
             }
-            for (int row = 0; row < 3; ++row) {
-                for (int col = 0; col < 4; ++col) {
-                    P_mat.at<double>(row, col) = info_msg_tmp.P[row*4+col];
-                }
-            }
-            // cout << "P matrix: " << endl;
-            // cout << P_mat << endl << endl;
+
+            image_geometry::PinholeCameraModel model;
+            model.fromCameraInfo(info_msg);
+            intrinsics = model.fullIntrinsicMatrix();
+            intrinsics_recorded = true;
         }
+        #ifdef SIMULATION
         else if (m.getTopic() == topics[3])
         {
 
         }
+        #endif
         else
         {
             cerr << "Invalid topic: " << m.getTopic() << endl;
             exit(1);
         }
     }
+    bag.close();
+    if (!intrinsics_recorded)
+    {
+        throw std::runtime_error("Bagfile did not contain any camera intrinsics");
+    }
 
     CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
 #ifdef COMP
-    CDCPD cdcpd_without_constrain(template_cloud, template_edges, P_mat, false, alpha, beta, lambda, k_spring);
+    CDCPD cdcpd_without_constrain(template_cloud, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
 #endif
-
-    bag.close();
 
     auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
@@ -434,7 +421,8 @@ int main(int argc, char* argv[])
     bool use_grippers = false; // TODO don't error if no gripper broadcast
 
     std::vector<CDCPD::FixedPoint> fixed_points;
-    if (use_grippers) {
+    if (use_grippers)
+    {
         while (nh.ok())
         {
             try{
@@ -461,8 +449,7 @@ int main(int argc, char* argv[])
     }
 
     std::string stepper;
-    ros::Rate rate(30); // 5 hz, maybe allow changes, or mimicking bag?
-
+    ros::Rate rate(30); // 30 hz, maybe allow changes, or mimicking bag?
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend())
     {
         // if(kbhit())
@@ -548,7 +535,7 @@ int main(int argc, char* argv[])
         cv::imwrite(workingDir + "/hsv_mask.png", hsv_mask);
 #endif
 
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, P_mat, template_cloud, true, false, fixed_points);
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, false, fixed_points);
         template_cloud = out.gurobi_output;
 #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);

@@ -1,24 +1,8 @@
-// #include <string>
-// #include <vector>
-// #include <thread>
-// #include <chrono>
-// #include <map>
-
-// #include <opencv2/core.hpp>
-// #include <opencv2/highgui.hpp>
-// #include <opencv2/imgcodecs.hpp>
-// #include <opencv2/imgproc/imgproc.hpp>
-
 #include <ros/ros.h>
-// #include <cv_bridge/cv_bridge.h>
-// #include <image_transport/image_transport.h>
 #include <pcl/point_types.h>
-// #include <pcl/visualization/pcl_visualizer.h>
-// #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/TransformStamped.h>
-// #include <geometry_msgs/Point.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
