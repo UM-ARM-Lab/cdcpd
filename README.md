@@ -41,9 +41,8 @@ To run the demo, you will need to download some [dataset](https://drive.google.c
 Also, you need to download [cdcpd_ros](https://github.com/UM-ARM-Lab/cdcpd_ros) and put it under the same folder as cdcpd.
 You need to specify `.bag` file path in the running command.
 
-To run the fully ROS integrated demo start all of the following from individual terminals, without activating the conda workspace:
-* Start ROS core: `roscore`
-* Start Rviz for visualization: `rviz`
-* Start the tracking nodes: `rosrun cdcpd_ros node _bagfile:="NAME_OF_BAG"`
+To run the bagfile demo start, run the following node:
+* `rosrun cdcpd_ros bagfile _bagfile:="NAME_OF_BAG"`
+Note that the bag is assumed to exist in `cdcpd_test/datasets/`
 
 My own running result is [here](https://drive.google.com/open?id=1HovZ9eJMZ1WYyCsdsISw5YndlS-BUwSx), which includes bag files and MP4 files.
