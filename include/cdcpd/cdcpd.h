@@ -68,7 +68,7 @@ public:
     Output operator()(const cv::Mat& rgb, // RGB image
                       const cv::Mat& depth, // Depth image
                       const cv::Mat& mask,
-                      const cv::Mat& P_matrix, // P_matrix: (3, 4) camera matrix
+                      const cv::Matx33d& intrinsics,
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
@@ -78,8 +78,8 @@ private:
     Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices,
                                      const cv::Mat& depth,
                                      const cv::Mat& mask,
-                                     const Eigen::MatrixXf& P_eigen,
-                                     const float k); // TODO this should be configurable
+                                     const Eigen::Matrix3f& intrinsics,
+                                     const float kvis);
     // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
     // and not have to pass around intr in here
     Eigen::MatrixXf calcP(const int N,

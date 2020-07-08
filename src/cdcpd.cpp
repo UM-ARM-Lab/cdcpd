@@ -20,6 +20,7 @@
 #include "cdcpd/optimizer.h"
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/past_template_matcher.h"
+#include "depth_traits.h"
 
 // TODO rm
 #include <iostream>
@@ -329,13 +330,13 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
                                         const cv::Mat& depth,
                                         const cv::Mat& mask,
-                                        const Eigen::MatrixXf& P_eigen,
-                                        const float k)
+                                        const Eigen::Matrix3f& intrinsics,
+                                        const float kvis)
 {
     // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
     // mask: CV_8U mask for segmentation
-    // k: k_vis in the paper
+    // kvis: k_vis in the paper
 
 #ifdef DEBUG
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
@@ -349,7 +350,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
 
     // Project the vertices to get their corresponding pixel coordinate
     // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
-    Eigen::Matrix3Xf image_space_vertices = P_eigen.leftCols(3) * vertices;
+    Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
 
     // Homogeneous coords: divide by third row
     // the for-loop is unnecessary
@@ -416,7 +417,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
         dist_to_mask(i) = dist_img.at<float>(coords(1, i), coords(0, i));
     }
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
-    VectorXf prob = (-k * score).array().exp().matrix();
+    VectorXf prob = (-kvis * score).array().exp().matrix();
     // ???: unnormalized prob
 #ifdef DEBUG
     to_file(workingDir + "/cpp_prob.txt", prob);
@@ -531,38 +532,35 @@ static std::tuple<PointCloud::Ptr>
 point_clouds_from_images(const cv::Mat& depth_image,
                          const cv::Mat& rgb_image,
                          const cv::Mat& mask,
-                         const Eigen::MatrixXf& P,
-                         const Eigen::Vector3f& lower_bounding_box_vec,
-                         const Eigen::Vector3f& upper_bounding_box_vec)
+                         const Eigen::Matrix3f& intrinsics,
+                         const Eigen::Vector3f& lower_bounding_box,
+                         const Eigen::Vector3f& upper_bounding_box)
 {
     // depth_image: CV_16U depth image
     // rgb_image: CV_8U3C rgb image
     // mask: CV_8U mask for segmentation
-    // P: camera matrix of Kinect
-    //  [[fx 0  px 0];
-    //   [0  fy py 0];
-    //   [0  0  1  0]]
+    // intrinsic matrix of Kinect using the Pinhole camera model
+    //  [[fx 0  px];
+    //   [0  fy py];
+    //   [0  0  1 ]]
     // lower_bounding_box_vec: bounding for mask
     // upper_bounding_box_vec: bounding for mask
 
-    // assert(depth_image.cols == rgb_image.cols);
-    // assert(depth_image.rows == rgb_image.rows);
-    // assert(depth_image.type() == CV_16U);
-    // assert(P.rows() == 3 && P.cols() == 4);
-    // Assume unit_scaling is the standard Kinect 1mm
-    float unit_scaling = 0.001;
-#ifdef SIMULATION
-    float pixel_len = 0.0000222222;
-#else
-    float pixel_len = 0.0002645833;
-#endif
-    float constant_x = 1 / (P(0, 0) * pixel_len);
-    float constant_y = 1 / (P(1, 1) * pixel_len);
-    float center_x = P(0, 2);
-    float center_y = P(1, 2);
-    float bad_point = std::numeric_limits<float>::quiet_NaN();
-    Eigen::Array<float, 3, 1> lower_bounding_box = lower_bounding_box_vec.array();
-    Eigen::Array<float, 3, 1> upper_bounding_box = upper_bounding_box_vec.array();
+    #ifdef SIMULATION
+    using T = float;
+    #else
+    using T = uint16_t;
+    #endif
+    using DepthTraits = cdcpd::DepthTraits<T>;
+
+    // Use correct principal point from calibration
+    auto const center_x = intrinsics(0, 2);
+    auto const center_y = intrinsics(1, 2);
+
+    auto const unit_scaling = DepthTraits::toMeters(T(1));
+    auto const constant_x = unit_scaling / intrinsics(0, 0);
+    auto const constant_y = unit_scaling / intrinsics(1, 1);
+    auto constexpr bad_point = std::numeric_limits<float>::quiet_NaN();
 
     // ENHANCE: change the way to get access to depth image and rgb image to be more readable
     // from "depth_row += row_step" to ".at<>()"
@@ -573,77 +571,60 @@ point_clouds_from_images(const cv::Mat& depth_image,
     int rgb_step = 3; // TODO check on this
     int rgb_skip = rgb_image.step - rgb_image.cols * rgb_step;
     */
-#ifdef ENTIRE
-    PointCloudRGB::Ptr unfiltered_cloud(
-            new PointCloudRGB(depth_image.cols, depth_image.rows));
-#endif
+
     PointCloud::Ptr filtered_cloud(new PointCloud);
-    //std::vector<cv::Point> pixel_coords;
-#ifdef ENTIRE
+    #ifdef ENTIRE
+    PointCloudRGB::Ptr unfiltered_cloud(new PointCloudRGB(depth_image.cols, depth_image.rows));
     auto unfiltered_iter = unfiltered_cloud->begin();
-#endif
+    #endif
 
     for (int v = 0; v < depth_image.rows; ++v)
     {
-#ifdef ENTIRE
-        for (uint32_t u = 0; u < depth_image.cols; ++u, ++unfiltered_iter)
-#else
-        for (uint32_t u = 0; u < depth_image.cols; ++u)
-#endif
+        for (int u = 0; u < depth_image.cols; ++u)
         {
-#ifdef SIMULATION
-            float depth = depth_image.at<float>(v, u);
-            // float depth = float(depth_temp)/255.0f*(8000.0f-3000.0f)+3000.0f;
-#else
-            uint16_t depth = depth_image.at<uint16_t>(v, u);
-#endif
+            T depth = depth_image.at<T>(v, u);
 
             // Assume depth = 0 is the standard was to note invalid
-            if (depth != 0)
+            if (DepthTraits::valid(depth))
             {
-                float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x; // * pixel_len * depth * unit_scaling * constant_x;
-                float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y; // * pixel_len * depth * unit_scaling * constant_y;
+                float x = (float(u) - center_x) * float(depth) * constant_x;
+                float y = (float(v) - center_y) * float(depth) * constant_y;
                 float z = float(depth) * unit_scaling;
                 // Add to unfiltered cloud
                 // ENHANCE: be more concise
-#ifdef ENTIRE
+                #ifdef ENTIRE
                 unfiltered_iter->x = x;
                 unfiltered_iter->y = y;
                 unfiltered_iter->z = z;
                 unfiltered_iter->r = rgb_image.at<Vec3b>(v, u)[0];
                 unfiltered_iter->g = rgb_image.at<Vec3b>(v, u)[1];
                 unfiltered_iter->b = rgb_image.at<Vec3b>(v, u)[2];
-#endif
+                #endif
 
-                // cv::Point2i pixel = cv::Point2i(u, v);
                 Eigen::Array<float, 3, 1> point(x, y, z);
                 if (mask.at<bool>(v, u) &&
-                    point.min(upper_bounding_box).isApprox(point) &&
-                    point.max(lower_bounding_box).isApprox(point))
+                    point.min(upper_bounding_box.array()).isApprox(point) &&
+                    point.max(lower_bounding_box.array()).isApprox(point))
                 {
                     filtered_cloud->push_back(pcl::PointXYZ(x, y, z));
-                    // pixel_coords.push_back(pixel);
                 }
-                // else if (mask.at<bool>(pixel))
-                // {
-                //     cout << "Point ignored because it was outside the boundaries." << endl;
-                // }
             }
-#ifdef ENTIRE
+            #ifdef ENTIRE
             else
             {
                 unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
             }
-#endif
+            ++unfiltered_iter;
+            #endif
         }
     }
-//    assert(unfiltered_iter == unfiltered_cloud->end());
-    return {
-#ifdef ENTIRE
-        unfiltered_cloud,
-#endif
-        filtered_cloud};
-        // pixel_coords };
+
+    #ifdef ENTIRE
+    assert(unfiltered_iter == unfiltered_cloud->end());
+    return { unfiltered_cloud, filtered_cloud };
+    #else
+    return { filtered_cloud };
+    #endif
 }
 
 static void sample_X_points(const Matrix3Xf& Y,
@@ -853,7 +834,7 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& rgb,
         const cv::Mat& depth,
         const cv::Mat& mask,
-        const cv::Mat& P_matrix, // P_matrix: (3, 4) camera matrix
+        const cv::Matx33d& intrinsics,
         const PointCloud::Ptr template_cloud,
         const bool self_intersection,
         const bool interation_constrain,
@@ -873,8 +854,6 @@ CDCPD::Output CDCPD::operator()(
     assert(depth.type() == CV_16U);
 #endif
     assert(mask.type() == CV_8U);
-    assert(P_matrix.type() == CV_64F);
-    assert(P_matrix.rows == 3 && P_matrix.cols == 4);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
     size_t recovery_knn_k = 12; // TODO configure this?
@@ -889,45 +868,34 @@ CDCPD::Output CDCPD::operator()(
     };
 #endif
 
-    // We'd like an Eigen version of the P matrix
-    Eigen::MatrixXf P_eigen(3, 4);
-    cv::cv2eigen(P_matrix, P_eigen);
+    Eigen::Matrix3d intrinsics_eigen_tmp;
+    cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
+    Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
-    std::cout << "P_eigen:\n" << P_eigen << std::endl;
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
 
-    // TODO: For testing purposes, compute the whole cloud, though it's not really necessary
-    // ENHANCE: debug macro to remove entire_cloud
-    // ENHANCE: pixel_coords is not used
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
-    // pixel_coords: pixel coordinate corresponds to the point in the cloud
-    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
-    auto [
-#ifdef ENTIRE
-            entire_cloud,
-#endif
-                    cloud]
+    #ifdef ENTIRE
+    auto [entire_cloud, cloud]
+    #else
+    auto [cloud]
+    #endif
         = point_clouds_from_images(
                 depth,
                 rgb,
                 mask,
-                P_eigen,
+                intrinsics_eigen,
                 last_lower_bounding_box - bounding_box_extend,
                 last_upper_bounding_box + bounding_box_extend);
-    #ifdef ENTIRE
-    std::cout << "Points in entire:   (" << entire_cloud->height << " x " << entire_cloud->width << ")\n";
-    #endif
     std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
-
-    // intr: intrinsics of the camera
-    Eigen::Matrix3f intr = P_eigen.leftCols(3);
 
     /// VoxelGrid filter downsampling
     PointCloud::Ptr cloud_downsampled(new PointCloud);
     const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
     double sigma2 = 0.002;
     // TODO: check whether the change is needed here for unit conversion
-    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, P_eigen, kvis);
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
     // std::cout << "P_vis:" << std::endl;
     // std::cout << Y_emit_prior << std::endl << std::endl;
     // sample_X_points(Y, Y_emit_prior, sigma2, cloud);
@@ -968,7 +936,7 @@ CDCPD::Output CDCPD::operator()(
         std::cout << "matcher size: " << template_matcher.size() << std::endl;
 
         // TODO: check whether the change is needed here for unit conversion
-        float cost = smooth_free_space_cost(Y_opt, intr, depth, mask);
+        float cost = smooth_free_space_cost(Y_opt, intrinsics_eigen, depth, mask);
         std::cout << "cost" << std::endl;
         std::cout << cost << std::endl;
 
@@ -985,7 +953,7 @@ CDCPD::Output CDCPD::operator()(
                 Matrix3Xf proposed_recovery = cpd(cloud_downsampled->getMatrixXfMap().topRows(3), templ, depth, mask);
                 // TODO if we end up being able to disable optimization, we should not call this
                 proposed_recovery = opt(proposed_recovery, template_edges, fixed_points);
-                float proposal_cost = smooth_free_space_cost(proposed_recovery, intr, depth, mask);
+                float proposal_cost = smooth_free_space_cost(proposed_recovery, intrinsics_eigen, depth, mask);
                 if (proposal_cost < best_cost)
                 {
                     final_tracking_result = proposed_recovery;
