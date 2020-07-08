@@ -387,10 +387,10 @@ int main(int argc, char* argv[])
                 info_msg_tmp.width = depth_images.back().cols;
                 info_msg_tmp.height = depth_images.back().rows;
                 float ratio = float(depth_images.back().cols)/float(color_images.back().cols);
-                // info_msg_tmp.K[0] *= ratio;
-                // info_msg_tmp.K[2] *= ratio;
-                // info_msg_tmp.K[4] *= ratio;
-                // info_msg_tmp.K[5] *= ratio;
+                info_msg_tmp.K[0] *= ratio;
+                info_msg_tmp.K[2] *= ratio;
+                info_msg_tmp.K[4] *= ratio;
+                info_msg_tmp.K[5] *= ratio;
                 info_msg_tmp.P[0] *= ratio;
                 info_msg_tmp.P[2] *= ratio;
                 info_msg_tmp.P[5] *= ratio;
