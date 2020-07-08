@@ -39,6 +39,8 @@ using Eigen::MatrixXf;
 using Eigen::MatrixXi;
 using Eigen::Matrix3Xf;
 using pcl::PointXYZ;
+namespace gm = geometry_msgs;
+namespace vm = visualization_msgs;
 
 using namespace cv;
 
@@ -55,12 +57,6 @@ std::vector<cv::Mat> depth_images;
 // }
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
-
-#ifdef SIMULATION
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result";
-#else
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
-#endif
 
 void clean_file(const std::string& fname) {
     std::ofstream ofs(fname, std::ofstream::out);
@@ -89,11 +85,19 @@ public:
 void callback(const sensor_msgs::Image::ConstPtr &rgb_img,
               const sensor_msgs::Image::ConstPtr &depth_img)
 {
+    #ifdef SIMULATION
     cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::TYPE_8UC3);
+    #else
+    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sensor_msgs::image_encodings::BGR8);
+    #endif
     cv::Mat color_image = rgb_ptr->image.clone();
     color_images.push_back(color_image);
 
+    #ifdef SIMULATION
     cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_32FC1);
+    #else
+    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sensor_msgs::image_encodings::TYPE_16UC1);
+    #endif
     cv::Mat depth_image = depth_ptr->image.clone();
     depth_images.push_back(depth_image);
 }
@@ -114,6 +118,7 @@ double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
     return reg;
 }
 
+#if 0
 void test_lle() {
     // test LLE
     PointCloud::Ptr init(new PointCloud);
@@ -174,6 +179,7 @@ void test_lle() {
 
     exit(1);
 }
+#endif
 
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float height, int num_width, int num_height)
 {
@@ -283,22 +289,18 @@ int main(int argc, char* argv[])
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
 
-#ifdef ENTIRE
-    ros::Publisher original_publisher = ph.advertise<PointCloud> ("original", 1);
-#endif
-    ros::Publisher masked_publisher = ph.advertise<PointCloud> ("masked", 1);
-    ros::Publisher downsampled_publisher = ph.advertise<PointCloud> ("downsampled", 1);
-    ros::Publisher template_publisher = ph.advertise<PointCloud> ("template", 1);
-    ros::Publisher cpd_iters_publisher = ph.advertise<PointCloud> ("cpd_iters", 1);
-    ros::Publisher output_publisher = ph.advertise<PointCloud> ("output", 1);
-    ros::Publisher output_without_constrain_publisher = ph.advertise<PointCloud> ("output_without_constrain", 1);
-    ros::Publisher left_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/left_gripper_prior", 1);
-    ros::Publisher right_gripper_pub = nh.advertise<geometry_msgs::TransformStamped>("/cdcpd/right_gripper_prior", 1);
-    ros::Publisher cylinder_pub = ph.advertise<visualization_msgs::Marker>( "cylinder", 0 );
-    ros::Publisher order_pub = ph.advertise<visualization_msgs::Marker>("order", 10);
-#ifdef COMP
-    ros::Publisher order_without_constrain_pub = ph.advertise<visualization_msgs::Marker>("order_without_constrain", 10);
-#endif
+    // Publsihers for the data, some visualizations, others consumed by other nodes
+    auto original_publisher = nh.advertise<PointCloud> ("cdcpd/original", 1);
+    auto masked_publisher = nh.advertise<PointCloud> ("cdcpd/masked", 1);
+    auto downsampled_publisher = nh.advertise<PointCloud> ("cdcpd/downsampled", 1);
+    auto template_publisher = nh.advertise<PointCloud> ("cdcpd/template", 1);
+    auto cpd_iters_publisher = nh.advertise<PointCloud> ("cdcpd/cpd_iters", 1);
+    auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
+    auto output_without_constrain_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_constrain", 1);
+    auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
+    auto right_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/right_gripper_prior", 1);
+    auto cylinder_pub = nh.advertise<vm::Marker>("cdcpd/cylinder", 0);
+    auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 
     BagSubscriber<sensor_msgs::Image> rgb_sub, depth_sub;
 
@@ -333,6 +335,12 @@ int main(int argc, char* argv[])
     topics.push_back(std::string("/kinect2/qhd/camera_info"));
 #endif
 
+    image_transport::ImageTransport it(nh);
+    auto color_pub = it.advertise(topics[0], 1);
+    auto depth_pub = it.advertise(topics[1], 1);
+    auto ci_pub = nh.advertise<sensor_msgs::CameraInfo>(topics[2], 1);
+
+
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
     message_filters::TimeSynchronizer<sensor_msgs::Image, sensor_msgs::Image> sync(rgb_sub, depth_sub, 25);
@@ -345,27 +353,34 @@ int main(int argc, char* argv[])
         // cout << "topic: " << m.getTopic() << endl;
         if (m.getTopic() == topics[0])
         {
-            sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
+            auto i = m.instantiate<sensor_msgs::Image>();
             if (i != nullptr) {
                 rgb_sub.newMessage(i);
+                i->header.stamp = ros::Time::now();
+                color_pub.publish(i);
             }
             else
                 cout << "NULL initiation!" << endl;
         }
         else if (m.getTopic() == topics[1])
         {
-            sensor_msgs::Image::ConstPtr i = m.instantiate<sensor_msgs::Image>();
+            auto i = m.instantiate<sensor_msgs::Image>();
             if (i != nullptr) {
                 depth_sub.newMessage(i);
+                i->header.stamp = ros::Time::now();
+                depth_pub.publish(i);
             }
             else
                 cout << "NULL initiation!" << endl;
         }
         else if (m.getTopic() == topics[2])
         {
-            sensor_msgs::CameraInfo::ConstPtr info_msg = m.instantiate<sensor_msgs::CameraInfo>();
+            auto info_msg = m.instantiate<sensor_msgs::CameraInfo>();
+            info_msg->header.stamp = ros::Time::now();
+            auto info_msg_tmp = *info_msg;
+            ci_pub.publish(info_msg);
+
             // the following is similar to https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
-            sensor_msgs::CameraInfo info_msg_tmp = *info_msg;
             if (!depth_images.empty() && !color_images.empty() && (depth_images.back().cols != color_images.back().cols || depth_images.back().rows != color_images.back().rows))
             {
                 cout << "resized" << endl;
@@ -400,7 +415,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    CDCPD cdcpd(template_cloud, template_edges, P_mat, false, alpha, beta, lambda, k_spring);
+    CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
 #ifdef COMP
     CDCPD cdcpd_without_constrain(template_cloud, template_edges, P_mat, false, alpha, beta, lambda, k_spring);
 #endif
@@ -418,6 +433,7 @@ int main(int argc, char* argv[])
     geometry_msgs::TransformStamped rightTS;
     bool use_grippers = false; // TODO don't error if no gripper broadcast
 
+    std::vector<CDCPD::FixedPoint> fixed_points;
     if (use_grippers) {
         while (nh.ok())
         {
@@ -432,16 +448,17 @@ int main(int argc, char* argv[])
                 ros::Duration(1.0).sleep();
             }
         }
+        // Eigen::Vector3f left_pos(-1.5f, -0.5f, 2.2f);
+        // Eigen::Vector3f right_pos(-1.06f, -0.55f, 2.23f);
+        Eigen::Vector3f left_pos((float)leftTS.transform.translation.x, (float)leftTS.transform.translation.y, (float)leftTS.transform.translation.z);
+        Eigen::Vector3f right_pos((float)rightTS.transform.translation.x, (float)rightTS.transform.translation.y, (float)rightTS.transform.translation.z);
+        cout << "Left gripper: " << left_pos.transpose() << endl;
+        cout << "Right gripper: " << right_pos.transpose() << endl;
+        CDCPD::FixedPoint left_gripper = { left_pos, (int) template_vertices.cols() - 1 };
+        CDCPD::FixedPoint right_gripper = { right_pos, 0 };
+        fixed_points.push_back(left_gripper);
+        fixed_points.push_back(right_gripper);
     }
-
-    // Eigen::Vector3f left_pos(-1.5f, -0.5f, 2.2f);
-    // Eigen::Vector3f right_pos(-1.06f, -0.55f, 2.23f);
-    Eigen::Vector3f left_pos((float)leftTS.transform.translation.x, (float)leftTS.transform.translation.y, (float)leftTS.transform.translation.z);
-    Eigen::Vector3f right_pos((float)rightTS.transform.translation.x, (float)rightTS.transform.translation.y, (float)rightTS.transform.translation.z);
-    cout << "Left gripper: " << left_pos << endl;
-    cout << "Right gripper: " << right_pos << endl;
-    CDCPD::FixedPoint left_gripper = { left_pos, (int) template_vertices.cols() - 1 };
-    CDCPD::FixedPoint right_gripper = { right_pos, 0 };
 
     std::string stepper;
     ros::Rate rate(30); // 5 hz, maybe allow changes, or mimicking bag?
@@ -463,6 +480,7 @@ int main(int argc, char* argv[])
 
 
         if (stepper != "r") {
+            cout << "Waiting for input... ";
             cin >> stepper;
         }
         else {
@@ -472,8 +490,11 @@ int main(int argc, char* argv[])
         {
             exit(-1);
         }
-        left_gripper_pub.publish(leftTS);
-        right_gripper_pub.publish(rightTS);
+        if (use_grippers)
+        {
+            left_gripper_pub.publish(leftTS);
+            right_gripper_pub.publish(rightTS);
+        }
         auto color_image_bgr = *color_iter;
         auto depth_image = *depth_iter;
         cout << "Matched" << endl;
@@ -527,25 +548,10 @@ int main(int argc, char* argv[])
         cv::imwrite(workingDir + "/hsv_mask.png", hsv_mask);
 #endif
 
-        // Without the grippers vs with the grippers
-        CDCPD::Output out;
-#ifdef COMP
-        CDCPD::Output out_without_constrain;
-#endif
-        if (use_grippers)
-        {
-            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, true, false, {left_gripper, right_gripper});
-        }
-        else
-        {
-            out = cdcpd(rgb_image, depth_image, hsv_mask, template_cloud, true, false);
-#ifdef COMP
-            out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
-#endif
-        }
-
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, P_mat, template_cloud, true, false, fixed_points);
         template_cloud = out.gurobi_output;
 #ifdef COMP
+        auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
         template_cloud_without_constrain = out_without_constrain.gurobi_output;
 #endif
 
