@@ -36,19 +36,9 @@
 // #define CYL_CLOTH4
 // #endif
 
-#ifndef SIMULATION
-#define SIMULATION
-#endif
-
-// void test_nearest_line();
-
-Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
-                                     int lle_neighbors,
-                                     double reg);
-
-Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
-                                  int lle_neighbors,
-                                  double reg);
+// #ifndef SIMULATION
+// #define SIMULATION
+// #endif
 
 class CDCPD {
 public:
@@ -67,32 +57,29 @@ public:
         int template_index;
     };
 
-    CDCPD(
-        pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
-        const Eigen::Matrix2Xi& _template_edges,
-        const cv::Mat& _P_matrix,
-        const bool _use_recovery = true,
-        const double alpha = 0.5,
-        const double beta = 1.0,
-        const double lambda = 1.0,
-        const double k = 100.0
-        );
+    CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+          const Eigen::Matrix2Xi& _template_edges,
+          const bool _use_recovery = true,
+          const double alpha = 0.5,
+          const double beta = 1.0,
+          const double lambda = 1.0,
+          const double k = 100.0);
 
-    Output operator()(
-        const cv::Mat& rgb, // RGB image
-        const cv::Mat& depth, // Depth image
-        const cv::Mat& mask,
-        const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-        const bool self_intersection = true,
-        const bool interation_constrain = true,
-        const std::vector<FixedPoint>& fixed_points = std::vector<FixedPoint>()
-        );
+    Output operator()(const cv::Mat& rgb, // RGB image
+                      const cv::Mat& depth, // Depth image
+                      const cv::Mat& mask,
+                      const cv::Mat& P_matrix, // P_matrix: (3, 4) camera matrix
+                      const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                      const bool self_intersection = true,
+                      const bool interation_constrain = true,
+                      const std::vector<FixedPoint>& fixed_points = {});
 
 private:
     Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices,
-                                            const cv::Mat& depth,
-                                            const cv::Mat& mask,
-                                            float k); // TODO this should be configurable
+                                     const cv::Mat& depth,
+                                     const cv::Mat& mask,
+                                     const Eigen::MatrixXf& P_eigen,
+                                     const float k); // TODO this should be configurable
     // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
     // and not have to pass around intr in here
     Eigen::MatrixXf calcP(const int N,
@@ -111,8 +98,6 @@ private:
     Eigen::Matrix3Xf original_template;
     const Eigen::Matrix2Xi template_edges;
 
-    // P_matrix: (3, 4) camera matrix
-    const cv::Mat P_matrix;
     Eigen::Vector3f last_lower_bounding_box;
     Eigen::Vector3f last_upper_bounding_box;
     const int lle_neighbors;
@@ -131,7 +116,7 @@ private:
     bool use_recovery;
     std::vector<Eigen::MatrixXf> Q;
     double last_sigma2;
-}; 
+};
 
 #endif
 

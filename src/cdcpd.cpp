@@ -27,9 +27,6 @@
 #include <random>
 // end TODO
 
-using std::vector;
-using std::cout;
-using std::endl;
 using cv::Mat;
 using cv::Vec3b;
 using Eigen::ArrayXf;
@@ -46,34 +43,20 @@ using Eigen::VectorXf;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 using Eigen::RowVectorXf;
-using pcl::PointCloud;
-using pcl::PointXYZ;
-using pcl::PointXYZRGB;
+
+typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
+typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
+
+
 
 #ifdef SIMULATION
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result";
+std::string workingDir = "/home/dmcconac/catkin_ws/src/cdcpd_test_blender/result";
 #else
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
+std::string workingDir = "/home/dmcconac/catkin_ws/src/cdcpd_test/result";
 #endif
 
-// void test_nearest_line() {
-//     Matrix3Xf Y(3, 4);
-//     Y(0, 0) = 0.0f; Y(0, 1) = 0.0f; Y(0, 2) = 0.0f; Y(0, 3) = 0.0f;
-//     Y(1, 0) = 1.0f; Y(1, 1) = 2.0f; Y(1, 2) = 3.0f; Y(1, 3) = 5.0f;
-//     Y(2, 0) = 0.0f; Y(2, 1) = 0.0f; Y(2, 2) = 0.0f; Y(2, 3) = 0.0f;
-//     Matrix2Xi E(2, 3);
-//     E(0, 0) = 0; E(0, 1) = 1; E(0, 2) = 2;
-//     E(1, 0) = 1; E(1, 1) = 2; E(1, 2) = 3;
-//     auto [startPts, endPts] = nearest_points_line_segments(Y, E);
-//     cout << "startPts" << endl;
-//     cout << startPts << endl << endl;
-//     cout << "endPts" << endl;
-//     cout << endPts << endl << endl;
-
-//     exit(1);
-// }
-
-double abs_derivative(double x) {
+static double abs_derivative(double x)
+{
     return x;
     // double eps = 0.000000001;
     // if (x < eps && x > -eps) {
@@ -87,7 +70,9 @@ double abs_derivative(double x) {
     // }
 }
 
-double calculate_lle_reg(const MatrixXf& L, const Matrix3Xf pts_matrix) {
+static double calculate_lle_reg(const MatrixXf& L,
+                                const Matrix3Xf pts_matrix)
+{
     double reg = 0;
     for (int ind = 0; ind < L.rows(); ++ind)
     {
@@ -102,11 +87,17 @@ double calculate_lle_reg(const MatrixXf& L, const Matrix3Xf pts_matrix) {
     return reg;
 }
 
-double calculate_prob_reg(const Matrix3Xf& X, const Matrix3Xf& TY, const MatrixXf& G, const MatrixXf& W, const double sigma2, const VectorXf Y_emit_prior) {
+static double calculate_prob_reg(const Matrix3Xf& X,
+                                 const Matrix3Xf& TY,
+                                 const MatrixXf& G,
+                                 const MatrixXf& W,
+                                 const double sigma2,
+                                 const VectorXf& Y_emit_prior)
+{
     int M = TY.cols();
     int N = X.cols();
     int D = X.rows();
-    MatrixXf P(M, N); // end = std::chrono::system_clock::now(); cout << "526: " << (end-start).count() << endl;
+    MatrixXf P(M, N); // end = std::chrono::system_clock::now(); std::cout << "526: " << (end-start).count() << std::endl;
     for (int i = 0; i < M; ++i) {
         for (int j = 0; j < N; ++j) {
             P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
@@ -139,7 +130,14 @@ double calculate_prob_reg(const Matrix3Xf& X, const Matrix3Xf& TY, const MatrixX
     return reg;
 }
 
-double calculate_prob_reg(const Matrix3Xf& X, const Matrix3Xf& TY, const MatrixXf& G, const MatrixXf& W, const double sigma2, const VectorXf Y_emit_prior, const MatrixXf& P) {
+static double calculate_prob_reg(const Matrix3Xf& X,
+                                 const Matrix3Xf& TY,
+                                 const MatrixXf& G,
+                                 const MatrixXf& W,
+                                 const double sigma2,
+                                 const VectorXf Y_emit_prior,
+                                 const MatrixXf& P)
+{
     int M = TY.cols();
     int N = X.cols();
     int D = X.rows();
@@ -158,18 +156,18 @@ double calculate_prob_reg(const Matrix3Xf& X, const Matrix3Xf& TY, const MatrixX
     return reg;
 }
 
-PointCloud<PointXYZ>::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
+static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf& mat)
 {
-    PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
-    for (int i = 0; i < mat.cols(); ++i)
+    PointCloud::Ptr cloud(new PointCloud);
+    cloud->points.reserve(mat.cols());
+    for (ssize_t i = 0; i < mat.cols(); ++i)
     {
-        const Vector3f& pt = mat.col(i);
-        cloud->push_back(PointXYZ(pt(0), pt(1), pt(2)));
+        cloud->push_back(pcl::PointXYZ(mat(0, i), mat(1, i), mat(2, i)));
     }
     return cloud;
 }
 
-double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
+static double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
 {
     // X: (3, N) matrix, X^t in Algorithm 1
     // Y: (3, M) matrix, Y^(t-1) in Algorithm 1
@@ -186,7 +184,7 @@ double initial_sigma2(const MatrixXf& X, const MatrixXf& Y)
     return total_error / (X.cols() * Y.cols() * X.rows());
 }
 
-MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
+static MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
 {
     // Y: (3, M) matrix, corresponding to Y^(t-1) in Eq. 13.5 (Y^t in VI.A)
     // beta: beta in Eq. 13.5 (between 13 and 14)
@@ -204,16 +202,16 @@ MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
     return kernel;
 }
 
-MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
-                                     int lle_neighbors,
-                                     double reg)
+static MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
+                                            int lle_neighbors,
+                                            double reg)
 {
     // calculate L in Eq. (15) and Eq. (16)
     // ENHANCE: use tapkee lib to accelarate
     // kdtree: kdtree from Y^0
     // lle_neighbors: parameter for lle calculation
     // reg: regularization term (necessary when lle_neighbor > dimension)
-    PointCloud<PointXYZ>::ConstPtr cloud = kdtree.getInputCloud();
+    PointCloud::ConstPtr cloud = kdtree.getInputCloud();
     assert(cloud->height == 1);
     // adjacencies: save index of adjacent points
     MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
@@ -223,8 +221,8 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
     // algorithm: see https://cs.nyu.edu/~roweis/lle/algorithm.html
     for (size_t i = 0; i < cloud->width; ++i)
     {
-        vector<int> neighbor_inds(lle_neighbors + 1);
-        vector<float> neighbor_dists(lle_neighbors + 1);
+        std::vector<int> neighbor_inds(lle_neighbors + 1);
+        std::vector<float> neighbor_dists(lle_neighbors + 1);
         kdtree.nearestKSearch(i, lle_neighbors + 1, neighbor_inds, neighbor_dists);
         // C: transpose of Z in Eq [d] and [e]
         MatrixXf C(lle_neighbors, 3);
@@ -258,15 +256,15 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<PointXYZ>& kdtree,
     return graph;
 }
 
-MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
-                                  int lle_neighbors,
-                                  double reg)
+static MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
+                                         int lle_neighbors,
+                                         double reg)
 {
     // calculate H in Eq. (18)
     // template_cloud: Y^0 in Eq. (15) and (16)
     // lle_neighbors: parameter for lle calculation
     // reg: regularization term (seems unnecessary)
-    pcl::KdTreeFLANN<PointXYZ> kdtree;
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud (template_cloud);
     // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
     MatrixXf W = barycenter_kneighbors_graph(kdtree, lle_neighbors, reg);
@@ -276,7 +274,8 @@ MatrixXf locally_linear_embedding(PointCloud<PointXYZ>::ConstPtr template_cloud,
     return M;
 }
 
-void Qconstructor(const Matrix2Xi& E, vector<MatrixXf>& Q, int M) {
+static void Qconstructor(const Matrix2Xi& E, std::vector<MatrixXf>& Q, int M)
+{
     for (int i = 0; i < E.cols(); ++i)
     {
         MatrixXf Qi = MatrixXf::Zero(M, M);
@@ -288,20 +287,16 @@ void Qconstructor(const Matrix2Xi& E, vector<MatrixXf>& Q, int M) {
     }
 }
 
-CDCPD::CDCPD(
-            PointCloud<PointXYZ>::ConstPtr template_cloud,
-            const Matrix2Xi& _template_edges,
-            const Mat& _P_matrix,
-            const bool _use_recovery,
-            const double _alpha,
-            const double _beta,
-            const double _lambda,
-            const double _k
-            ):
+CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
+             const Matrix2Xi& _template_edges,
+             const bool _use_recovery,
+             const double _alpha,
+             const double _beta,
+             const double _lambda,
+             const double _k) :
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
-    P_matrix(_P_matrix),
     last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?
     last_upper_bounding_box(6.0, 6.0, 6.0), // TODO make configurable?
     lle_neighbors(8), // TODO make configurable?
@@ -319,8 +314,8 @@ CDCPD::CDCPD(
     kvis(1e3),
     use_recovery(_use_recovery)
 {
-    pcl::KdTreeFLANN<PointXYZ> kdtree;
-    kdtree.setInputCloud (template_cloud);
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud(template_cloud);
     // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
     L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
 
@@ -332,9 +327,10 @@ CDCPD::CDCPD(
  * Implement Eq. (7) in the paper
  */
 Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
-                                 const cv::Mat& depth,
-                                 const cv::Mat& mask,
-                                 float k)
+                                        const cv::Mat& depth,
+                                        const cv::Mat& mask,
+                                        const Eigen::MatrixXf& P_eigen,
+                                        const float k)
 {
     // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
@@ -353,8 +349,6 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
 
     // Project the vertices to get their corresponding pixel coordinate
     // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
-    Eigen::MatrixXf P_eigen(3, 4);
-    cv::cv2eigen(P_matrix, P_eigen);
     Eigen::Matrix3Xf image_space_vertices = P_eigen.leftCols(3) * vertices;
 
     // Homogeneous coords: divide by third row
@@ -389,7 +383,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
     {
-        // cout << "depth at " << coords(1, i) << " " << coords(0, i) << endl;
+        // std::cout << "depth at " << coords(1, i) << " " << coords(0, i) << std::endl;
         uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
         if (raw_depth != 0)
         {
@@ -435,11 +429,11 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
  * image_depth - vertex_depth, not vice-versa. There's also no normalization.
  * Calculate Eq. (22) in the paper
  */
-float smooth_free_space_cost(const Matrix3Xf vertices,
-                                 const Eigen::Matrix3f& intrinsics,
-                                 const cv::Mat& depth,
-                                 const cv::Mat& mask,
-                                 float k=1e2)
+static float smooth_free_space_cost(const Matrix3Xf vertices,
+                                    const Eigen::Matrix3f& intrinsics,
+                                    const cv::Mat& depth,
+                                    const cv::Mat& mask,
+                                    const float k = 1e2)
 {
     // vertices: Y^t in Eq. (22)
     // intrinsics: intrinsic matrix of the camera
@@ -488,7 +482,7 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
     Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
     {
-        // cout << "depth at " << coords(1, i) << " " << coords(0, i) << endl;
+        // std::cout << "depth at " << coords(1, i) << " " << coords(0, i) << std::endl;
         uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
         if (raw_depth != 0)
         {
@@ -529,18 +523,17 @@ float smooth_free_space_cost(const Matrix3Xf vertices,
 // TODO based on the implementation here:
 // https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
 // Note that we expect that cx, cy, fx, fy are in the appropriate places in P
-std::tuple<
 #ifdef ENTIRE
-        PointCloud<PointXYZRGB>::Ptr,
+static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr>
+#else
+static std::tuple<PointCloud::Ptr>
 #endif
-        PointCloud<PointXYZ>::Ptr>
-        //std::vector<cv::Point>>
 point_clouds_from_images(const cv::Mat& depth_image,
                          const cv::Mat& rgb_image,
                          const cv::Mat& mask,
                          const Eigen::MatrixXf& P,
-                         const Eigen::Vector3f lower_bounding_box_vec,
-                         const Eigen::Vector3f upper_bounding_box_vec)
+                         const Eigen::Vector3f& lower_bounding_box_vec,
+                         const Eigen::Vector3f& upper_bounding_box_vec)
 {
     // depth_image: CV_16U depth image
     // rgb_image: CV_8U3C rgb image
@@ -571,7 +564,6 @@ point_clouds_from_images(const cv::Mat& depth_image,
     Eigen::Array<float, 3, 1> lower_bounding_box = lower_bounding_box_vec.array();
     Eigen::Array<float, 3, 1> upper_bounding_box = upper_bounding_box_vec.array();
 
-    cout << "depth(0, 0): " << depth_image.at<float>(0, 0) << endl;
     // ENHANCE: change the way to get access to depth image and rgb image to be more readable
     // from "depth_row += row_step" to ".at<>()"
     /*
@@ -582,10 +574,10 @@ point_clouds_from_images(const cv::Mat& depth_image,
     int rgb_skip = rgb_image.step - rgb_image.cols * rgb_step;
     */
 #ifdef ENTIRE
-    PointCloud<PointXYZRGB>::Ptr unfiltered_cloud(
-            new PointCloud<PointXYZRGB>(depth_image.cols, depth_image.rows));
+    PointCloudRGB::Ptr unfiltered_cloud(
+            new PointCloudRGB(depth_image.cols, depth_image.rows));
 #endif
-    PointCloud<PointXYZ>::Ptr filtered_cloud(new PointCloud<PointXYZ>);
+    PointCloud::Ptr filtered_cloud(new PointCloud);
     //std::vector<cv::Point> pixel_coords;
 #ifdef ENTIRE
     auto unfiltered_iter = unfiltered_cloud->begin();
@@ -629,7 +621,7 @@ point_clouds_from_images(const cv::Mat& depth_image,
                     point.min(upper_bounding_box).isApprox(point) &&
                     point.max(lower_bounding_box).isApprox(point))
                 {
-                    filtered_cloud->push_back(PointXYZ(x, y, z));
+                    filtered_cloud->push_back(pcl::PointXYZ(x, y, z));
                     // pixel_coords.push_back(pixel);
                 }
                 // else if (mask.at<bool>(pixel))
@@ -654,7 +646,11 @@ point_clouds_from_images(const cv::Mat& depth_image,
         // pixel_coords };
 }
 
-void sample_X_points(const Matrix3Xf& Y, const VectorXf& Y_emit_prior, const double sigma2, PointCloud<PointXYZ>::Ptr& cloud) {
+static void sample_X_points(const Matrix3Xf& Y,
+                            const VectorXf& Y_emit_prior,
+                            const double sigma2,
+                            PointCloud::Ptr& cloud)
+{
     int N = 40;
     for (int m = 0; m < Y.cols(); ++m)
     {
@@ -663,14 +659,14 @@ void sample_X_points(const Matrix3Xf& Y, const VectorXf& Y_emit_prior, const dou
         std::normal_distribution<double> distrib_x(Y(0, m), sigma2);
         std::normal_distribution<double> distrib_y(Y(1, m), sigma2);
         std::normal_distribution<double> distrib_z(Y(2, m), sigma2);
-        
+
         for (int i = 0; i < num_pts; ++i)
         {
             double x = distrib_x(generator);
             double y = distrib_y(generator);
             double z = distrib_z(generator);
 
-            cloud->push_back(PointXYZ(x, y, z));
+            cloud->push_back(pcl::PointXYZ(x, y, z));
         }
     }
 }
@@ -708,8 +704,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
     start = std::chrono::system_clock::now();
 
 #ifdef CPDLOG
-    cout << "\nCPD loop\n";
-    cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << endl;
+    std::cout << "\nCPD loop\n";
+    std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << std::endl;
 #endif
 
     while (iterations <= max_iterations && error > tolerance)
@@ -723,8 +719,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
         // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
         // Calculate Eq. (9) (Line 5 in Algorithm 1)
         // NOTE: Eq. (9) misses M in the denominator
-        
-        MatrixXf P(M, N); // end = std::chrono::system_clock::now(); cout << "526: " << (end-start).count() << endl;
+
+        MatrixXf P(M, N); // end = std::chrono::system_clock::now(); std::cout << "526: " << (end-start).count() << std::endl;
         {
             for (int i = 0; i < M; ++i) {
                 for (int j = 0; j < N; ++j) {
@@ -743,17 +739,17 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
             den.array() += c;
 
             P = P.array().rowwise() / den.array();
-        }  //end = std::chrono::system_clock::now(); cout << "545: " << (end-start).count() << endl;
-        
+        }  //end = std::chrono::system_clock::now(); std::cout << "545: " << (end-start).count() << std::endl;
+
         // Fast Gaussian Transformation to calculate Pt1, P1, PX
-        
+
         // double bandwidth = std::sqrt(2.0 * sigma2);
         // double epsilon = 1e-4;
-        // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //cout << "575\n";
-        // fgt::Matrix X_fgt = X.transpose().cast<double>(); //cout << "576\n";
-        // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //cout << "577\n";
-        // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //cout << "578\n";// N*1 vector
-        
+        // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //std::cout << "575\n";
+        // fgt::Matrix X_fgt = X.transpose().cast<double>(); //std::cout << "576\n";
+        // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //std::cout << "577\n";
+        // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //std::cout << "578\n";// N*1 vector
+
         // float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
         // c *= w / (1 - w);
         // c *= static_cast<double>(M) / N;
@@ -761,39 +757,39 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
 
-        // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //cout << "587\n";
-        // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //cout << "588\n";
+        // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //std::cout << "587\n";
+        // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //std::cout << "588\n";
         // P1 = P1.array()*Y_emit_prior.array();
 
         // MatrixXd PX_fgt(TY.rows(), TY.cols());
         // for (size_t i = 0; i < TY.rows(); ++i) {
         //     // ArrayXd Xi = X_fgt.col(i).array();
         //     ArrayXd aXarray = X_fgt.col(i).array() * a;
-        //     fgt::Vector aX = fgt::Vector(aXarray);  //cout << "594\n";
+        //     fgt::Vector aX = fgt::Vector(aXarray);  //std::cout << "594\n";
         //     PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX)).array() * Y_emit_prior.array().cast<double>();
         // }
         // MatrixXf PX = PX_fgt.cast<float>();
         MatrixXf PX = (P * X.transpose()).transpose();
 
         // // Maximization step
-        VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); cout << "548: " << (end-start).count() << endl;
-        VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); cout << "549: " << (end-start).count() << endl;
-        float Np = P1.sum(); //end = std::chrono::system_clock::now(); cout << "550: " << (end-start).count() << endl;
-        
+        VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); std::cout << "548: " << (end-start).count() << std::endl;
+        VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); std::cout << "549: " << (end-start).count() << std::endl;
+        float Np = P1.sum(); //end = std::chrono::system_clock::now(); std::cout << "550: " << (end-start).count() << std::endl;
+
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
         float lambda = start_lambda;
-        MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); cout << "557: " << (end-start).count() << endl;
+        MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
-            + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();cout << "560: " << (end-start).count() << endl;
-        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();cout << "561: " << (end-start).count() << endl;
+            + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
+        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
         MatrixXf W = A.householderQr().solve(B);
         // MatrixXf lastW = W;
 
         // int W_int = 0;
-        // cout << std::setw(20) << "W solver loop";
-        // cout << std::setw(20) << "W difference" << endl;
+        // std::cout << std::setw(20) << "W solver loop";
+        // std::cout << std::setw(20) << "W difference" << std::endl;
         // while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
         //     lastW = W;
         //     MatrixXf A_new = A;
@@ -807,29 +803,29 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
         //         A_new = A_new + k*sigma2*delta*Q[i]*G;
         //         B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
         //     }
-        //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); cout << "562: " << (end-start).count() << endl;
-        //     cout << std::setw(20) << W_int;
-        //     cout << std::setw(20) << (W-lastW).squaredNorm() << endl;
+        //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); std::cout << "562: " << (end-start).count() << std::endl;
+        //     std::cout << std::setw(20) << W_int;
+        //     std::cout << std::setw(20) << (W-lastW).squaredNorm() << std::endl;
         //     W_int++;
         // }
 
         // MatrixXf W(M, D);
         // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
 
-        TY = Y + (G * W).transpose();// end = std::chrono::system_clock::now(); cout << "564: " << (end-start).count() << endl;
+        TY = Y + (G * W).transpose();// end = std::chrono::system_clock::now(); std::cout << "564: " << (end-start).count() << std::endl;
 
         // Corresponding to Eq. (19) in the paper
         VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
 //        float xPx = (Pt1 * xPxtemp.transpose())(0,0);
-        double xPx = Pt1.dot(xPxtemp);// end = std::chrono::system_clock::now();cout << "569: " << (end-start).count() << endl;
+        double xPx = Pt1.dot(xPxtemp);// end = std::chrono::system_clock::now();std::cout << "569: " << (end-start).count() << std::endl;
 //        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
 //        double xPx = xPxMat.sum();
         VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
 //        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
 //        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
-        double yPy = P1.dot(yPytemp); //end = std::chrono::system_clock::now();cout << "575: " << (end-start).count() << endl;
-        double trPXY = (TY.array() * PX.array()).sum(); //end = std::chrono::system_clock::now();cout << "576: " << (end-start).count() << endl;
-        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); //end = std::chrono::system_clock::now();cout << "577: " << (end-start).count() << endl;
+        double yPy = P1.dot(yPytemp); //end = std::chrono::system_clock::now();std::cout << "575: " << (end-start).count() << std::endl;
+        double trPXY = (TY.array() * PX.array()).sum(); //end = std::chrono::system_clock::now();std::cout << "576: " << (end-start).count() << std::endl;
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); //end = std::chrono::system_clock::now();std::cout << "577: " << (end-start).count() << std::endl;
 
         if (sigma2 <= 0)
         {
@@ -840,10 +836,10 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
         double prob_reg = calculate_prob_reg(X, TY, G, W, sigma2, Y_emit_prior, P);
         double lle_reg = start_lambda / 2 * ((TY*m_lle*TY.transpose()).trace() + 2*(W.transpose()*G*m_lle*TY).trace() + (W.transpose()*G*m_lle*G*W).trace());
         double cpd_reg = alpha * (W.transpose()*G*W).trace()/2;
-        cout << std::setw(20) << iterations;
-        cout << std::setw(20) << prob_reg;
-        cout << std::setw(20) << cpd_reg;
-        cout << std::setw(20) << lle_reg << endl;
+        std::cout << std::setw(20) << iterations;
+        std::cout << std::setw(20) << prob_reg;
+        std::cout << std::setw(20) << cpd_reg;
+        std::cout << std::setw(20) << lle_reg << std::endl;
 #endif
 
 
@@ -857,11 +853,11 @@ CDCPD::Output CDCPD::operator()(
         const cv::Mat& rgb,
         const cv::Mat& depth,
         const cv::Mat& mask,
-        const PointCloud<PointXYZ>::Ptr template_cloud,
+        const cv::Mat& P_matrix, // P_matrix: (3, 4) camera matrix
+        const PointCloud::Ptr template_cloud,
         const bool self_intersection,
         const bool interation_constrain,
-        const std::vector<CDCPD::FixedPoint>& fixed_points
-        )
+        const std::vector<CDCPD::FixedPoint>& fixed_points)
 {
     // rgb: CV_8U3C rgb image
     // depth: CV_16U depth image
@@ -897,18 +893,20 @@ CDCPD::Output CDCPD::operator()(
     Eigen::MatrixXf P_eigen(3, 4);
     cv::cv2eigen(P_matrix, P_eigen);
 
+    std::cout << "P_eigen:\n" << P_eigen << std::endl;
+
     // TODO: For testing purposes, compute the whole cloud, though it's not really necessary
     // ENHANCE: debug macro to remove entire_cloud
     // ENHANCE: pixel_coords is not used
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
     // pixel_coords: pixel coordinate corresponds to the point in the cloud
-    Eigen::Vector3f bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
     auto [
 #ifdef ENTIRE
             entire_cloud,
 #endif
-                    cloud]//, pixel_coords]
+                    cloud]
         = point_clouds_from_images(
                 depth,
                 rgb,
@@ -916,27 +914,30 @@ CDCPD::Output CDCPD::operator()(
                 P_eigen,
                 last_lower_bounding_box - bounding_box_extend,
                 last_upper_bounding_box + bounding_box_extend);
-    cout << "Points in filtered: " << cloud->width << endl;
+    #ifdef ENTIRE
+    std::cout << "Points in entire:   (" << entire_cloud->height << " x " << entire_cloud->width << ")\n";
+    #endif
+    std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
 
     // intr: intrinsics of the camera
     Eigen::Matrix3f intr = P_eigen.leftCols(3);
 
     /// VoxelGrid filter downsampling
-    PointCloud<PointXYZ>::Ptr cloud_downsampled(new PointCloud<PointXYZ>);
+    PointCloud::Ptr cloud_downsampled(new PointCloud);
     const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
     double sigma2 = 0.002;
     // TODO: check whether the change is needed here for unit conversion
-    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
-    // cout << "P_vis:" << endl;
-    // cout << Y_emit_prior << endl << endl;
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, P_eigen, kvis);
+    // std::cout << "P_vis:" << std::endl;
+    // std::cout << Y_emit_prior << std::endl << std::endl;
     // sample_X_points(Y, Y_emit_prior, sigma2, cloud);
 
-    pcl::VoxelGrid<PointXYZ> sor;
-    cout << "Points in cloud before leaf: " << cloud->width << endl;
+    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    std::cout << "Points in cloud before leaf: " << cloud->width << std::endl;
     sor.setInputCloud(cloud);
     sor.setLeafSize(0.02f, 0.02f, 0.02f);
     sor.filter(*cloud_downsampled);
-    cout << "Points in fully filtered: " << cloud_downsampled->width << endl;
+    std::cout << "Points in fully filtered: " << cloud_downsampled->width << std::endl;
     Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
     // Add points to X according to the previous template
 
@@ -964,10 +965,12 @@ CDCPD::Output CDCPD::operator()(
     // If we're doing tracking recovery, do that now
     if (use_recovery)
     {
+        std::cout << "matcher size: " << template_matcher.size() << std::endl;
+
         // TODO: check whether the change is needed here for unit conversion
         float cost = smooth_free_space_cost(Y_opt, intr, depth, mask);
-        cout << "cost" << endl;
-        cout << cost << endl;
+        std::cout << "cost" << std::endl;
+        std::cout << cost << std::endl;
 
         if (cost > recovery_cost_threshold && template_matcher.size() > recovery_knn_k)
         {
@@ -996,13 +999,12 @@ CDCPD::Output CDCPD::operator()(
             template_matcher.add_template(cloud_downsampled, Y_opt);
         }
     }
-    cout << "matcher size: " << template_matcher.size() << endl;
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
     last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
 
-    PointCloud<PointXYZ>::Ptr cpd_out = mat_to_cloud(Y_opt);
+    PointCloud::Ptr cpd_out = mat_to_cloud(Y_opt);
 
     return CDCPD::Output {
 #ifdef ENTIRE
