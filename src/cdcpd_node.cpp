@@ -20,8 +20,7 @@ namespace ehc = EigenHelpersConversions;
 
 std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, float const length)
 {
-    Eigen::Matrix3Xf template_vertices(3, num_points); // Y^0 in the paper
-    template_vertices.setZero();
+    Eigen::Matrix3Xf template_vertices = Eigen::Matrix3Xf::Zero(3, num_points); // Y^0 in the paper
     template_vertices.row(0).setLinSpaced(num_points, -length/2, length/2);
     template_vertices.row(2).array() += 1.4f;
     Eigen::Matrix2Xi template_edges(2, num_points - 1);

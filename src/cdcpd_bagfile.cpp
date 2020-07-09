@@ -201,10 +201,8 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
 
     int edge_count = 0;
     for (int i = 0; i < num_height; ++i) {
-        // cout << i << endl;
         for (int j = 0; j < num_width; ++j)
         {
-            // cout << j << endl;
             int index = j * num_height + i;
             vertices(0, index) = static_cast<float>(j) * width / static_cast<float>(num_width - 1)+left_bottom_x;
             vertices(1, index) = static_cast<float>(i) * height / static_cast<float>(num_height - 1)+left_bottom_y;
