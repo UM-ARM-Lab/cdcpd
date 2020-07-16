@@ -5,6 +5,7 @@
 #include <pcl/point_types.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/io/pcd_io.h>
+#include <smmap/constraint_jacobian_model.h>
 
 #include "cdcpd/past_template_matcher.h"
 
@@ -40,6 +41,20 @@
 // #define SIMULATION
 // #endif
 
+#ifdef PREDICT
+#define PREDICT
+#endif
+
+// void test_nearest_line();
+
+Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
+                                     int lle_neighbors,
+                                     double reg);
+
+Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+                                  int lle_neighbors,
+                                  double reg);
+
 class CDCPD {
 public:
     struct Output {
@@ -59,6 +74,12 @@ public:
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
+#ifdef PREDICT
+          std::shared_ptr<ros::NodeHandle> nh,
+          const double translation_dir_deformability,
+          const double translation_dis_deformability,
+          const double rotation_deformability,
+#endif
           const bool _use_recovery = true,
           const double alpha = 0.5,
           const double beta = 1.0,
@@ -93,6 +114,17 @@ private:
                          const Eigen::Matrix3Xf& Y,
                          const cv::Mat& depth,
                          const cv::Mat& mask);
+
+#ifdef PREDICT
+    Eigen::Matrix3Xf predict(const Eigen::Matrix3Xf& P,
+                             const Eigen::MatrixXf& q_dot,
+                             const Eigen::MatrixXf& q_config);
+
+    std::shared_ptr<smmap::ConstraintJacobianModel> model;
+    // TODO:
+    //  - what is WorldState?
+    //  - how to call private functions?
+#endif
 
     PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;

@@ -203,7 +203,7 @@ static MatrixXf gaussian_kernel(const MatrixXf& Y, double beta)
     return kernel;
 }
 
-static MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
+MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
                                             int lle_neighbors,
                                             double reg)
 {
@@ -257,7 +257,7 @@ static MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ
     return graph;
 }
 
-static MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
+MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
                                          int lle_neighbors,
                                          double reg)
 {
@@ -290,6 +290,12 @@ static void Qconstructor(const Matrix2Xi& E, std::vector<MatrixXf>& Q, int M)
 
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi& _template_edges,
+#ifdef PREDICT
+             std::shared_ptr<ros::NodeHandle> nh,
+             const double translation_dir_deformability,
+             const double translation_dis_deformability,
+             const double rotation_deformability,
+#endif
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
@@ -321,6 +327,16 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
 
     Qconstructor(template_edges, Q, original_template.cols());
+
+#ifdef PREDICT
+    const auto sdf = GetEnvironmentSDF(*nh);
+    model = std::make_shared<smmap::ConstraintJacobianModel>(
+                        nh,
+                        translation_dir_deformability,
+                        translation_dis_deformability,
+                        rotation_deformability,
+                        sdf);
+#endif
 }
 
 /*
@@ -829,6 +845,48 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
     }
     return TY;
 }
+
+
+Matrix3Xf CDCPD::predict(const Eigen::Matrix3Xf& P,
+                         const Eigen::MatrixXf& q_dot,
+                         const Eigen::MatrixXf& q_config)
+{
+    // P: template
+    // q_dot: velocity of gripper, a 6*G matrix
+    // q_config: indices of points gripped, a X*G matrix (X: depends on the case)
+    // NOTE:
+    //      - WorldState definition
+    //      struct WorldState
+    //      {
+    //      public:
+    //          ObjectPointSet object_configuration_;
+    //          EigenHelpers::VectorIsometry3d rope_node_transforms_;
+    //          AllGrippersSinglePose all_grippers_single_pose_;
+    //          Eigen::VectorXd robot_configuration_;
+    //          bool robot_configuration_valid_;
+    //          std::vector<CollisionData> gripper_collision_data_;
+    //          double sim_time_;
+
+    //          uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
+
+    //          static uint64_t Serialize(const WorldState& state, std::vector<uint8_t>& buffer);
+
+    //          static std::pair<WorldState, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current);
+
+    //          bool operator==(const WorldState& other) const;
+    //      };
+    //      - Needed attribute:
+    //          - object_configuration_
+    //          - all_grippers_single_pose_
+    //          - 
+    //      - AllGrippersSinglePoseDelta: kinematics::VectorVector6d (std::vector of eigen's 6D vector)
+    //      - ObjectPointSet: Eigen::Matrix3Xd
+    //      - AllGrippersSinglePose: EigenHelpers::VectorIsometry3d (std::vector of Isometry3d)
+    smmap::WorldState world;
+    world.object_configuration_ = P;
+    world.
+}
+
 
 CDCPD::Output CDCPD::operator()(
         const cv::Mat& rgb,

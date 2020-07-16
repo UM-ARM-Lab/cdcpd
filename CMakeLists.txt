@@ -6,6 +6,13 @@ project(cdcpd VERSION 0.1.0
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CATKIN_PACKAGES
+    roscpp
+    rospy
+    std_msgs
+    smmap
+)
+
 # https://blog.kitware.com/cmake-and-the-default-build-type/
 set(default_build_type "Release")
 #set(default_build_type "RelWithDebInfo")
@@ -21,15 +28,33 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 # TODO Components?
+find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
 find_package(Fgt REQUIRED)
-
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
+
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
+
+catkin_package(
+    INCLUDE_DIRS    include ${FAISS_INCLUDE_DIRS}
+    LIBRARIES       cdcpd ${FAISS_LIBRARY} Fgt::Library-C++
+    CATKIN_DEPENDS  ${CATKIN_PACKAGES} 
+    DEPENDS         OpenCV PCL EIGEN3 GUROBI
+)
+
+include_directories(include PUBLIC 
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+include_directories(include SYSTEM PUBLIC 
+    ${PCL_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS})
+include_directories(include SYSTEM PRIVATE 
+    ${GUROBI_INCLUDE_DIRS}
+    ${FAISS_INCLUDE_DIRS})
 
 ### The library itself
 add_library(cdcpd SHARED
@@ -38,15 +63,20 @@ add_library(cdcpd SHARED
     src/past_template_matcher.cpp
 )
 
-target_include_directories(cdcpd PUBLIC 
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>)
-target_include_directories(cdcpd SYSTEM PUBLIC 
-    ${PCL_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS})
-target_include_directories(cdcpd SYSTEM PRIVATE 
-    ${GUROBI_INCLUDE_DIRS}
-    ${FAISS_INCLUDE_DIRS})
+#target_include_directories(cdcpd PUBLIC 
+#    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+#    $<INSTALL_INTERFACE:include>)
+#target_include_directories(cdcpd SYSTEM PUBLIC 
+#    ${PCL_INCLUDE_DIRS}
+#    ${OpenCV_INCLUDE_DIRS})
+#target_include_directories(cdcpd SYSTEM PRIVATE 
+#    ${GUROBI_INCLUDE_DIRS}
+#    ${FAISS_INCLUDE_DIRS}
+#    ${smmap_INCLUDE_DIRS})
+
+add_custom_target(cdcpd_headers SOURCES
+    include/cdcpd/*.h
+)
 
 target_link_libraries(cdcpd PUBLIC
     ${PCL_LIBRARIES}
@@ -56,6 +86,7 @@ target_link_libraries(cdcpd PRIVATE
     ${GUROBI_LIBRARIES}
     ${FAISS_LIBRARY}
     Fgt::Library-C++)
+add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
 target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -g)
 
