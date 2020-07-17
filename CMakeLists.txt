@@ -53,6 +53,7 @@ include_directories(include SYSTEM PUBLIC
     ${PCL_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS})
 include_directories(include SYSTEM PRIVATE 
+    ${catkin_INCLUDE_DIRS}
     ${GUROBI_INCLUDE_DIRS}
     ${FAISS_INCLUDE_DIRS})
 
@@ -74,15 +75,16 @@ add_library(cdcpd SHARED
 #    ${FAISS_INCLUDE_DIRS}
 #    ${smmap_INCLUDE_DIRS})
 
-add_custom_target(cdcpd_headers SOURCES
-    include/cdcpd/*.h
-)
+#add_custom_target(cdcpd_headers SOURCES
+#    include/cdcpd/*.h
+#)
 
 target_link_libraries(cdcpd PUBLIC
     ${PCL_LIBRARIES}
     ${OpenCV_LIBS}
     Eigen3::Eigen)
 target_link_libraries(cdcpd PRIVATE
+    ${catkin_LIBRARIES}
     ${GUROBI_LIBRARIES}
     ${FAISS_LIBRARY}
     Fgt::Library-C++)

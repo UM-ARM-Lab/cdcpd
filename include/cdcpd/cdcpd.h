@@ -41,15 +41,15 @@
 // #define SIMULATION
 // #endif
 
-#ifdef PREDICT
+#ifndef PREDICT
 #define PREDICT
 #endif
 
 // void test_nearest_line();
 
 Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
-                                     int lle_neighbors,
-                                     double reg);
+                                            int lle_neighbors,
+                                            double reg);
 
 Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
                                   int lle_neighbors,
@@ -79,6 +79,7 @@ public:
           const double translation_dir_deformability,
           const double translation_dis_deformability,
           const double rotation_deformability,
+          const Eigen::MatrixXf& gripper_idx,
 #endif
           const bool _use_recovery = true,
           const double alpha = 0.5,
@@ -118,12 +119,9 @@ private:
 #ifdef PREDICT
     Eigen::Matrix3Xf predict(const Eigen::Matrix3Xf& P,
                              const Eigen::MatrixXf& q_dot,
-                             const Eigen::MatrixXf& q_config);
+                             const std::vector<Eigen::Isometry3d>& q_config);
 
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
-    // TODO:
-    //  - what is WorldState?
-    //  - how to call private functions?
 #endif
 
     PastTemplateMatcher template_matcher;

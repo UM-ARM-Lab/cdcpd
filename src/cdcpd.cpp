@@ -44,6 +44,7 @@ using Eigen::VectorXf;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 using Eigen::RowVectorXf;
+using Eigen::Isometry3d;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
@@ -295,6 +296,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double translation_dir_deformability,
              const double translation_dis_deformability,
              const double rotation_deformability,
+             const Eigen::MatrixXi& grippers,
 #endif
              const bool _use_recovery,
              const double _alpha,
@@ -329,6 +331,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     Qconstructor(template_edges, Q, original_template.cols());
 
 #ifdef PREDICT
+    // TODO: how to configure nh so that the it can get correct sdf
+    // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
     const auto sdf = GetEnvironmentSDF(*nh);
     model = std::make_shared<smmap::ConstraintJacobianModel>(
                         nh,
@@ -336,6 +340,23 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
                         translation_dis_deformability,
                         rotation_deformability,
                         sdf);
+
+    // initializa gripper data
+    std::vector<GripperData> grippers_data;
+
+    // format grippers_data
+    for (int gripper_idx = 0; gripper_idx < grippers.cols(); gripper_idx++) {
+        std::vector<long> grip_node_idx;
+        for (int node_idx = 0; node_idx < grippers.rows(); node_idx++) {
+            grip_node_idx.push_back(long(grippers(node_idx, gripper_idx)));
+        }
+        std::string gripper_name;
+        gripper_name = "gripper" + to_string(gripper_idx);
+        GripperData gripper(gripper_name, grip_node_idx);
+        grippers_data.push_back(gripper);
+    }
+
+    model->SetGrippersData(grippers_data);
 #endif
 }
 
@@ -846,10 +867,10 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
     return TY;
 }
 
-
-Matrix3Xf CDCPD::predict(const Eigen::Matrix3Xf& P,
-                         const Eigen::MatrixXf& q_dot,
-                         const Eigen::MatrixXf& q_config)
+#ifdef PREDICT
+Matrix3Xf CDCPD::predict(const Matrix3Xf& P,
+                         const MatrixXf& q_dot,
+                         const std::vector<Isometry3d>& q_config)
 {
     // P: template
     // q_dot: velocity of gripper, a 6*G matrix
@@ -878,14 +899,16 @@ Matrix3Xf CDCPD::predict(const Eigen::Matrix3Xf& P,
     //      - Needed attribute:
     //          - object_configuration_
     //          - all_grippers_single_pose_
-    //          - 
     //      - AllGrippersSinglePoseDelta: kinematics::VectorVector6d (std::vector of eigen's 6D vector)
     //      - ObjectPointSet: Eigen::Matrix3Xd
     //      - AllGrippersSinglePose: EigenHelpers::VectorIsometry3d (std::vector of Isometry3d)
     smmap::WorldState world;
     world.object_configuration_ = P;
-    world.
+    world.object_configuration_ = q_config;
+    AllGrippersSinglePoseDelta grippers_pose_delta = EigenHelpers::EigenVectorXToVectorEigenVector<double, 6>(q_dot);
+    return model->getObjectDelta_impl(world, grippers_pose_delta) + P;
 }
+#endif
 
 
 CDCPD::Output CDCPD::operator()(
