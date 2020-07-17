@@ -79,7 +79,7 @@ public:
           const double translation_dir_deformability,
           const double translation_dis_deformability,
           const double rotation_deformability,
-          const Eigen::MatrixXf& gripper_idx,
+          const Eigen::MatrixXi& gripper_idx,
 #endif
           const bool _use_recovery = true,
           const double alpha = 0.5,
@@ -92,6 +92,10 @@ public:
                       const cv::Mat& mask,
                       const cv::Matx33d& intrinsics,
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+#ifdef PREDICT
+                      const Eigen::MatrixXd& q_dot,
+                      const std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d> >& q_config,
+#endif
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
                       const std::vector<FixedPoint>& fixed_points = {});
@@ -117,9 +121,9 @@ private:
                          const cv::Mat& mask);
 
 #ifdef PREDICT
-    Eigen::Matrix3Xf predict(const Eigen::Matrix3Xf& P,
-                             const Eigen::MatrixXf& q_dot,
-                             const std::vector<Eigen::Isometry3d>& q_config);
+    Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
+                             const Eigen::MatrixXd& q_dot,
+                             const std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d> >& q_config);
 
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
 #endif

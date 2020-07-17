@@ -11,6 +11,9 @@ set(CATKIN_PACKAGES
     rospy
     std_msgs
     smmap
+    deformable_manipulation_experiment_params
+    smmap_utilities
+    arc_utilities
 )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/

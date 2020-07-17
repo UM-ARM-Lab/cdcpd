@@ -15,6 +15,12 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
 
+#include <smmap/ros_communication_helpers.h>
+
+#include <smmap_utilities/grippers.h>
+
+#include <arc_utilities/eigen_helpers.hpp>
+
 #include <fgt.hpp>
 
 #include "cdcpd/optimizer.h"
@@ -35,6 +41,7 @@ using Eigen::ArrayXd;
 using Eigen::MatrixXf;
 using Eigen::MatrixXd;
 using Eigen::Matrix3Xf;
+using Eigen::Matrix3Xd;
 using Eigen::Matrix3f;
 using Eigen::MatrixXi;
 using Eigen::Matrix2Xi;
@@ -333,7 +340,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 #ifdef PREDICT
     // TODO: how to configure nh so that the it can get correct sdf
     // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
-    const auto sdf = GetEnvironmentSDF(*nh);
+    const auto sdf = smmap::GetEnvironmentSDF(*nh);
     model = std::make_shared<smmap::ConstraintJacobianModel>(
                         nh,
                         translation_dir_deformability,
@@ -342,7 +349,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
                         sdf);
 
     // initializa gripper data
-    std::vector<GripperData> grippers_data;
+    std::vector<smmap::GripperData> grippers_data;
 
     // format grippers_data
     for (int gripper_idx = 0; gripper_idx < grippers.cols(); gripper_idx++) {
@@ -351,8 +358,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
             grip_node_idx.push_back(long(grippers(node_idx, gripper_idx)));
         }
         std::string gripper_name;
-        gripper_name = "gripper" + to_string(gripper_idx);
-        GripperData gripper(gripper_name, grip_node_idx);
+        gripper_name = "gripper" + std::to_string(gripper_idx);
+        smmap::GripperData gripper(gripper_name, grip_node_idx);
         grippers_data.push_back(gripper);
     }
 
@@ -868,9 +875,9 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 }
 
 #ifdef PREDICT
-Matrix3Xf CDCPD::predict(const Matrix3Xf& P,
-                         const MatrixXf& q_dot,
-                         const std::vector<Isometry3d>& q_config)
+Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
+                         const MatrixXd& q_dot,
+                         const std::vector<Isometry3d, Eigen::aligned_allocator<Isometry3d> >& q_config)
 {
     // P: template
     // q_dot: velocity of gripper, a 6*G matrix
@@ -904,19 +911,23 @@ Matrix3Xf CDCPD::predict(const Matrix3Xf& P,
     //      - AllGrippersSinglePose: EigenHelpers::VectorIsometry3d (std::vector of Isometry3d)
     smmap::WorldState world;
     world.object_configuration_ = P;
-    world.object_configuration_ = q_config;
-    AllGrippersSinglePoseDelta grippers_pose_delta = EigenHelpers::EigenVectorXToVectorEigenVector<double, 6>(q_dot);
+    world.all_grippers_single_pose_ = smmap::AllGrippersSinglePose(q_config);
+    smmap::AllGrippersSinglePoseDelta grippers_pose_delta = EigenHelpers::EigenVectorXToVectorEigenVector<double, 6>(q_dot);
     return model->getObjectDelta_impl(world, grippers_pose_delta) + P;
 }
 #endif
 
 
 CDCPD::Output CDCPD::operator()(
-        const cv::Mat& rgb,
-        const cv::Mat& depth,
-        const cv::Mat& mask,
+        const Mat& rgb,
+        const Mat& depth,
+        const Mat& mask,
         const cv::Matx33d& intrinsics,
         const PointCloud::Ptr template_cloud,
+#ifdef PREDICT
+        const MatrixXd& q_dot,
+        const std::vector<Isometry3d, Eigen::aligned_allocator<Isometry3d> >& q_config,
+#endif
         const bool self_intersection,
         const bool interation_constrain,
         const std::vector<CDCPD::FixedPoint>& fixed_points)
@@ -993,8 +1004,14 @@ CDCPD::Output CDCPD::operator()(
 #ifdef ENTIRE
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
 #endif
-    // TODO: check whether the change is needed here for unit conversion
+
+#ifdef PREDICT
+    Eigen::Matrix3Xf TY = predict(Y.cast<double>(), q_dot, q_config).cast<float>();
+#else
     Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
+#endif
+
+
 #ifdef DEBUG
     to_file(workingDir + "/cpp_entire_cloud.txt", entire);
     to_file(workingDir + "/cpp_downsample.txt", X);
@@ -1007,6 +1024,7 @@ CDCPD::Output CDCPD::operator()(
     Optimizer opt(original_template, Y, 1.00);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
+
 #ifdef DEBUG
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
 #endif
