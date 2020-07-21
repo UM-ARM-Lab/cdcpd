@@ -57,11 +57,11 @@ using namespace std::chrono_literals;
 std::vector<sm::Image::ConstPtr> color_images;
 std::vector<sm::Image::ConstPtr> depth_images;
 std::vector<sm::CameraInfo::ConstPtr> camera_infos;
-#ifdef PREDICT
+#ifdef SIMULATION
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_config;
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_dot;
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_ind;
-std::vector<stdm::Float32MultiArray::ConstPtr> groud_truth;
+std::vector<stdm::Float32MultiArray::ConstPtr> ground_truth;
 #endif
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
@@ -94,23 +94,23 @@ void callback(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
     const sm::CameraInfo::ConstPtr &cam_info
-#ifdef PREDICT
+    #ifdef PREDICT
     ,
     const stdm::Float32MultiArray::ConstPtr &g_config,
     const stdm::Float32MultiArray::ConstPtr &g_dot,
     const stdm::Float32MultiArray::ConstPtr &g_ind,
     const stdm::Float32MultiArray::ConstPtr &one_truth
-#endif)
+    #endif)
 {
     color_images.push_back(rgb_img);
     depth_images.push_back(depth_img);
     camera_infos.push_back(cam_info);
-#ifdef PREDICT
+    #ifdef PREDICT
     grippers_config.push_back(g_config);
     grippers_dot.push_back(g_dot);
     grippers_ind.push_back(g_ind);
-    groud_truth.push_back(one_truth);
-#endif
+    ground_truth.push_back(one_truth);
+    #endif
 }
 
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
@@ -156,7 +156,9 @@ Matrix3Xf toGroundTruth(
     return one_frame_truth_eigen;
 }
 
-std::tuple<std::vector<Isometry3d>, std::vector<VectorXd>, std::vector<VectorXi>> toGripperConfig(
+std::tuple<AllGrippersSinglePose,
+           AllGrippersSinglePoseDelta,
+           MatrixXi> toGripperConfig(
     const stdm::Float32MultiArray::ConstPtr &g_config
     const stdm::Float32MultiArray::ConstPtr &g_dot
     const stdm::Float32MultiArray::ConstPtr &g_ind)
@@ -166,37 +168,35 @@ std::tuple<std::vector<Isometry3d>, std::vector<VectorXd>, std::vector<VectorXi>
     num_dot = (g_dot->layout).dim[1],size;
     num_ind = (g_ind->layout).dim[1].size;
 
-    std::vector<Isometry3d> one_frame_config;
-    std::vector<VectorXd> one_frame_velocity;
-    std::vector<VectorXi> one_frame_ind;
+    AllGrippersSinglePose one_frame_config;
+    AllGrippersSinglePoseDelta one_frame_velocity;
+    MatrixXi one_frame_ind(num_ind, num_gripper);
 
     for (int g = 0; g < num_gripper; ++g)
     {
         Isometry3d one_config;
-        VectorXd one_velocity(num_dot);
-        VectorXi one_ind(num_ind);
+        Vector6d one_velocity(num_dot);
 
         for (int row = 0; row < 4; ++row)
         {
             for (int col = 0; col < 4; ++col)
             {
-                one_config(row, col) = (g_config->data)[num_config*g + row*4 + col];
+                one_config(row, col) = double((g_config->data)[num_config*g + row*4 + col]);
             }
         }
 
         for (int i = 0; i < num_dot; ++i)
         {
-            one_velocity(i) = (g_dot->data)[num_dot*g + i];
+            one_velocity(i) = double((g_dot->data)[num_dot*g + i]);
         }
 
         for (int i = 0; i < num_ind; ++i)
         {
-            one_ind(i) = (g_ind->data)[num_ind*g + i];
+            one_frame_ind(i, g) = (g_ind->data)[num_ind*g + i];
         }
 
         one_frame_config.push_back(one_config);
         one_frame_velocity.push_back(one_velocity);
-        one_frame_ind.push_back(one_ind);
     }
 
     return {one_frame_config, one_frame_velocity, one_frame_ind};
@@ -412,7 +412,7 @@ int main(int argc, char* argv[])
 
     std::vector<std::string> topics;
     #ifdef SIMULATION
-    topics.push_back(std::string("image_color_rect"));
+    topics.push_back(stringtd::string("image_color_rect"));
     topics.push_back(std::string("image_depth_rect"));
     topics.push_back(std::string("camera_info"));
     topics.push_back(std::string("groud_truth"));
@@ -436,14 +436,14 @@ int main(int argc, char* argv[])
 
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
-    #ifdef PREDICT
-        auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray>(
+    #ifdef SIMULATION
+    auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray>(
             rgb_sub, depth_sub, info_sub, config_sub, dot_sub, ind_sub, truth_sub, 25);
-        sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
+    sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
     #else
-        auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
+    auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
             rgb_sub, depth_sub, info_sub, 25);
-        sync.registerCallback(boost::bind(&callback, _1, _2, _3));
+    sync.registerCallback(boost::bind(&callback, _1, _2, _3));
     #endif
 
     for(rosbag::MessageInstance const& m: view)
@@ -484,55 +484,55 @@ int main(int argc, char* argv[])
                 cout << "NULL initiation!" << endl;
             }
         }
-        #ifdef PREDICT
-            else if (m.getTopic() == topics[3])
+        #ifdef SIMULATION
+        else if (m.getTopic() == topics[3])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
             {
-                auto info = m.instantiate<stdm::Float32MultiArray>();
-                if (info != nullptr)
-                {
-                    truth_sub.newMessage(info);
-                }
-                else
-                {
-                    cout << "NULL initiation!" << endl;
-                }
+                truth_sub.newMessage(info);
             }
-            else if (m.getTopic() == topics[4])
+            else
             {
-                auto info = m.instantiate<stdm::Float32MultiArray>();
-                if (info != nullptr)
-                {
-                    dot_sub.newMessage(info);
-                }
-                else
-                {
-                    cout << "NULL initiation!" << endl;
-                }   
+                cout << "NULL initiation!" << endl;
             }
-            else if (m.getTopic() == topics[5])
+        }
+        else if (m.getTopic() == topics[4])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
             {
-                auto info = m.instantiate<stdm::Float32MultiArray>();
-                if (info != nullptr)
-                {
-                    ind_sub.newMessage(info);
-                }
-                else
-                {
-                    cout << "NULL initiation!" << endl;
-                }
+                dot_sub.newMessage(info);
             }
-            else if (m.getTopic() == topics[6])
+            else
             {
-                auto info = m.instantiate<stdm::Float32MultiArray>();
-                if (info != nullptr)
-                {
-                    config_sub.newMessage(info);
-                }
-                else
-                {
-                    cout << "NULL initiation!" << endl;
-                }
+                cout << "NULL initiation!" << endl;
+            }   
+        }
+        else if (m.getTopic() == topics[5])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                ind_sub.newMessage(info);
             }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+        }
+        else if (m.getTopic() == topics[6])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+        }
         #endif
         else
         {
@@ -545,6 +545,12 @@ int main(int argc, char* argv[])
     auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
     auto info_iter = camera_infos.cbegin();
+    #ifdef SIMULATION
+    auto config_iter = grippers_config.cbegin();
+    auto velocity_iter = grippers_dot.cbegin();
+    auto ind_iter = grippers_dot.cbegin();
+    auto truth_iter = ground_truth.cbegin();
+    #endif
 
     cout << "rgb images size: " << color_images.size() << endl;
     cout << "depth images size: " << depth_images.size() << endl;
@@ -599,10 +605,31 @@ int main(int argc, char* argv[])
         return EXIT_SUCCESS;
     }
 
+    #ifdef SIMULATION
+    auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
+    std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
+    double translation_dir_deformability = 1.0;
+    double translation_dis_deformability = 1.0;
+    double rotation_deformability = 1.0;
+    CDCPD cdcpd(template_cloud,
+                template_edges,
+                nh_ptr,
+                translation_dir_deformability,
+                translation_dis_deformability,
+                rotation_deformability,
+                g_ind,
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
+    #else
     CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
+    #endif
     #ifdef COMP
     CDCPD cdcpd_without_constrain(template_cloud, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
     #endif
+
 
     // Let's also grab the gripper positions. Note that in practice, you'd do this in real time.
     geometry_msgs::TransformStamped leftTS;
@@ -674,8 +701,10 @@ int main(int argc, char* argv[])
         }
 
         auto [color_image_bgr, depth_image, intrinsics] = toOpenCv(*color_iter, *depth_iter, *info_iter);
-
-
+        #ifdef SIMULATION
+        Matrix3Xf one_frame_truth = toGroundTruth(*truth_iter);
+        auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
+        #endif
 
         /// Color filter
         // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
@@ -727,7 +756,11 @@ int main(int argc, char* argv[])
         cv::imwrite(workingDir + "/hsv_mask.png", hsv_mask);
         #endif
 
+        #ifdef SIMULATION
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, false, fixed_points);
+        #else
         auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, false, fixed_points);
+        #endif
         template_cloud = out.gurobi_output;
         #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
@@ -1125,6 +1158,12 @@ int main(int argc, char* argv[])
         ++color_iter;
         ++depth_iter;
         ++info_iter;
+        #ifdef SIMULATION
+        ++config_iter;
+        ++velocity_iter;
+        ++ind_iter;
+        ++truth_iter;
+        #endif
     }
 
     cout << "Test ended" << endl;
