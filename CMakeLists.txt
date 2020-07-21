@@ -46,7 +46,7 @@ catkin_package(
     INCLUDE_DIRS    include ${FAISS_INCLUDE_DIRS}
     LIBRARIES       cdcpd ${FAISS_LIBRARY} Fgt::Library-C++
     CATKIN_DEPENDS  ${CATKIN_PACKAGES} 
-    DEPENDS         OpenCV PCL EIGEN3 GUROBI
+    DEPENDS         OpenCV PCL EIGEN3
 )
 
 include_directories(include PUBLIC 
