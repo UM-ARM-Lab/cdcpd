@@ -93,8 +93,8 @@ public:
                       const cv::Matx33d& intrinsics,
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
 #ifdef PREDICT
-                      const Eigen::MatrixXd& q_dot,
-                      const std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d> >& q_config,
+                      const AllGrippersSinglePoseDelta& q_dot,
+                      const AllGrippersSinglePose& q_config
 #endif
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
@@ -122,8 +122,8 @@ private:
 
 #ifdef PREDICT
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
-                             const Eigen::MatrixXd& q_dot,
-                             const std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d> >& q_config);
+                             const AllGrippersSinglePoseDelta& q_dot,
+                             const AllGrippersSinglePose& q_config);
 
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
 #endif

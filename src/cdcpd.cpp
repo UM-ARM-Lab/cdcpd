@@ -876,8 +876,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
 #ifdef PREDICT
 Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
-                         const MatrixXd& q_dot,
-                         const std::vector<Isometry3d, Eigen::aligned_allocator<Isometry3d> >& q_config)
+                         const AllGrippersSinglePoseDelta& q_dot,
+                         const AllGrippersSinglePose& q_config)
 {
     // P: template
     // q_dot: velocity of gripper, a 6*G matrix
@@ -911,8 +911,8 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
     //      - AllGrippersSinglePose: EigenHelpers::VectorIsometry3d (std::vector of Isometry3d)
     smmap::WorldState world;
     world.object_configuration_ = P;
-    world.all_grippers_single_pose_ = smmap::AllGrippersSinglePose(q_config);
-    smmap::AllGrippersSinglePoseDelta grippers_pose_delta = EigenHelpers::EigenVectorXToVectorEigenVector<double, 6>(q_dot);
+    world.all_grippers_single_pose_ = q_config;
+    smmap::AllGrippersSinglePoseDelta grippers_pose_delta = q_dot;
     return model->getObjectDelta_impl(world, grippers_pose_delta) + P;
 }
 #endif
@@ -925,8 +925,8 @@ CDCPD::Output CDCPD::operator()(
         const cv::Matx33d& intrinsics,
         const PointCloud::Ptr template_cloud,
 #ifdef PREDICT
-        const MatrixXd& q_dot,
-        const std::vector<Isometry3d, Eigen::aligned_allocator<Isometry3d> >& q_config,
+        const AllGrippersSinglePoseDelta& q_dot,
+        const AllGrippersSinglePose& q_config
 #endif
         const bool self_intersection,
         const bool interation_constrain,
