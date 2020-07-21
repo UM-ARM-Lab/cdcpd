@@ -139,17 +139,67 @@ std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
 }
 
 Matrix3Xf toGroundTruth(
-    const stdm::Float32MultiArray &one_frame_truth)
+    const stdm::Float32MultiArray::ConstPtr &one_frame_truth)
 {
-    // TODO
+    num_dim = (one_frame_truth->layout).dim[0].size;
+    num_points = (one_frame_truth->layout).dim[1].size;
+
+    Matrix3Xf one_frame_truth_eigen(num_dim, num_points);
+    for (int pt = 0; pt < num_points; ++pt)
+    {
+        for (int dim = 0; dim < num_dim; ++dim)
+        {
+            one_frame_truth_eigen(dim, pt) = (one_frame_truth->data)[pt*num_dim + dim];
+        }
+    }
+
+    return one_frame_truth_eigen;
 }
 
 std::tuple<std::vector<Isometry3d>, std::vector<VectorXd>, std::vector<VectorXi>> toGripperConfig(
-    const stdm::Float32MultiArray &g_config
-    const stdm::Float32MultiArray &g_dot
-    const stdm::Float32MultiArray &g_ind)
+    const stdm::Float32MultiArray::ConstPtr &g_config
+    const stdm::Float32MultiArray::ConstPtr &g_dot
+    const stdm::Float32MultiArray::ConstPtr &g_ind)
 {
-    // TODO
+    num_gripper = (g_config->layout).dim[0].size;
+    num_config = (g_config->layout).dim[1].size;
+    num_dot = (g_dot->layout).dim[1],size;
+    num_ind = (g_ind->layout).dim[1].size;
+
+    std::vector<Isometry3d> one_frame_config;
+    std::vector<VectorXd> one_frame_velocity;
+    std::vector<VectorXi> one_frame_ind;
+
+    for (int g = 0; g < num_gripper; ++g)
+    {
+        Isometry3d one_config;
+        VectorXd one_velocity(num_dot);
+        VectorXi one_ind(num_ind);
+
+        for (int row = 0; row < 4; ++row)
+        {
+            for (int col = 0; col < 4; ++col)
+            {
+                one_config(row, col) = (g_config->data)[num_config*g + row*4 + col];
+            }
+        }
+
+        for (int i = 0; i < num_dot; ++i)
+        {
+            one_velocity(i) = (g_dot->data)[num_dot*g + i];
+        }
+
+        for (int i = 0; i < num_ind; ++i)
+        {
+            one_ind(i) = (g_ind->data)[num_ind*g + i];
+        }
+
+        one_frame_config.push_back(one_config);
+        one_frame_velocity.push_back(one_velocity);
+        one_frame_ind.push_back(one_ind);
+    }
+
+    return {one_frame_config, one_frame_velocity, one_frame_ind};
 }
 
 double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
