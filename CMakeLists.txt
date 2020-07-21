@@ -28,6 +28,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   roscpp
   sensor_msgs
+  std_msgs
   pcl_ros
   arc_utilities
 )

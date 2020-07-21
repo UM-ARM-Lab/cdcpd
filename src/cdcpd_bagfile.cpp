@@ -25,6 +25,7 @@
 #include <message_filters/time_synchronizer.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
+#include <std_msgs/Float32MultiArray.h>
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Point.h>
@@ -36,13 +37,19 @@
 
 using std::cout;
 using std::endl;
+using Eigen::MatrixXd;
 using Eigen::MatrixXf;
 using Eigen::MatrixXi;
 using Eigen::Matrix3Xf;
+using Eigen::Matrix3Xd;
+using Eigen::Isometry3d;
+using Eigen::VectorXd;
+using Eigen::VectorXi;
 using pcl::PointXYZ;
 namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace sm = sensor_msgs;
+namespace stdm = std_msgs;
 
 using namespace cv;
 using namespace std::chrono_literals;
@@ -50,6 +57,12 @@ using namespace std::chrono_literals;
 std::vector<sm::Image::ConstPtr> color_images;
 std::vector<sm::Image::ConstPtr> depth_images;
 std::vector<sm::CameraInfo::ConstPtr> camera_infos;
+#ifdef PREDICT
+std::vector<stdm::Float32MultiArray::ConstPtr> grippers_config;
+std::vector<stdm::Float32MultiArray::ConstPtr> grippers_dot;
+std::vector<stdm::Float32MultiArray::ConstPtr> grippers_ind;
+std::vector<stdm::Float32MultiArray::ConstPtr> groud_truth;
+#endif
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
@@ -80,11 +93,24 @@ public:
 void callback(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
-    const sm::CameraInfo::ConstPtr &cam_info)
+    const sm::CameraInfo::ConstPtr &cam_info
+#ifdef PREDICT
+    ,
+    const stdm::Float32MultiArray::ConstPtr &g_config,
+    const stdm::Float32MultiArray::ConstPtr &g_dot,
+    const stdm::Float32MultiArray::ConstPtr &g_ind,
+    const stdm::Float32MultiArray::ConstPtr &one_truth
+#endif)
 {
     color_images.push_back(rgb_img);
     depth_images.push_back(depth_img);
     camera_infos.push_back(cam_info);
+#ifdef PREDICT
+    grippers_config.push_back(g_config);
+    grippers_dot.push_back(g_dot);
+    grippers_ind.push_back(g_ind);
+    groud_truth.push_back(one_truth);
+#endif
 }
 
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
@@ -110,6 +136,20 @@ std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
     cameraModel.fromCameraInfo(cam_info);
 
     return { color_image, depth_image, cameraModel.fullIntrinsicMatrix() };
+}
+
+Matrix3Xf toGroundTruth(
+    const stdm::Float32MultiArray &one_frame_truth)
+{
+    // TODO
+}
+
+std::tuple<std::vector<Isometry3d>, std::vector<VectorXd>, std::vector<VectorXi>> toGripperConfig(
+    const stdm::Float32MultiArray &g_config
+    const stdm::Float32MultiArray &g_dot
+    const stdm::Float32MultiArray &g_ind)
+{
+    // TODO
 }
 
 double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
@@ -280,14 +320,14 @@ int main(int argc, char* argv[])
         template_cloud->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
 
-#ifdef COMP
+    #ifdef COMP
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_constrain(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < template_vertices.cols(); ++i)
     {
         const auto& c = template_vertices.col(i);
         template_cloud_without_constrain->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
-#endif
+    #endif
 
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
@@ -307,6 +347,9 @@ int main(int argc, char* argv[])
 
     BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
+    #ifdef PREDICT
+    BagSubscriber<stdm::Float32MultiArray> config_sub, dot_sub, ind_sub, truth_sub;
+    #endif
 
     cout << "Making buffer" << endl;
     tf2_ros::Buffer tfBuffer;
@@ -323,6 +366,9 @@ int main(int argc, char* argv[])
     topics.push_back(std::string("image_depth_rect"));
     topics.push_back(std::string("camera_info"));
     topics.push_back(std::string("groud_truth"));
+    topics.push_back(std::string("gripper_velocity"));
+    topics.push_back(std::string("gripper_info"));
+    topics.push_back(std::string("gripper_config"));
     #else
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -340,9 +386,15 @@ int main(int argc, char* argv[])
 
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
-    auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
-        rgb_sub, depth_sub, info_sub, 25);
-    sync.registerCallback(boost::bind(&callback, _1, _2, _3));
+    #ifdef PREDICT
+        auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray>(
+            rgb_sub, depth_sub, info_sub, config_sub, dot_sub, ind_sub, truth_sub, 25);
+        sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
+    #else
+        auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
+            rgb_sub, depth_sub, info_sub, 25);
+        sync.registerCallback(boost::bind(&callback, _1, _2, _3));
+    #endif
 
     for(rosbag::MessageInstance const& m: view)
     {
@@ -382,11 +434,55 @@ int main(int argc, char* argv[])
                 cout << "NULL initiation!" << endl;
             }
         }
-        #ifdef SIMULATION
-        else if (m.getTopic() == topics[3])
-        {
-
-        }
+        #ifdef PREDICT
+            else if (m.getTopic() == topics[3])
+            {
+                auto info = m.instantiate<stdm::Float32MultiArray>();
+                if (info != nullptr)
+                {
+                    truth_sub.newMessage(info);
+                }
+                else
+                {
+                    cout << "NULL initiation!" << endl;
+                }
+            }
+            else if (m.getTopic() == topics[4])
+            {
+                auto info = m.instantiate<stdm::Float32MultiArray>();
+                if (info != nullptr)
+                {
+                    dot_sub.newMessage(info);
+                }
+                else
+                {
+                    cout << "NULL initiation!" << endl;
+                }   
+            }
+            else if (m.getTopic() == topics[5])
+            {
+                auto info = m.instantiate<stdm::Float32MultiArray>();
+                if (info != nullptr)
+                {
+                    ind_sub.newMessage(info);
+                }
+                else
+                {
+                    cout << "NULL initiation!" << endl;
+                }
+            }
+            else if (m.getTopic() == topics[6])
+            {
+                auto info = m.instantiate<stdm::Float32MultiArray>();
+                if (info != nullptr)
+                {
+                    config_sub.newMessage(info);
+                }
+                else
+                {
+                    cout << "NULL initiation!" << endl;
+                }
+            }
         #endif
         else
         {
@@ -528,6 +624,7 @@ int main(int argc, char* argv[])
         }
 
         auto [color_image_bgr, depth_image, intrinsics] = toOpenCv(*color_iter, *depth_iter, *info_iter);
+
 
 
         /// Color filter
