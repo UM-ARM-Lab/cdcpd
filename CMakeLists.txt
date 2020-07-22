@@ -66,23 +66,24 @@ include_directories(
   include
   SYSTEM
   ${catkin_INCLUDE_DIRS}
+  ${cdcpd_INCLUDE_DIRS}
 )
 
 # Node for live data
-add_executable(${PROJECT_NAME}
-  src/${PROJECT_NAME}/kinect_sub.cpp
-  src/cdcpd_node.cpp
-)
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    OUTPUT_NAME node PREFIX ""
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED YES)
-add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME} PRIVATE
-  ${catkin_LIBRARIES}
-  cdcpd::cdcpd
-)
-target_compile_options(${PROJECT_NAME} PRIVATE -O3 -Wall -Wextra -Wconversion -Wshadow)
+# add_executable(${PROJECT_NAME}
+#   src/${PROJECT_NAME}/kinect_sub.cpp
+#   src/cdcpd_node.cpp
+# )
+# set_target_properties(${PROJECT_NAME} PROPERTIES
+#     OUTPUT_NAME node PREFIX ""
+#     CXX_STANDARD 17
+#     CXX_STANDARD_REQUIRED YES)
+# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# target_link_libraries(${PROJECT_NAME} PRIVATE
+#   ${catkin_LIBRARIES}
+#   cdcpd::cdcpd
+# )
+#target_compile_options(${PROJECT_NAME} PRIVATE -O3 -Wall -Wextra -Wconversion -Wshadow)
 
 # Node for bagged data
 add_executable(${PROJECT_NAME}_bagfile

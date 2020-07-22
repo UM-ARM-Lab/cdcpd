@@ -46,6 +46,10 @@ using Eigen::Isometry3d;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 using pcl::PointXYZ;
+using smmap::AllGrippersSinglePose;
+using smmap::AllGrippersSinglePoseDelta;
+using kinematics::Vector6d;
+
 namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace sm = sensor_msgs;
@@ -100,7 +104,8 @@ void callback(
     const stdm::Float32MultiArray::ConstPtr &g_dot,
     const stdm::Float32MultiArray::ConstPtr &g_ind,
     const stdm::Float32MultiArray::ConstPtr &one_truth
-    #endif)
+    #endif
+    )
 {
     color_images.push_back(rgb_img);
     depth_images.push_back(depth_img);
@@ -141,13 +146,13 @@ std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
 Matrix3Xf toGroundTruth(
     const stdm::Float32MultiArray::ConstPtr &one_frame_truth)
 {
-    num_dim = (one_frame_truth->layout).dim[0].size;
-    num_points = (one_frame_truth->layout).dim[1].size;
+    uint32_t num_dim = (one_frame_truth->layout).dim[0].size;
+    uint32_t num_points = (one_frame_truth->layout).dim[1].size;
 
     Matrix3Xf one_frame_truth_eigen(num_dim, num_points);
-    for (int pt = 0; pt < num_points; ++pt)
+    for (uint32_t pt = 0; pt < num_points; ++pt)
     {
-        for (int dim = 0; dim < num_dim; ++dim)
+        for (uint32_t dim = 0; dim < num_dim; ++dim)
         {
             one_frame_truth_eigen(dim, pt) = (one_frame_truth->data)[pt*num_dim + dim];
         }
@@ -159,40 +164,40 @@ Matrix3Xf toGroundTruth(
 std::tuple<AllGrippersSinglePose,
            AllGrippersSinglePoseDelta,
            MatrixXi> toGripperConfig(
-    const stdm::Float32MultiArray::ConstPtr &g_config
-    const stdm::Float32MultiArray::ConstPtr &g_dot
+    const stdm::Float32MultiArray::ConstPtr &g_config,
+    const stdm::Float32MultiArray::ConstPtr &g_dot,
     const stdm::Float32MultiArray::ConstPtr &g_ind)
 {
-    num_gripper = (g_config->layout).dim[0].size;
-    num_config = (g_config->layout).dim[1].size;
-    num_dot = (g_dot->layout).dim[1],size;
-    num_ind = (g_ind->layout).dim[1].size;
+    uint32_t num_gripper = (g_config->layout).dim[0].size;
+    uint32_t num_config = (g_config->layout).dim[1].size;
+    uint32_t num_dot = (g_dot->layout).dim[1].size;
+    uint32_t num_ind = (g_ind->layout).dim[1].size;
 
     AllGrippersSinglePose one_frame_config;
     AllGrippersSinglePoseDelta one_frame_velocity;
     MatrixXi one_frame_ind(num_ind, num_gripper);
 
-    for (int g = 0; g < num_gripper; ++g)
+    for (uint32_t g = 0; g < num_gripper; ++g)
     {
         Isometry3d one_config;
-        Vector6d one_velocity(num_dot);
+        Vector6d one_velocity;
 
-        for (int row = 0; row < 4; ++row)
+        for (uint32_t row = 0; row < 4; ++row)
         {
-            for (int col = 0; col < 4; ++col)
+            for (uint32_t col = 0; col < 4; ++col)
             {
                 one_config(row, col) = double((g_config->data)[num_config*g + row*4 + col]);
             }
         }
 
-        for (int i = 0; i < num_dot; ++i)
+        for (uint32_t i = 0; i < num_dot; ++i)
         {
             one_velocity(i) = double((g_dot->data)[num_dot*g + i]);
         }
 
-        for (int i = 0; i < num_ind; ++i)
+        for (uint32_t i = 0; i < num_ind; ++i)
         {
-            one_frame_ind(i, g) = (g_ind->data)[num_ind*g + i];
+            one_frame_ind(i, g) = int((g_ind->data)[num_ind*g + i]);
         }
 
         one_frame_config.push_back(one_config);
@@ -397,7 +402,7 @@ int main(int argc, char* argv[])
 
     BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
-    #ifdef PREDICT
+    #ifdef SIMULATION
     BagSubscriber<stdm::Float32MultiArray> config_sub, dot_sub, ind_sub, truth_sub;
     #endif
 
@@ -412,7 +417,7 @@ int main(int argc, char* argv[])
 
     std::vector<std::string> topics;
     #ifdef SIMULATION
-    topics.push_back(stringtd::string("image_color_rect"));
+    topics.push_back(std::string("image_color_rect"));
     topics.push_back(std::string("image_depth_rect"));
     topics.push_back(std::string("camera_info"));
     topics.push_back(std::string("groud_truth"));
@@ -436,11 +441,7 @@ int main(int argc, char* argv[])
 
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
-    #ifdef SIMULATION
-    auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray, stdm::Float32MultiArray>(
-            rgb_sub, depth_sub, info_sub, config_sub, dot_sub, ind_sub, truth_sub, 25);
-    sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
-    #else
+    #ifndef SIMULATION
     auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
             rgb_sub, depth_sub, info_sub, 25);
     sync.registerCallback(boost::bind(&callback, _1, _2, _3));
@@ -703,7 +704,7 @@ int main(int argc, char* argv[])
         auto [color_image_bgr, depth_image, intrinsics] = toOpenCv(*color_iter, *depth_iter, *info_iter);
         #ifdef SIMULATION
         Matrix3Xf one_frame_truth = toGroundTruth(*truth_iter);
-        auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
+        tie(g_config, g_dot, g_ind) = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
         #endif
 
         /// Color filter
