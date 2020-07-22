@@ -7,6 +7,8 @@
 #include <pcl/io/pcd_io.h>
 #include <smmap/constraint_jacobian_model.h>
 
+#include <smmap_utilities/grippers.h>
+
 #include "cdcpd/past_template_matcher.h"
 
 // #ifndef DEBUG
@@ -37,9 +39,9 @@
 // #define CYL_CLOTH4
 // #endif
 
-// #ifndef SIMULATION
-// #define SIMULATION
-// #endif
+#ifndef SIMULATION
+#define SIMULATION
+#endif
 
 #ifndef PREDICT
 #define PREDICT
@@ -52,8 +54,8 @@ Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ
                                             double reg);
 
 Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
-                                  int lle_neighbors,
-                                  double reg);
+                                         int lle_neighbors,
+                                         double reg);
 
 class CDCPD {
 public:
@@ -93,8 +95,8 @@ public:
                       const cv::Matx33d& intrinsics,
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
 #ifdef PREDICT
-                      const AllGrippersSinglePoseDelta& q_dot,
-                      const AllGrippersSinglePose& q_config
+                      const smmap::AllGrippersSinglePoseDelta& q_dot,
+                      const smmap::AllGrippersSinglePose& q_config,
 #endif
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
@@ -122,8 +124,8 @@ private:
 
 #ifdef PREDICT
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
-                             const AllGrippersSinglePoseDelta& q_dot,
-                             const AllGrippersSinglePose& q_config);
+                             const smmap::AllGrippersSinglePoseDelta& q_dot,
+                             const smmap::AllGrippersSinglePose& q_config);
 
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
 #endif

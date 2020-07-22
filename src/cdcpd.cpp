@@ -17,8 +17,6 @@
 
 #include <smmap/ros_communication_helpers.h>
 
-#include <smmap_utilities/grippers.h>
-
 #include <arc_utilities/eigen_helpers.hpp>
 
 #include <fgt.hpp>
@@ -52,6 +50,8 @@ using Eigen::VectorXd;
 using Eigen::VectorXi;
 using Eigen::RowVectorXf;
 using Eigen::Isometry3d;
+using smmap::AllGrippersSinglePose;
+using smmap::AllGrippersSinglePoseDelta;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
@@ -926,7 +926,7 @@ CDCPD::Output CDCPD::operator()(
         const PointCloud::Ptr template_cloud,
 #ifdef PREDICT
         const AllGrippersSinglePoseDelta& q_dot,
-        const AllGrippersSinglePose& q_config
+        const AllGrippersSinglePose& q_config,
 #endif
         const bool self_intersection,
         const bool interation_constrain,
