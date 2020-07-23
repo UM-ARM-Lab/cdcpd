@@ -31,8 +31,8 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   pcl_ros
   arc_utilities
+  cdcpd
 )
-find_package(cdcpd REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -66,7 +66,6 @@ include_directories(
   include
   SYSTEM
   ${catkin_INCLUDE_DIRS}
-  ${cdcpd_INCLUDE_DIRS}
 )
 
 # Node for live data
@@ -96,6 +95,5 @@ set_target_properties(${PROJECT_NAME}_bagfile PROPERTIES
 add_dependencies(${PROJECT_NAME}_bagfile ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_bagfile PRIVATE
   ${catkin_LIBRARIES}
-  cdcpd::cdcpd
 )
 target_compile_options(${PROJECT_NAME}_bagfile PRIVATE -O3 -Wall -Wextra -Wconversion -Werror -Wshadow)

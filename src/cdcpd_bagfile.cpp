@@ -68,6 +68,12 @@ std::vector<stdm::Float32MultiArray::ConstPtr> grippers_ind;
 std::vector<stdm::Float32MultiArray::ConstPtr> ground_truth;
 #endif
 
+#ifdef SIMULATION
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result";
+#else
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
+#endif
+
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
 void clean_file(const std::string& fname) {
@@ -98,24 +104,24 @@ void callback(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
     const sm::CameraInfo::ConstPtr &cam_info
-    #ifdef PREDICT
-    ,
-    const stdm::Float32MultiArray::ConstPtr &g_config,
-    const stdm::Float32MultiArray::ConstPtr &g_dot,
-    const stdm::Float32MultiArray::ConstPtr &g_ind,
-    const stdm::Float32MultiArray::ConstPtr &one_truth
-    #endif
+    // #ifdef PREDICT
+    // ,
+    // const stdm::Float32MultiArray::ConstPtr &g_config,
+    // const stdm::Float32MultiArray::ConstPtr &g_dot,
+    // const stdm::Float32MultiArray::ConstPtr &g_ind,
+    // const stdm::Float32MultiArray::ConstPtr &one_truth
+    // #endif
     )
 {
     color_images.push_back(rgb_img);
     depth_images.push_back(depth_img);
     camera_infos.push_back(cam_info);
-    #ifdef PREDICT
-    grippers_config.push_back(g_config);
-    grippers_dot.push_back(g_dot);
-    grippers_ind.push_back(g_ind);
-    ground_truth.push_back(one_truth);
-    #endif
+    // #ifdef PREDICT
+    // grippers_config.push_back(g_config);
+    // grippers_dot.push_back(g_dot);
+    // grippers_ind.push_back(g_ind);
+    // ground_truth.push_back(one_truth);
+    // #endif
 }
 
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
@@ -172,6 +178,11 @@ std::tuple<AllGrippersSinglePose,
     uint32_t num_config = (g_config->layout).dim[1].size;
     uint32_t num_dot = (g_dot->layout).dim[1].size;
     uint32_t num_ind = (g_ind->layout).dim[1].size;
+
+    std::cout << "num of gripper " << num_gripper << std::endl;
+    std::cout << "num of config " << num_config << std::endl;
+    std::cout << "num of gripper dot " << num_dot << std::endl;
+    std::cout << "num of gripper index " << num_ind << std::endl;
 
     AllGrippersSinglePose one_frame_config;
     AllGrippersSinglePoseDelta one_frame_velocity;
@@ -441,11 +452,11 @@ int main(int argc, char* argv[])
 
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
-    #ifndef SIMULATION
+    // #ifndef SIMULATION
     auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
             rgb_sub, depth_sub, info_sub, 25);
     sync.registerCallback(boost::bind(&callback, _1, _2, _3));
-    #endif
+    // #endif
 
     for(rosbag::MessageInstance const& m: view)
     {
@@ -491,7 +502,8 @@ int main(int argc, char* argv[])
             auto info = m.instantiate<stdm::Float32MultiArray>();
             if (info != nullptr)
             {
-                truth_sub.newMessage(info);
+                ground_truth.push_back(info);
+                // truth_sub.newMessage(info);
             }
             else
             {
@@ -503,7 +515,8 @@ int main(int argc, char* argv[])
             auto info = m.instantiate<stdm::Float32MultiArray>();
             if (info != nullptr)
             {
-                dot_sub.newMessage(info);
+                grippers_dot.push_back(info);
+                // dot_sub.newMessage(info);
             }
             else
             {
@@ -515,7 +528,8 @@ int main(int argc, char* argv[])
             auto info = m.instantiate<stdm::Float32MultiArray>();
             if (info != nullptr)
             {
-                ind_sub.newMessage(info);
+                grippers_ind.push_back(info);
+                // ind_sub.newMessage(info);
             }
             else
             {
@@ -527,7 +541,8 @@ int main(int argc, char* argv[])
             auto info = m.instantiate<stdm::Float32MultiArray>();
             if (info != nullptr)
             {
-                config_sub.newMessage(info);
+                grippers_config.push_back(info);
+                // config_sub.newMessage(info);
             }
             else
             {
@@ -549,7 +564,7 @@ int main(int argc, char* argv[])
     #ifdef SIMULATION
     auto config_iter = grippers_config.cbegin();
     auto velocity_iter = grippers_dot.cbegin();
-    auto ind_iter = grippers_dot.cbegin();
+    auto ind_iter = grippers_ind.cbegin();
     auto truth_iter = ground_truth.cbegin();
     #endif
 
