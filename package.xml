@@ -17,21 +17,9 @@
   <!-- buildtool_depend>cmake</buildtool_depend -->
   <buildtool_depend>catkin</buildtool_depend>
 
-  <build_depend>roscpp</build_depend>
-  <build_depend>rospy</build_depend>
-  <build_depend>std_msgs</build_depend>
   <build_depend>smmap</build_depend>
-  <build_depend>deformable_manipulation_experiment_params</build_depend>
-  <build_depend>smmap_utilities</build_depend>
-  <build_depend>arc_utilities</build_depend>
 
-  <run_depend>roscpp</run_depend>
-  <run_depend>rospy</run_depend>
-  <run_depend>std_msgs</run_depend>
   <run_depend>smmap</run_depend>
-  <run_depend>deformable_manipulation_experiment_params</run_depend>
-  <run_depend>smmap_utilities</run_depend>
-  <run_depend>arc_utilities</run_depend>
 
   <export>
     <!-- build_type>cmake</build_type -->

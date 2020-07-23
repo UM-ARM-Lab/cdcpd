@@ -55,7 +55,7 @@ template<>
 struct DepthTraits<float>
 {
   static inline bool valid(float depth) { return std::isfinite(depth); }
-  static inline float toMeters(float depth) { return depth; }
+  static inline float toMeters(float depth) { return depth * 0.001f; }
   static inline float fromMeters(float depth) { return depth; }
 
   static inline void initializeBuffer(std::vector<uint8_t>& buffer)

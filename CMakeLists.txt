@@ -1,19 +1,15 @@
 cmake_minimum_required(VERSION 3.9)
-project(cdcpd VERSION 0.1.0
-    DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
-    LANGUAGES CXX)
+#project(cdcpd VERSION 0.1.0
+#    DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
+#    LANGUAGES CXX
+
+project(cdcpd)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CATKIN_PACKAGES
-    roscpp
-    rospy
-    std_msgs
     smmap
-    deformable_manipulation_experiment_params
-    smmap_utilities
-    arc_utilities
 )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/
@@ -43,10 +39,10 @@ find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization feature
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 catkin_package(
-    INCLUDE_DIRS    include ${FAISS_INCLUDE_DIRS}
-    LIBRARIES       cdcpd ${FAISS_LIBRARY} Fgt::Library-C++
+    INCLUDE_DIRS    include
+    LIBRARIES       cdcpd
     CATKIN_DEPENDS  ${CATKIN_PACKAGES} 
-    DEPENDS         OpenCV PCL EIGEN3
+    DEPENDS
 )
 
 include_directories(include PUBLIC 
