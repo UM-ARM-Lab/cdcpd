@@ -628,8 +628,8 @@ point_clouds_from_images(const cv::Mat& depth_image,
     auto const center_y = intrinsics(1, 2);
 
     auto const unit_scaling = DepthTraits::toMeters(T(1));
-    auto const constant_x = unit_scaling / (intrinsics(0, 0) * pixel_len);
-    auto const constant_y = unit_scaling / (intrinsics(1, 1) * pixel_len);
+    auto const constant_x = 1.0f / (intrinsics(0, 0) * pixel_len);
+    auto const constant_y = 1.0f / (intrinsics(1, 1) * pixel_len);
     auto constexpr bad_point = std::numeric_limits<float>::quiet_NaN();
 
     // ENHANCE: change the way to get access to depth image and rgb image to be more readable
@@ -939,6 +939,17 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
     world.object_configuration_ = P;
     world.all_grippers_single_pose_ = q_config;
     smmap::AllGrippersSinglePoseDelta grippers_pose_delta = q_dot;
+    cout << "gripper configuration:" << endl;
+    for (int i = 0; i < q_config.size(); ++i)
+    {
+        cout << q_config[i].rotation() << endl << endl;
+        cout << q_config[i].translation() << endl << endl;
+    }
+    cout << "gripper velocity" << endl;
+    for (int i = 0; i < q_dot.size(); ++i)
+    {
+        cout << q_dot[i] << endl << endl;
+    }
     return model->getObjectDelta_impl(world, grippers_pose_delta) + P;
 }
 #endif

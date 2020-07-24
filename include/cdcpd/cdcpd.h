@@ -11,9 +11,9 @@
 
 #include "cdcpd/past_template_matcher.h"
 
-#ifndef DEBUG
-#define DEBUG
-#endif
+// #ifndef DEBUG
+// #define DEBUG
+// #endif
 
 #ifndef ENTIRE
 #define ENTIRE
