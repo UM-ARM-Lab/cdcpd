@@ -345,11 +345,11 @@ int main(int argc, char* argv[])
 
     // initial connectivity model of rope
     int points_on_rope = 50;
-    float rope_length = 0.9f;
+    float rope_length = 1.0f;
     MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
     template_vertices.setZero();
-    template_vertices.row(0).setLinSpaced(points_on_rope, -rope_length/2, rope_length/2);
-    template_vertices.row(2).array() += 1.4f;
+    template_vertices.row(0).setLinSpaced(points_on_rope, -rope_length/2-1.5f, rope_length/2-1.5f);
+    template_vertices.row(2).array() += 6.0f;
     MatrixXi template_edges(2, points_on_rope - 1);
     template_edges(0, 0) = 0;
     template_edges(1, template_edges.cols() - 1) = points_on_rope - 1;
@@ -377,6 +377,7 @@ int main(int argc, char* argv[])
     clean_file(workingDir + "/cpp_TY-1.txt");
     clean_file(workingDir + "/cpp_hsv.txt");
     clean_file(workingDir + "/cpp_mask.txt");
+    clean_file(workingDir + "/cpp_intrinsics.txt");
     #endif
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -624,7 +625,7 @@ int main(int argc, char* argv[])
     #ifdef SIMULATION
     auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
     std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
-    double translation_dir_deformability = 1.0;
+    double translation_dir_deformability = 10.0;
     double translation_dis_deformability = 1.0;
     double rotation_deformability = 1.0;
     CDCPD cdcpd(template_cloud,
@@ -769,6 +770,7 @@ int main(int argc, char* argv[])
 
         #ifdef DEBUG
         to_file(workingDir + "/cpp_mask.txt", hsv_mask);
+        to_file(workingDir + "/cpp_intrinsics.txt", cv::Mat(intrinsics));
         cv::imwrite(workingDir + "/hsv_mask.png", hsv_mask);
         #endif
 
