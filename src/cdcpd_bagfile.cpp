@@ -379,6 +379,7 @@ int main(int argc, char* argv[])
     clean_file(workingDir + "/cpp_mask.txt");
     clean_file(workingDir + "/cpp_intrinsics.txt");
     #endif
+    clean_file(workingDir + "/occluded_index.txt");
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < template_vertices.cols(); ++i)
@@ -404,12 +405,19 @@ int main(int argc, char* argv[])
     auto masked_publisher = nh.advertise<PointCloud> ("cdcpd/masked", 1);
     auto downsampled_publisher = nh.advertise<PointCloud> ("cdcpd/downsampled", 1);
     auto template_publisher = nh.advertise<PointCloud> ("cdcpd/template", 1);
+    #ifdef PREDICT
+    auto pred_publisher = nh.advertise<PointCloud>("cdcpd/prediction", 1);
+    #endif
     // auto cpd_iters_publisher = nh.advertise<PointCloud> ("cdcpd/cpd_iters", 1);
     auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
+    #ifdef COMP
     auto output_without_constrain_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_constrain", 1);
+    #endif
     auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
     auto right_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/right_gripper_prior", 1);
+    #ifdef CYLINDER
     auto cylinder_pub = nh.advertise<vm::Marker>("cdcpd/cylinder", 0);
+    #endif
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 
     BagSubscriber<sm::Image> rgb_sub, depth_sub;
@@ -626,8 +634,8 @@ int main(int argc, char* argv[])
     auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
     std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
     double translation_dir_deformability = 10.0;
-    double translation_dis_deformability = 1.0;
-    double rotation_deformability = 1.0;
+    double translation_dis_deformability = 10.0;
+    double rotation_deformability = 10.0;
     CDCPD cdcpd(template_cloud,
                 template_edges,
                 nh_ptr,
@@ -793,6 +801,9 @@ int main(int argc, char* argv[])
         out.downsampled_cloud->header.frame_id = frame_id;
         out.cpd_output->header.frame_id = frame_id;
         out.gurobi_output->header.frame_id = frame_id;
+        #ifdef PREDICT
+        out.cpd_predict->header.frame_id = frame_id;
+        #endif
         #ifdef COMP
         out_without_constrain.gurobi_output->header.frame_id = frame_id;
         #endif
@@ -1161,6 +1172,9 @@ int main(int argc, char* argv[])
         #ifdef COMP
         pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
         #endif
+        #ifdef PREDICT
+        pcl_conversions::toPCL(time, out.cpd_predict->header.stamp);
+        #endif
 
         #ifdef ENTIRE
         original_publisher.publish(out.original_cloud);
@@ -1168,6 +1182,9 @@ int main(int argc, char* argv[])
         masked_publisher.publish(out.masked_point_cloud);
         downsampled_publisher.publish(out.downsampled_cloud);
         template_publisher.publish(out.cpd_output);
+        #ifdef PREDICT
+        pred_publisher.publish(out.cpd_predict);
+        #endif
         output_publisher.publish(out.gurobi_output);
         #ifdef COMP
         output_without_constrain_publisher.publish(out_without_constrain.gurobi_output);
