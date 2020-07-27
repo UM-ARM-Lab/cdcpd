@@ -820,6 +820,9 @@ static void sample_X_points(const Matrix3Xf& Y,
 
 Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
                      const Matrix3Xf& Y,
+                     #ifdef PREDICT
+                     const Matrix3Xf& Y_pred,
+                     #endif
                      const cv::Mat& depth,
                      const cv::Mat& mask)
 {
@@ -925,12 +928,26 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
+        float zeta = 10.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
+        
+        #ifdef PREDICT
+        MatrixXf A = (P1.asDiagonal() * G)
+            + alpha * sigma2 * MatrixXf::Identity(M, M)
+            + sigma2 * lambda * (m_lle * G)
+            + zeta * G;// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
+        #else
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
+        #endif
+
+        #ifdef PREDICT
+        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() - Y.transpose()); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
+        #else
         MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
+        #endif
         MatrixXf W = A.householderQr().solve(B);
         // MatrixXf lastW = W;
 
@@ -1151,8 +1168,8 @@ CDCPD::Output CDCPD::operator()(
     }
     VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
     std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-    Matrix3Xf TY_cpd = cpd(X, Y, depth, mask);
-    Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
+    Matrix3Xf TY = cpd(X, Y, TY_pred, depth, mask);
+    // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     #else
     Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
     #endif
@@ -1167,7 +1184,7 @@ CDCPD::Output CDCPD::operator()(
 
     // Next step: optimization.
     // ???: most likely not 1.0
-    Optimizer opt(original_template, Y, 1.20);
+    Optimizer opt(original_template, Y, 1.0);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
 
@@ -1176,6 +1193,7 @@ CDCPD::Output CDCPD::operator()(
     #endif
 
     // If we're doing tracking recovery, do that now
+    #ifndef PREDICT
     if (use_recovery)
     {
         std::cout << "matcher size: " << template_matcher.size() << std::endl;
@@ -1212,6 +1230,7 @@ CDCPD::Output CDCPD::operator()(
             template_matcher.add_template(cloud_downsampled, Y_opt);
         }
     }
+    #endif
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();

@@ -132,6 +132,9 @@ private:
                           const Eigen::Matrix3Xf& Y_emit_prior);
     Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf& X,
                          const Eigen::Matrix3Xf& Y,
+                         #ifdef PREDICT
+                         const Eigen::Matrix3Xf& Y_pred,
+                         #endif
                          const cv::Mat& depth,
                          const cv::Mat& mask);
 
