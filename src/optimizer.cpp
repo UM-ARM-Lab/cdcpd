@@ -572,8 +572,8 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
         {
             float current_distance = (first_elem->position - second_elem->position).squaredNorm();
             float original_distance = (initial_template.col(first_elem->template_index) - initial_template.col(second_elem->template_index)).squaredNorm();
-            cout << "current_distance " << current_distance << endl;
-            cout << "original_distance " << original_distance << endl;
+            // cout << "current_distance " << current_distance << endl;
+            // cout << "original_distance " << original_distance << endl;
             if (current_distance > original_distance * stretch_lambda * stretch_lambda)
             {
                 return false;

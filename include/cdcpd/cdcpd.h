@@ -60,12 +60,15 @@ Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPt
 class CDCPD {
 public:
     struct Output {
-#ifdef ENTIRE
+        #ifdef ENTIRE
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr original_cloud;
-#endif
+        #endif
         pcl::PointCloud<pcl::PointXYZ>::Ptr masked_point_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_output;
+        #ifdef PREDICT
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_predict;
+        #endif
         pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
     };
 
@@ -76,13 +79,13 @@ public:
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
-#ifdef PREDICT
+          #ifdef PREDICT
           std::shared_ptr<ros::NodeHandle> nh,
           const double translation_dir_deformability,
           const double translation_dis_deformability,
           const double rotation_deformability,
           const Eigen::MatrixXi& gripper_idx,
-#endif
+          #endif
           const bool _use_recovery = true,
           const double alpha = 0.5,
           const double beta = 1.0,
@@ -103,11 +106,21 @@ public:
                       const std::vector<FixedPoint>& fixed_points = {});
 
 private:
-    Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf vertices,
+    Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf& vertices,
                                      const cv::Mat& depth,
                                      const cv::Mat& mask,
                                      const Eigen::Matrix3f& intrinsics,
                                      const float kvis);
+
+    Eigen::VectorXi is_occluded(const Eigen::Matrix3Xf& vertices,
+                                const cv::Mat& depth,
+                                const cv::Mat& mask,
+                                const Eigen::Matrix3f& intrinsics);
+
+    Eigen::Matrix3Xf blend_result(const Eigen::Matrix3Xf& Y_pred,
+                                  const Eigen::Matrix3Xf& Y_cpd,
+                                  const Eigen::VectorXi& is_occluded);
+
     // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
     // and not have to pass around intr in here
     Eigen::MatrixXf calcP(const int N,
@@ -152,6 +165,9 @@ private:
     bool use_recovery;
     std::vector<Eigen::MatrixXf> Q;
     double last_sigma2;
+    #ifdef PREDICT
+    const Eigen::MatrixXi& gripper_idx;
+    #endif
 };
 
 #endif

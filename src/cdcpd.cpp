@@ -334,6 +334,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     max_iterations(100), // TODO make configurable?
     kvis(1e3),
     use_recovery(_use_recovery)
+    #ifdef PREDICT
+    , gripper_idx(grippers)
+    #endif
 {
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(template_cloud);
@@ -395,11 +398,11 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
  * Return a non-normalized probability that each of the tracked vertices produced any detected point.
  * Implement Eq. (7) in the paper
  */
-Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
-                                        const cv::Mat& depth,
-                                        const cv::Mat& mask,
-                                        const Eigen::Matrix3f& intrinsics,
-                                        const float kvis)
+VectorXf CDCPD::visibility_prior(const Matrix3Xf& vertices,
+                                 const Mat& depth,
+                                 const Mat& mask,
+                                 const Matrix3f& intrinsics,
+                                 const float kvis)
 {
     // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
@@ -418,7 +421,7 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
 
     // Project the vertices to get their corresponding pixel coordinate
     // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
-    Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
+    Matrix3Xf image_space_vertices = intrinsics * vertices;
 
     // Homogeneous coords: divide by third row
     // the for-loop is unnecessary
@@ -493,6 +496,99 @@ Eigen::VectorXf CDCPD::visibility_prior(const Matrix3Xf vertices,
     return prob;
 }
 
+VectorXi CDCPD::is_occluded(const Matrix3Xf& vertices,
+                            const Mat& depth,
+                            const Mat& mask,
+                            const Matrix3f& intrinsics)
+{
+    // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation
+    // kvis: k_vis in the paper
+
+    // Project the vertices to get their corresponding pixel coordinate
+    Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
+
+    // Homogeneous coords: divide by third row
+    // the for-loop is unnecessary
+    image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
+    image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
+    for (int i = 0; i < image_space_vertices.cols(); ++i)
+    {
+        float x = image_space_vertices(0, i);
+        float y = image_space_vertices(1, i);
+        image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
+        image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
+    }
+
+    // Get image coordinates
+    Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
+
+    for (int i = 0; i < coords.cols(); ++i)
+    {
+        coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
+        coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
+    }
+
+    // Find difference between point depth and image depth
+    // depth_diffs: (1, M) vector
+    Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
+    for (int i = 0; i < vertices.cols(); ++i)
+    {
+        // std::cout << "depth at " << coords(1, i) << " " << coords(0, i) << std::endl;
+        #ifdef SIMULATION
+        assert(depth.depth() == CV_32F);
+        float raw_depth = depth.at<float>(coords(1, i), coords(0, i));
+        #else
+        assert(depth.depth() == CV_16U);
+        uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
+        #endif
+        if (raw_depth != 0)
+        {
+            depth_diffs(i) = vertices(2, i) - static_cast<float>(raw_depth) / 1000.0;
+        }
+        else
+        {
+            depth_diffs(i) = 0.02; // prevent numerical problems; taken from the Python code
+        }
+    }
+
+    depth_diffs = depth_diffs.array().max(0.0);
+    VectorXi occl_idx(depth_diffs.size());
+    for (int i = 0; i < depth_diffs.size(); ++i)
+    {
+        if (depth_diffs(i) > 0.5) {
+            occl_idx(i) = 1;
+        }
+        else
+        {
+            occl_idx(i) = 0;
+        }
+    }
+
+    return occl_idx;
+}
+
+Matrix3Xf CDCPD::blend_result(const Matrix3Xf& Y_pred,
+                       const Matrix3Xf& Y_cpd,
+                       const VectorXi& is_occluded)
+{
+    Matrix3Xf result(3, Y_pred.cols());
+    for (int i = 0; i < is_occluded.size(); ++i)
+    {
+        if (is_occluded(i))
+        {
+            result.col(i) = Y_pred.col(i);
+        }
+        else
+        {
+            result.col(i) = Y_cpd.col(i);
+        }
+    }
+
+    return result;
+}
+
 /*
  * Used for failure recovery. Very similar to the visibility_prior function, but with a different K and
  * image_depth - vertex_depth, not vice-versa. There's also no normalization.
@@ -511,11 +607,11 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
     // k: constant defined in Eq. (22)
 
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-#ifdef DEBUG
+    #ifdef DEBUG
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname) << mat.format(np_fmt);
     };
-#endif
+    #endif
 
     // Project the vertices to get their corresponding pixel coordinate
     Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
@@ -530,9 +626,9 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-#ifdef DEBUG
+    #ifdef DEBUG
     to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
-#endif
+    #endif
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -563,9 +659,9 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
         }
     }
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
-#ifdef DEBUG
+    #ifdef DEBUG
     to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
-#endif
+    #endif
 
 
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
@@ -580,9 +676,9 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     // NOTE: Eq. (22) lost 1 in it
     VectorXf prob = (1 - (-k * score).array().exp()).matrix();
-#ifdef DEBUG
+    #ifdef DEBUG
     to_file(workingDir + "/cpp_prob.txt", prob);
-#endif
+    #endif
     float cost = prob.array().isNaN().select(0, prob.array()).sum();
     cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
     return cost;
@@ -867,13 +963,13 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // Corresponding to Eq. (19) in the paper
         VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
-//        float xPx = (Pt1 * xPxtemp.transpose())(0,0);
+        // float xPx = (Pt1 * xPxtemp.transpose())(0,0);
         double xPx = Pt1.dot(xPxtemp);// end = std::chrono::system_clock::now();std::cout << "569: " << (end-start).count() << std::endl;
-//        assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
-//        double xPx = xPxMat.sum();
+        // assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
+        // double xPx = xPxMat.sum();
         VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-//        MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
-//        assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
+        // MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
+        // assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
         double yPy = P1.dot(yPytemp); //end = std::chrono::system_clock::now();std::cout << "575: " << (end-start).count() << std::endl;
         double trPXY = (TY.array() * PX.array()).sum(); //end = std::chrono::system_clock::now();std::cout << "576: " << (end-start).count() << std::endl;
         sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); //end = std::chrono::system_clock::now();std::cout << "577: " << (end-start).count() << std::endl;
@@ -883,7 +979,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
             sigma2 = tolerance / 10;
         }
 
-#ifdef CPDLOG
+        #ifdef CPDLOG
         double prob_reg = calculate_prob_reg(X, TY, G, W, sigma2, Y_emit_prior, P);
         double lle_reg = start_lambda / 2 * ((TY*m_lle*TY.transpose()).trace() + 2*(W.transpose()*G*m_lle*TY).trace() + (W.transpose()*G*m_lle*G*W).trace());
         double cpd_reg = alpha * (W.transpose()*G*W).trace()/2;
@@ -891,7 +987,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
         std::cout << std::setw(20) << prob_reg;
         std::cout << std::setw(20) << cpd_reg;
         std::cout << std::setw(20) << lle_reg << std::endl;
-#endif
+        #endif
 
 
         error = std::abs(sigma2 - qprev);
@@ -961,10 +1057,10 @@ CDCPD::Output CDCPD::operator()(
         const Mat& mask,
         const cv::Matx33d& intrinsics,
         const PointCloud::Ptr template_cloud,
-    #ifdef PREDICT
+        #ifdef PREDICT
         const AllGrippersSinglePoseDelta& q_dot,
         const AllGrippersSinglePose& q_config,
-    #endif
+        #endif
         const bool self_intersection,
         const bool interation_constrain,
         const std::vector<CDCPD::FixedPoint>& fixed_points)
@@ -988,14 +1084,12 @@ CDCPD::Output CDCPD::operator()(
     size_t recovery_knn_k = 12; // TODO configure this?
     float recovery_cost_threshold = 0.5; // TODO configure this?
 
-    #ifdef DEBUG
     Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
 
     // Useful utility for outputting an Eigen matrix to a file
     auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
         std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
     };
-    #endif
 
     Eigen::Matrix3d intrinsics_eigen_tmp;
     cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
@@ -1043,7 +1137,22 @@ CDCPD::Output CDCPD::operator()(
     #endif
 
     #ifdef PREDICT
-    Eigen::Matrix3Xf TY = predict(Y.cast<double>(), q_dot, q_config).cast<float>();
+    Matrix3Xf TY_pred = predict(Y.cast<double>(), q_dot, q_config).cast<float>();
+    std::vector<FixedPoint> pred_fixed_points;
+    for (int col = 0; col < gripper_idx.cols(); ++col)
+    {
+        for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+        {
+            FixedPoint pt;
+            pt.template_index = gripper_idx(row, col);
+            pt.position = TY_pred.col(pt.template_index);
+            pred_fixed_points.push_back(pt);
+        }
+    }
+    VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
+    std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
+    Matrix3Xf TY_cpd = cpd(X, Y, depth, mask);
+    Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     #else
     Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
     #endif
@@ -1058,9 +1167,9 @@ CDCPD::Output CDCPD::operator()(
 
     // Next step: optimization.
     // ???: most likely not 1.0
-    Optimizer opt(original_template, Y, 1.00);
+    Optimizer opt(original_template, Y, 1.20);
 
-    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
+    Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
 
     #ifdef DEBUG
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
@@ -1108,15 +1217,22 @@ CDCPD::Output CDCPD::operator()(
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
     last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
 
-    PointCloud::Ptr cpd_out = mat_to_cloud(Y_opt);
+    PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
+    PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
+    #ifdef PREDICT
+    PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
+    #endif
 
     return CDCPD::Output {
-#ifdef ENTIRE
+        #ifdef ENTIRE
         entire_cloud,
-#endif
+        #endif
         cloud,
         cloud_downsampled,
-        template_cloud,
-        cpd_out
+        cdcpd_cpd,
+        #ifdef PREDICT
+        cdcpd_pred,
+        #endif
+        cdcpd_out
     };
 }
