@@ -288,28 +288,28 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
     return M;
 }
 
-static void Qconstructor(const Matrix2Xi& E, std::vector<MatrixXf>& Q, int M)
-{
-    for (int i = 0; i < E.cols(); ++i)
-    {
-        MatrixXf Qi = MatrixXf::Zero(M, M);
-        Qi(E(0, i), E(0, i)) = 1.0f;
-        Qi(E(1, i), E(1, i)) = 1.0f;
-        Qi(E(0, i), E(1, i)) = -1.0f;
-        Qi(E(1, i), E(0, i)) = -1.0f;
-        Q.push_back(Qi);
-    }
-}
+// static void Qconstructor(const Matrix2Xi& E, std::vector<MatrixXf>& Q, int M)
+// {
+//     for (int i = 0; i < E.cols(); ++i)
+//     {
+//         MatrixXf Qi = MatrixXf::Zero(M, M);
+//         Qi(E(0, i), E(0, i)) = 1.0f;
+//         Qi(E(1, i), E(1, i)) = 1.0f;
+//         Qi(E(0, i), E(1, i)) = -1.0f;
+//         Qi(E(1, i), E(0, i)) = -1.0f;
+//         Q.push_back(Qi);
+//     }
+// }
 
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi& _template_edges,
-#ifdef PREDICT
+             #ifdef PREDICT
              std::shared_ptr<ros::NodeHandle> nh,
              const double translation_dir_deformability,
              const double translation_dis_deformability,
              const double rotation_deformability,
              const Eigen::MatrixXi& grippers,
-#endif
+             #endif
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
@@ -342,10 +342,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     kdtree.setInputCloud(template_cloud);
     // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
     L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+    // Qconstructor(template_edges, Q, original_template.cols());
 
-    Qconstructor(template_edges, Q, original_template.cols());
-
-#ifdef PREDICT
+    #ifdef PREDICT
     // TODO: how to configure nh so that the it can get correct sdf
     // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
     // const auto sdf = smmap::GetEnvironmentSDF(*nh);
@@ -391,7 +390,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
                         translation_dis_deformability,
                         rotation_deformability,
                         sdf_ptr);
-#endif
+    #endif
 }
 
 /*
@@ -1154,6 +1153,7 @@ CDCPD::Output CDCPD::operator()(
     #endif
 
     #ifdef PREDICT
+    // NOTE: order of P cannot influence delta_P, but influence P+delta_P
     Matrix3Xf TY_pred = predict(Y.cast<double>(), q_dot, q_config).cast<float>();
     std::vector<FixedPoint> pred_fixed_points;
     for (int col = 0; col < gripper_idx.cols(); ++col)

@@ -19,9 +19,9 @@
 #define ENTIRE
 #endif
 
-#ifndef ROPE
-#define ROPE
-#endif
+// #ifndef ROPE
+// #define ROPE
+// #endif
 
 // #ifndef COMP
 // #define COMP
@@ -166,7 +166,7 @@ private:
     const int max_iterations;
     const float kvis;
     bool use_recovery;
-    std::vector<Eigen::MatrixXf> Q;
+    // std::vector<Eigen::MatrixXf> Q;
     double last_sigma2;
     #ifdef PREDICT
     const Eigen::MatrixXi& gripper_idx;
