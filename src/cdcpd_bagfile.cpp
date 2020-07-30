@@ -297,21 +297,58 @@ void test_lle() {
 }
 #endif
 
-std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float height, int num_width, int num_height)
+std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
+    #ifdef ROPE
+
+    float left_x = -2.0f;
+    float left_y = 0.0f;
+    float left_z = 6.0f;
+
+    float right_x = -1.0f;
+    float right_y = 0.0f;
+    float right_z = 6.0f;
+    
+    int points_on_rope = 50;
+
+    MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
+    template_vertices.setZero();
+    template_vertices.row(0).setLinSpaced(points_on_rope, left_x, right_x);
+    template_vertices.row(1).setLinSpaced(points_on_rope, left_y, right_y);
+    template_vertices.row(2).setLinSpaced(points_on_rope, left_z, right_z);
+
+    MatrixXi template_edges(2, points_on_rope - 1);
+    template_edges(0, 0) = 0;
+    template_edges(1, template_edges.cols() - 1) = points_on_rope - 1;
+    for (int i = 1; i <= template_edges.cols() - 1; ++i)
+    {
+        template_edges(0, i) = i;
+        template_edges(1, i - 1) = i;
+    }
+
+    #else
+
+    int num_width = 50;
+    int num_height = 50;
+    float right_up_y = 1.0f;
+    float right_up_x = -1.0f;
     float left_bottom_y = 0.0f;
-    float left_bottom_x = 0.0f;
-    float z = 1.45f;
+    float left_bottom_x = -2.0f;
+    float z = 6.0f;
+
     Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
     Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
 
     int edge_count = 0;
-    for (int i = 0; i < num_height; ++i) {
+    for (int i = 0; i < num_height; ++i)
+    {
         for (int j = 0; j < num_width; ++j)
         {
             int index = j * num_height + i;
-            vertices(0, index) = static_cast<float>(j) * width / static_cast<float>(num_width - 1)+left_bottom_x;
-            vertices(1, index) = static_cast<float>(i) * height / static_cast<float>(num_height - 1)+left_bottom_y;
+            float ratio_x = static_cast<float>(j) / static_cast<float>(num_width - 1);
+            float ratio_y = static_cast<float>(i) / static_cast<float>(num_height - 1);
+            vertices(0, index) = (1-ratio_x) * right_up_x + (ratio_x) * left_bottom_x;
+            vertices(1, index) = (1-ratio_y) * right_up_y + (ratio_y) * left_bottom_y;
             vertices(2, index) = z;
             if (i + 1 < num_height)
             {
@@ -330,6 +367,8 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> make_rectangle(float width, float
         }
     }
     assert(edge_count == (num_width - 1) * num_height + (num_height - 1) * num_width);
+    #endif
+
     return std::make_tuple(vertices, edges);
 }
 
@@ -341,32 +380,13 @@ int main(int argc, char* argv[])
     ros::init(argc, argv, "cdcpd_bagfile");
     cout << "Starting up..." << endl;
 
+    auto [template_vertices, template_edges] = init_template();
+
     #ifdef ROPE
-
-    // initial connectivity model of rope
     int points_on_rope = 50;
-    float rope_length = 1.0f;
-    MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
-    template_vertices.setZero();
-    template_vertices.row(0).setLinSpaced(points_on_rope, -rope_length/2-1.5f, rope_length/2-1.5f);
-    template_vertices.row(2).array() += 6.0f;
-    MatrixXi template_edges(2, points_on_rope - 1);
-    template_edges(0, 0) = 0;
-    template_edges(1, template_edges.cols() - 1) = points_on_rope - 1;
-    for (int i = 1; i <= template_edges.cols() - 1; ++i)
-    {
-        template_edges(0, i) = i;
-        template_edges(1, i - 1) = i;
-    }
-
     #else
-
-    int cloth_width_num = 23;
-    int cloth_height_num = 18;
-    float cloth_width = 0.44f;
-    float cloth_height = 0.34f;
-    auto [template_vertices, template_edges] = make_rectangle(cloth_width, cloth_height, cloth_width_num, cloth_height_num);
-
+    int cloth_width_num = 50;
+    int cloth_height_num = 50;
     #endif
 
     #ifdef DEBUG
@@ -647,7 +667,7 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring); std::cout << "668" << std::endl;
     #else
     CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
     #endif
