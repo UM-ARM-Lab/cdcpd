@@ -819,9 +819,7 @@ static void sample_X_points(const Matrix3Xf& Y,
 
 Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
                      const Matrix3Xf& Y,
-                     #ifdef PREDICT
                      const Matrix3Xf& Y_pred,
-                     #endif
                      const cv::Mat& depth,
                      const cv::Mat& mask)
 {
@@ -931,22 +929,194 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
         
-        #ifdef PREDICT
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G)
             + zeta * G;// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
-        #else
+
+        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() - Y.transpose()); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
+
+        MatrixXf W = A.householderQr().solve(B);
+        // MatrixXf lastW = W;
+
+        // int W_int = 0;
+        // std::cout << std::setw(20) << "W solver loop";
+        // std::cout << std::setw(20) << "W difference" << std::endl;
+        // while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
+        //     lastW = W;
+        //     MatrixXf A_new = A;
+        //     MatrixXf B_new = B;
+        //     for (int i = 0; i < template_edges.cols(); ++i)
+        //     {
+        //         MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
+        //         MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
+        //         double delta = abs_derivative(eit.trace()-ei0.trace());
+        //         // double delta = -1.0;
+        //         A_new = A_new + k*sigma2*delta*Q[i]*G;
+        //         B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
+        //     }
+        //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); std::cout << "562: " << (end-start).count() << std::endl;
+        //     std::cout << std::setw(20) << W_int;
+        //     std::cout << std::setw(20) << (W-lastW).squaredNorm() << std::endl;
+        //     W_int++;
+        // }
+
+        // MatrixXf W(M, D);
+        // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
+
+        TY = Y + (G * W).transpose();// end = std::chrono::system_clock::now(); std::cout << "564: " << (end-start).count() << std::endl;
+
+        // Corresponding to Eq. (19) in the paper
+        VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
+        // float xPx = (Pt1 * xPxtemp.transpose())(0,0);
+        double xPx = Pt1.dot(xPxtemp);// end = std::chrono::system_clock::now();std::cout << "569: " << (end-start).count() << std::endl;
+        // assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
+        // double xPx = xPxMat.sum();
+        VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+        // MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
+        // assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
+        double yPy = P1.dot(yPytemp); //end = std::chrono::system_clock::now();std::cout << "575: " << (end-start).count() << std::endl;
+        double trPXY = (TY.array() * PX.array()).sum(); //end = std::chrono::system_clock::now();std::cout << "576: " << (end-start).count() << std::endl;
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); //end = std::chrono::system_clock::now();std::cout << "577: " << (end-start).count() << std::endl;
+
+        if (sigma2 <= 0)
+        {
+            sigma2 = tolerance / 10;
+        }
+
+        #ifdef CPDLOG
+        double prob_reg = calculate_prob_reg(X, TY, G, W, sigma2, Y_emit_prior, P);
+        double lle_reg = start_lambda / 2 * ((TY*m_lle*TY.transpose()).trace() + 2*(W.transpose()*G*m_lle*TY).trace() + (W.transpose()*G*m_lle*G*W).trace());
+        double cpd_reg = alpha * (W.transpose()*G*W).trace()/2;
+        std::cout << std::setw(20) << iterations;
+        std::cout << std::setw(20) << prob_reg;
+        std::cout << std::setw(20) << cpd_reg;
+        std::cout << std::setw(20) << lle_reg << std::endl;
+        #endif
+
+
+        error = std::abs(sigma2 - qprev);
+        iterations++;
+    }
+    return TY;
+}
+
+Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
+                     const Matrix3Xf& Y,
+                     const cv::Mat& depth,
+                     const cv::Mat& mask)
+{
+    // downsampled_cloud: PointXYZ pointer to downsampled point clouds
+    // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation label
+
+    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
+    Eigen::VectorXf Y_emit_prior(Y.cols());
+    for (int i = 0; i < Y.cols(); ++i)
+    {
+        Y_emit_prior(i) = 1.0f;
+    }
+
+    /// CPD step
+
+    // G: (M, M) Guassian kernel matrix
+    MatrixXf G = gaussian_kernel(original_template, beta);//Y, beta);
+
+    // TY: Y^(t) in Algorithm 1
+    Matrix3Xf TY = Y;
+    double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
+
+    int iterations = 0;
+    double error = tolerance + 1; // loop runs the first time
+
+    std::chrono::time_point<std::chrono::system_clock> start, end;
+    start = std::chrono::system_clock::now();
+
+    #ifdef CPDLOG
+    std::cout << "\nCPD loop\n";
+    std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << std::endl;
+    #endif
+
+    while (iterations <= max_iterations && error > tolerance)
+    {
+        double qprev = sigma2;
+        // Expectation step
+        int N = X.cols();
+        int M = Y.cols();
+        int D = Y.rows();
+
+        // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
+        // Calculate Eq. (9) (Line 5 in Algorithm 1)
+        // NOTE: Eq. (9) misses M in the denominator
+
+        MatrixXf P(M, N); // end = std::chrono::system_clock::now(); std::cout << "526: " << (end-start).count() << std::endl;
+        {
+            for (int i = 0; i < M; ++i) {
+                for (int j = 0; j < N; ++j) {
+                    P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+                }
+            }
+
+            float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+            c *= w / (1 - w);
+            c *= static_cast<double>(M) / N;
+
+            P = (-P / (2 * sigma2)).array().exp().matrix();
+            P.array().colwise() *= Y_emit_prior.array();
+
+            RowVectorXf den = P.colwise().sum();
+            den.array() += c;
+
+            P = P.array().rowwise() / den.array();
+        }  //end = std::chrono::system_clock::now(); std::cout << "545: " << (end-start).count() << std::endl;
+
+        // Fast Gaussian Transformation to calculate Pt1, P1, PX
+
+        // double bandwidth = std::sqrt(2.0 * sigma2);
+        // double epsilon = 1e-4;
+        // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //std::cout << "575\n";
+        // fgt::Matrix X_fgt = X.transpose().cast<double>(); //std::cout << "576\n";
+        // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //std::cout << "577\n";
+        // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //std::cout << "578\n";// N*1 vector
+
+        // float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+        // c *= w / (1 - w);
+        // c *= static_cast<double>(M) / N;
+        // ArrayXd a = 1 / (kt1.array() + c); // N*1 array
+
+        // VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
+
+        // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //std::cout << "587\n";
+        // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //std::cout << "588\n";
+        // P1 = P1.array()*Y_emit_prior.array();
+
+        // MatrixXd PX_fgt(TY.rows(), TY.cols());
+        // for (size_t i = 0; i < TY.rows(); ++i) {
+        //     // ArrayXd Xi = X_fgt.col(i).array();
+        //     ArrayXd aXarray = X_fgt.col(i).array() * a;
+        //     fgt::Vector aX = fgt::Vector(aXarray);  //std::cout << "594\n";
+        //     PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX)).array() * Y_emit_prior.array().cast<double>();
+        // }
+        // MatrixXf PX = PX_fgt.cast<float>();
+        MatrixXf PX = (P * X.transpose()).transpose();
+
+        // // Maximization step
+        VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); std::cout << "548: " << (end-start).count() << std::endl;
+        VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); std::cout << "549: " << (end-start).count() << std::endl;
+        float Np = P1.sum(); //end = std::chrono::system_clock::now(); std::cout << "550: " << (end-start).count() << std::endl;
+
+        // NOTE: lambda means gamma here
+        // Corresponding to Eq. (18) in the paper
+        float lambda = start_lambda;
+        MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
+        
         MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
-        #endif
 
-        #ifdef PREDICT
-        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() - Y.transpose()); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
-        #else
         MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
-        #endif
+
         MatrixXf W = A.householderQr().solve(B);
         // MatrixXf lastW = W;
 
@@ -1079,6 +1249,7 @@ CDCPD::Output CDCPD::operator()(
         #endif
         const bool self_intersection,
         const bool interation_constrain,
+        const bool is_prediction,
         const std::vector<CDCPD::FixedPoint>& fixed_points)
 {
     // rgb: CV_8U3C rgb image
@@ -1154,22 +1325,32 @@ CDCPD::Output CDCPD::operator()(
 
     #ifdef PREDICT
     // NOTE: order of P cannot influence delta_P, but influence P+delta_P
-    Matrix3Xf TY_pred = predict(Y.cast<double>(), q_dot, q_config).cast<float>();
+    std::chrono::time_point<std::chrono::system_clock> start, end;
     std::vector<FixedPoint> pred_fixed_points;
-    for (int col = 0; col < gripper_idx.cols(); ++col)
-    {
-        for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+    Matrix3Xf TY, TY_pred;
+    if (is_prediction) {
+        start = std::chrono::system_clock::now(); 
+        TY_pred = predict(Y.cast<double>(), q_dot, q_config).cast<float>(); end = std::chrono::system_clock::now(); std::cout << "predict: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+        
+        for (int col = 0; col < gripper_idx.cols(); ++col)
         {
-            FixedPoint pt;
-            pt.template_index = gripper_idx(row, col);
-            pt.position = TY_pred.col(pt.template_index);
-            pred_fixed_points.push_back(pt);
+            for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+            {
+                FixedPoint pt;
+                pt.template_index = gripper_idx(row, col);
+                pt.position = TY_pred.col(pt.template_index);
+                pred_fixed_points.push_back(pt);
+            }
         }
+        // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
+        // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
+        TY = cpd(X, Y, TY_pred, depth, mask); end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+        // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     }
-    VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
-    std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-    Matrix3Xf TY = cpd(X, Y, TY_pred, depth, mask);
-    // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
+    else
+    {
+        TY = cpd(X, Y, depth, mask);
+    } 
     #else
     Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
     #endif
@@ -1187,7 +1368,7 @@ CDCPD::Output CDCPD::operator()(
     Optimizer opt(original_template, Y, 1.0);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
-
+    end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
     #ifdef DEBUG
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
     #endif

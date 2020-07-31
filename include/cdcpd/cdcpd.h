@@ -19,9 +19,9 @@
 #define ENTIRE
 #endif
 
-// #ifndef ROPE
-// #define ROPE
-// #endif
+#ifndef ROPE
+#define ROPE
+#endif
 
 // #ifndef COMP
 // #define COMP
@@ -45,6 +45,10 @@
 
 #ifndef PREDICT
 #define PREDICT
+#endif
+
+#ifndef COMP_NOPRED
+#define COMP_NOPRED
 #endif
 
 // void test_nearest_line();
@@ -103,6 +107,7 @@ public:
 #endif
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
+                      const bool is_prediction = true,
                       const std::vector<FixedPoint>& fixed_points = {});
 
 private:
@@ -132,12 +137,14 @@ private:
                           const Eigen::Matrix3Xf& Y_emit_prior);
     Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf& X,
                          const Eigen::Matrix3Xf& Y,
-                         #ifdef PREDICT
                          const Eigen::Matrix3Xf& Y_pred,
-                         #endif
                          const cv::Mat& depth,
                          const cv::Mat& mask);
 
+    Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf& X,
+                         const Eigen::Matrix3Xf& Y,
+                         const cv::Mat& depth,
+                         const cv::Mat& mask);
 #ifdef PREDICT
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
                              const smmap::AllGrippersSinglePoseDelta& q_dot,
