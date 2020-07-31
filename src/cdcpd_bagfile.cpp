@@ -234,6 +234,10 @@ double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
     return reg;
 }
 
+float calc_mean_error(const Matrix3Xf Y, const Matrix3Xf truth) {
+    return ((Y-truth).colwise().norm()).mean();
+}
+
 #if 0
 void test_lle() {
     // test LLE
@@ -311,30 +315,30 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
     
     int points_on_rope = 50;
 
-    MatrixXf template_vertices(3, points_on_rope); // Y^0 in the paper
-    template_vertices.setZero();
-    template_vertices.row(0).setLinSpaced(points_on_rope, left_x, right_x);
-    template_vertices.row(1).setLinSpaced(points_on_rope, left_y, right_y);
-    template_vertices.row(2).setLinSpaced(points_on_rope, left_z, right_z);
+    MatrixXf vertices(3, points_on_rope); // Y^0 in the paper
+    vertices.setZero();
+    vertices.row(0).setLinSpaced(points_on_rope, left_x, right_x);
+    vertices.row(1).setLinSpaced(points_on_rope, left_y, right_y);
+    vertices.row(2).setLinSpaced(points_on_rope, left_z, right_z);
 
-    MatrixXi template_edges(2, points_on_rope - 1);
-    template_edges(0, 0) = 0;
-    template_edges(1, template_edges.cols() - 1) = points_on_rope - 1;
-    for (int i = 1; i <= template_edges.cols() - 1; ++i)
+    MatrixXi edges(2, points_on_rope - 1);
+    edges(0, 0) = 0;
+    edges(1, edges.cols() - 1) = points_on_rope - 1;
+    for (int i = 1; i <= edges.cols() - 1; ++i)
     {
-        template_edges(0, i) = i;
-        template_edges(1, i - 1) = i;
+        edges(0, i) = i;
+        edges(1, i - 1) = i;
     }
 
     #else
 
-    int num_width = 50;
-    int num_height = 50;
-    float right_up_y = 1.0f;
-    float right_up_x = -1.0f;
-    float left_bottom_y = 0.0f;
-    float left_bottom_x = -2.0f;
-    float z = 6.0f;
+    int num_width = 20;
+    int num_height = 20;
+    float right_up_y = 0.19f;
+    float right_up_x = 0.19f;
+    float left_bottom_y = -0.19f;
+    float left_bottom_x = -0.19f;
+    float z = 2.0f;
 
     Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
     Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
@@ -385,8 +389,8 @@ int main(int argc, char* argv[])
     #ifdef ROPE
     int points_on_rope = 50;
     #else
-    int cloth_width_num = 50;
-    int cloth_height_num = 50;
+    int cloth_width_num = 20;
+    int cloth_height_num = 20;
     #endif
 
     #ifdef DEBUG
@@ -399,7 +403,9 @@ int main(int argc, char* argv[])
     clean_file(workingDir + "/cpp_mask.txt");
     clean_file(workingDir + "/cpp_intrinsics.txt");
     #endif
-    clean_file(workingDir + "/occluded_index.txt");
+    // clean_file(workingDir + "/occluded_index.txt");
+    clean_file(workingDir + "/error.txt");
+    clean_file(workingDir + "/error_no_pred.txt");
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < template_vertices.cols(); ++i)
@@ -414,6 +420,15 @@ int main(int argc, char* argv[])
     {
         const auto& c = template_vertices.col(i);
         template_cloud_without_constrain->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
+    }
+    #endif
+
+    #ifdef COMP_NOPRED
+    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < template_vertices.cols(); ++i)
+    {
+        const auto& c = template_vertices.col(i);
+        template_cloud_without_prediction->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
     }
     #endif
 
@@ -432,6 +447,9 @@ int main(int argc, char* argv[])
     auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
     #ifdef COMP
     auto output_without_constrain_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_constrain", 1);
+    #endif
+    #ifdef COMP_NOPRED
+    auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
     #endif
     auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
     auto right_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/right_gripper_prior", 1);
@@ -667,12 +685,26 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring); std::cout << "668" << std::endl;
+                k_spring);
     #else
     CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
     #endif
     #ifdef COMP
     CDCPD cdcpd_without_constrain(template_cloud, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
+    #endif
+    #ifdef COMP_NOPRED
+    CDCPD cdcpd_without_prediction(template_cloud,
+                template_edges,
+                nh_ptr,
+                translation_dir_deformability,
+                translation_dis_deformability,
+                rotation_deformability,
+                g_ind,
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
     #endif
 
 
@@ -711,8 +743,10 @@ int main(int argc, char* argv[])
 
     std::string stepper;
     ros::Rate rate(30); // 30 hz, maybe allow changes, or mimicking bag?
+    int frame = 0;
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend() && info_iter != camera_infos.cend())
     {
+        cout << "\n-------------------- frame " << frame << " --------------------" << endl << endl;
         // if(kbhit())
         // {
         //     interprete key;
@@ -803,29 +837,45 @@ int main(int argc, char* argv[])
         #endif
 
         #ifdef SIMULATION
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, false, fixed_points);
-        #else
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, false, fixed_points);
-        #endif
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, false, true, fixed_points);
+        std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         template_cloud = out.gurobi_output;
+        #else
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, false, true, fixed_points);
+        template_cloud = out.gurobi_output;
+        #endif
+
         #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
         template_cloud_without_constrain = out_without_constrain.gurobi_output;
         #endif
 
+        #ifdef COMP_NOPRED
+        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, true, false, false, fixed_points);
+        std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+        #endif
+
         auto frame_id = "kinect2_rgb_optical_frame";
+
         #ifdef ENTIRE
         out.original_cloud->header.frame_id = frame_id;
         #endif
+
         out.masked_point_cloud->header.frame_id = frame_id;
         out.downsampled_cloud->header.frame_id = frame_id;
         out.cpd_output->header.frame_id = frame_id;
         out.gurobi_output->header.frame_id = frame_id;
+
         #ifdef PREDICT
         out.cpd_predict->header.frame_id = frame_id;
         #endif
+
         #ifdef COMP
         out_without_constrain.gurobi_output->header.frame_id = frame_id;
+        #endif
+
+        #ifdef COMP_NOPRED
+        out_without_prediction.gurobi_output->header.frame_id = frame_id;
         #endif
 
         // draw cylinder
@@ -1195,6 +1245,9 @@ int main(int argc, char* argv[])
         #ifdef PREDICT
         pcl_conversions::toPCL(time, out.cpd_predict->header.stamp);
         #endif
+        #ifdef COMP_NOPRED
+        pcl_conversions::toPCL(time, out_without_prediction.gurobi_output->header.stamp);
+        #endif
 
         #ifdef ENTIRE
         original_publisher.publish(out.original_cloud);
@@ -1209,6 +1262,9 @@ int main(int argc, char* argv[])
         #ifdef COMP
         output_without_constrain_publisher.publish(out_without_constrain.gurobi_output);
         #endif
+        #ifdef COMP_NOPRED
+        output_without_prediction_publisher.publish(out_without_prediction.gurobi_output);
+        #endif
 
         ++color_iter;
         ++depth_iter;
@@ -1219,6 +1275,7 @@ int main(int argc, char* argv[])
         ++ind_iter;
         ++truth_iter;
         #endif
+        ++frame;
     }
 
     cout << "Test ended" << endl;
