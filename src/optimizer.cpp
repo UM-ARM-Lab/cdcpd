@@ -478,7 +478,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                                         ((vars[E(0, col)*3 + 1]*(1-t) + vars[E(1, col)*3 + 1]*t) - (vars[E(0, row)*3 + 1]*(1-s) + vars[E(1, row)*3 + 1]*s))
                                             *(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
                                         ((vars[E(0, col)*3 + 2]*(1-t) + vars[E(1, col)*3 + 2]*t) - (vars[E(0, row)*3 + 2]*(1-s) + vars[E(1, row)*3 + 2]*s))
-                                            *(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0.005 * 0.005);
+                                            *(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0.01 * l);
                     }
                 }
             }

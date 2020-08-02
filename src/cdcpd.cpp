@@ -925,7 +925,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
-        float zeta = 10.0;
+        float zeta = 1.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
         
@@ -1331,17 +1331,17 @@ CDCPD::Output CDCPD::operator()(
     if (is_prediction) {
         start = std::chrono::system_clock::now(); 
         TY_pred = predict(Y.cast<double>(), q_dot, q_config).cast<float>(); end = std::chrono::system_clock::now(); std::cout << "predict: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-        
-        for (int col = 0; col < gripper_idx.cols(); ++col)
-        {
-            for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-            {
-                FixedPoint pt;
-                pt.template_index = gripper_idx(row, col);
-                pt.position = TY_pred.col(pt.template_index);
-                pred_fixed_points.push_back(pt);
-            }
-        }
+        TY_pred = Y;
+        // for (int col = 0; col < gripper_idx.cols(); ++col)
+        // {
+        //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+        //     {
+        //         FixedPoint pt;
+        //         pt.template_index = gripper_idx(row, col);
+        //         pt.position = TY_pred.col(pt.template_index);
+        //         pred_fixed_points.push_back(pt);
+        //     }
+        // }
         // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
         // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
         TY = cpd(X, Y, TY_pred, depth, mask); end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;

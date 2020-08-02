@@ -19,9 +19,9 @@
 #define ENTIRE
 #endif
 
-#ifndef ROPE
-#define ROPE
-#endif
+// #ifndef ROPE
+// #define ROPE
+// #endif
 
 // #ifndef COMP
 // #define COMP
@@ -47,9 +47,9 @@
 #define PREDICT
 #endif
 
-#ifndef COMP_NOPRED
-#define COMP_NOPRED
-#endif
+// #ifndef COMP_NOPRED
+// #define COMP_NOPRED
+// #endif
 
 // void test_nearest_line();
 
