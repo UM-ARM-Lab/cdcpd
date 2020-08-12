@@ -11,6 +11,7 @@ Requirements
   * Eigen
   * [faiss](https://github.com/facebookresearch/faiss)
   * [fgt](https://github.com/gadomski/fgt)
+  * CGAL (Note that Qt5 should be installed for visualization)
   
 Installation
 ------------

@@ -1,5 +1,8 @@
 #include "cdcpd/optimizer.h"
+#include <CGAL/AABB_tree.h>
 
+typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
+typedef K::Point_3                                                      Point_3;
 
 using Eigen::Matrix3Xf;
 using Eigen::MatrixXf;
@@ -185,6 +188,61 @@ std::tuple<Matrix3Xf, Matrix3Xf>
         }
     }
     return {nearestPts, normalVecs};
+}
+#endif
+
+#ifdef SHAPE_COMP
+
+static VectorXf Pt3toVec(const Point_3 pt)
+{
+	return VectorXf(pt.x(), pt.y(), pt.z());
+}
+
+// TODO:
+// - match .h file in include/
+// - run pipeline of shape_completion
+// - pass in obs_mesh & obs_normal
+// - use functions properly (seem no work)
+// - visualize mesh
+// - test
+
+std::tuple<Matrix3Xf, Matrix3Xf>
+        nearest_points_and_normal(const Matrix3Xf& last_template)
+{
+	Matrix3Xf nearestPts(3, last_template.cols());
+    Matrix3Xf normalVecs(3, last_template.cols());
+
+	for(int pt_ind = 0; pt_ind < last_template.cols(); pt_ind++)
+	{
+		Point_3 pt(last_template(0, pt_ind),
+				   last_template(1, pt_ind),
+				   last_template(2, pt_ind));
+		Face_location query_location = PMP::locate(pt, mesh);
+		Point_3 nearestPt = PMP.construct_point(query_location, tm);
+		nearestPts.col(pt_ind) = Pt3toVec(nearestPt);
+
+		double w[3];
+		for(int i = 0; i < 3; i++){
+			w[i] = query_location.second[i];
+		}
+
+		MatrixXf verts_of_face(3, 3);
+		verts_of_face.col(0) = Pt3toVec(tm.point(source(halfedge(query_location.first,tm),tm)));
+		verts_of_face.col(1) = Pt3toVec(tm.point(target(halfedge(query_location.first,tm),tm)));
+		verts_of_face.col(2) = Pt3toVec(tm.point(target(next(halfedge(query_location.first,tm),tm),tm)));
+		
+		VectorXf normalVec(0, 0, 0);
+		for (int i = 0; i < 3; i++) {
+			for (int mesh_ind = 0; mesh_ind < obs_mesh.cols(); mesh_ind++)
+			{
+				if (verts_of_face.col(i).isApprox(obs_mesh.col(mesh_ind))) {
+					normalVec = normalVec + obs_normal.col(mesh_ind) * w[i];
+				}
+			}
+		}
+		
+		normalVecs.col(pt_ind) = normalVec;
+	}
 }
 #endif
 
