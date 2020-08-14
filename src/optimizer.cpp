@@ -1,8 +1,11 @@
 #include "cdcpd/optimizer.h"
+
+#ifdef SHAPE_COMP
 #include <CGAL/AABB_tree.h>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
 typedef K::Point_3                                                      Point_3;
+#endif
 
 using Eigen::Matrix3Xf;
 using Eigen::MatrixXf;

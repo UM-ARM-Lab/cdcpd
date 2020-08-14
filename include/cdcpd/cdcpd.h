@@ -5,8 +5,9 @@
 #include <pcl/point_types.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/io/pcd_io.h>
-#include <smmap/constraint_jacobian_model.h>
 
+#include <smmap/constraint_jacobian_model.h>
+#include <smmap/deformable_model.h>
 #include <smmap_utilities/grippers.h>
 
 #include "cdcpd/past_template_matcher.h"
@@ -26,6 +27,14 @@
 // #ifndef COMP
 // #define COMP
 // #endif
+
+#ifndef COMP_PRED1
+#define COMP_PRED1
+#endif
+
+#ifndef COMP_PRED2
+#define COMP_PRED2
+#endif
 
 // #ifndef CPDLOG
 // #define CPDLOG
@@ -108,6 +117,7 @@ public:
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
                       const bool is_prediction = true,
+					  const int pred_choice = 0,
                       const std::vector<FixedPoint>& fixed_points = {});
 
 private:
@@ -148,9 +158,11 @@ private:
 #ifdef PREDICT
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
                              const smmap::AllGrippersSinglePoseDelta& q_dot,
-                             const smmap::AllGrippersSinglePose& q_config);
+                             const smmap::AllGrippersSinglePose& q_config,
+							 const int pred_choice);
 
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
+	std::shared_ptr<smmap::DeformableModel> deformModel;
 #endif
 
     PastTemplateMatcher template_matcher;

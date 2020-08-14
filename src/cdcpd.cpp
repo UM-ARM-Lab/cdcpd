@@ -59,9 +59,9 @@ typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
 
 #ifdef SIMULATION
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result";
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/log";
 #else
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/log";
 #endif
 
 static double abs_derivative(double x)
@@ -390,7 +390,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
                         translation_dis_deformability,
                         rotation_deformability,
                         sdf_ptr);
-    #endif
+    
+	deformModel = std::make_shared<smmap::DeformableModel>(nh);
+	#endif
 }
 
 /*
@@ -1185,11 +1187,17 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 #ifdef PREDICT
 Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
                          const AllGrippersSinglePoseDelta& q_dot,
-                         const AllGrippersSinglePose& q_config)
+                         const AllGrippersSinglePose& q_config,
+						 const int pred_choice)
 {
     // P: template
     // q_dot: velocity of gripper, a 6*G matrix
     // q_config: indices of points gripped, a X*G matrix (X: depends on the case)
+	// pred_choice:
+	// 	- 0: no movement
+	// 	- 1: Dmitry's prediction
+	//  - 2: Mengyao's prediction
+
     // NOTE:
     //      - WorldState definition
     //      struct WorldState
@@ -1217,22 +1225,31 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
     //      - AllGrippersSinglePoseDelta: kinematics::VectorVector6d (std::vector of eigen's 6D vector)
     //      - ObjectPointSet: Eigen::Matrix3Xd
     //      - AllGrippersSinglePose: EigenHelpers::VectorIsometry3d (std::vector of Isometry3d)
-    smmap::WorldState world;
-    world.object_configuration_ = P;
-    world.all_grippers_single_pose_ = q_config;
-    smmap::AllGrippersSinglePoseDelta grippers_pose_delta = q_dot;
-    cout << "gripper configuration:" << endl;
-    for (int i = 0; i < q_config.size(); ++i)
-    {
-        cout << q_config[i].rotation() << endl << endl;
-        cout << q_config[i].translation() << endl << endl;
-    }
-    cout << "gripper velocity" << endl;
-    for (int i = 0; i < q_dot.size(); ++i)
-    {
-        cout << q_dot[i] << endl << endl;
-    }
-    return model->getObjectDelta_impl(world, grippers_pose_delta) + P;
+    if (pred_choice == 0) {
+		return P;
+	}
+	else {
+		smmap::WorldState world;
+    	world.object_configuration_ = P;
+    	world.all_grippers_single_pose_ = q_config;
+    	smmap::AllGrippersSinglePoseDelta grippers_pose_delta = q_dot;
+    	// cout << "gripper configuration:" << endl;
+    	// for (int i = 0; i < q_config.size(); ++i)
+    	// {
+        	// cout << q_config[i].rotation() << endl << endl;
+        	// cout << q_config[i].translation() << endl << endl;
+    	// }
+    	// cout << "gripper velocity" << endl;
+        // for (int i = 0; i < q_dot.size(); ++i)
+    	// {
+        	// cout << q_dot[i] << endl << endl;
+    	// }
+		if (pred_choice == 1) {
+			return model->getObjectDelta_impl(world, grippers_pose_delta) + P;
+		} else {
+			return deformModel->getObjectDelta(world, grippers_pose_delta) + P;
+		}
+	}
 }
 #endif
 
@@ -1250,6 +1267,7 @@ CDCPD::Output CDCPD::operator()(
         const bool self_intersection,
         const bool interation_constrain,
         const bool is_prediction,
+		const int pred_choice,
         const std::vector<CDCPD::FixedPoint>& fixed_points)
 {
     // rgb: CV_8U3C rgb image
@@ -1325,26 +1343,28 @@ CDCPD::Output CDCPD::operator()(
 
     #ifdef PREDICT
     // NOTE: order of P cannot influence delta_P, but influence P+delta_P
-    std::chrono::time_point<std::chrono::system_clock> start, end;
+    // std::chrono::time_point<std::chrono::system_clock> start, end;
     std::vector<FixedPoint> pred_fixed_points;
     Matrix3Xf TY, TY_pred;
     if (is_prediction) {
-        start = std::chrono::system_clock::now(); 
-        TY_pred = predict(Y.cast<double>(), q_dot, q_config).cast<float>(); end = std::chrono::system_clock::now(); std::cout << "predict: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-        TY_pred = Y;
-        // for (int col = 0; col < gripper_idx.cols(); ++col)
-        // {
-        //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-        //     {
-        //         FixedPoint pt;
-        //         pt.template_index = gripper_idx(row, col);
-        //         pt.position = TY_pred.col(pt.template_index);
-        //         pred_fixed_points.push_back(pt);
-        //     }
-        // }
+        // start = std::chrono::system_clock::now(); 
+        TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>(); // end = std::chrono::system_clock::now(); std::cout << "predict: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+        // TY_pred = Y;
+		if (pred_choice != 0) {
+        	for (int col = 0; col < gripper_idx.cols(); ++col)
+        	{
+            	for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+            	{
+                	FixedPoint pt;
+                	pt.template_index = gripper_idx(row, col);
+                	pt.position = TY_pred.col(pt.template_index);
+                	pred_fixed_points.push_back(pt);
+            	}
+        	}
+		}
         // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
         // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-        TY = cpd(X, Y, TY_pred, depth, mask); end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+        TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
         // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     }
     else
@@ -1367,8 +1387,8 @@ CDCPD::Output CDCPD::operator()(
     // ???: most likely not 1.0
     Optimizer opt(original_template, Y, 1.0);
 
-    Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
-    end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+    Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
+    // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
     #ifdef DEBUG
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
     #endif
@@ -1379,7 +1399,6 @@ CDCPD::Output CDCPD::operator()(
     {
         std::cout << "matcher size: " << template_matcher.size() << std::endl;
 
-        // TODO: check whether the change is needed here for unit conversion
         float cost = smooth_free_space_cost(Y_opt, intrinsics_eigen, depth, mask);
         std::cout << "cost" << std::endl;
         std::cout << cost << std::endl;
