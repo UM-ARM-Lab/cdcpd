@@ -23,6 +23,8 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/simple_filter.h>
 #include <message_filters/time_synchronizer.h>
+#include <mesh_msgs/TriangleIndices.h>
+#include <mesh_msgs/MeshGeometryStamped.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <std_msgs/Float32MultiArray.h>
@@ -54,6 +56,7 @@ namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace sm = sensor_msgs;
 namespace stdm = std_msgs;
+namespace mm = mesh_msg;
 
 using namespace cv;
 using namespace std::chrono_literals;
@@ -66,12 +69,15 @@ std::vector<stdm::Float32MultiArray::ConstPtr> grippers_config;
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_dot;
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_ind;
 std::vector<stdm::Float32MultiArray::ConstPtr> ground_truth;
+stdm::Float32MultiArray::ConstPtr verts_ptr;
+stdm::Float32MultiArray::ConstPtr normals_ptr;
+stdm::Float32MultiArray::ConstPtr faces_ptr;
 #endif
 
 #ifdef SIMULATION
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result";
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/log";
 #else
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/result";
+std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/log";
 #endif
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
@@ -216,6 +222,22 @@ std::tuple<AllGrippersSinglePose,
     }
 
     return {one_frame_config, one_frame_velocity, one_frame_ind};
+}
+
+MatrixXf Float32MultiArrayPtr2MatrixXf(const stdm::Float32MultiArray::ConstPtr& array_ptr)
+{
+	int row = (array_ptr->layout).dim[0];
+	int col = (array_ptr->layout).dim[1];
+	MatrixXf mat(row, col);
+
+	for (int r = 0; r < row; r++)
+	{
+		for (int c = 0; c < col; c++)
+		{
+			mat(r, c) = (array_ptr->data)[r*col+c];
+		}
+	}
+	return mat;	
 }
 
 double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
@@ -376,6 +398,56 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
     return std::make_tuple(vertices, edges);
 }
 
+static pcl::PointCloud<pcl::PointXYZ>::Ptr Matrix3Xf2pcptr(const Eigen::Matrix3Xf& template_vertices) {
+	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < template_vertices.cols(); ++i) 
+    {    
+        const auto& c = template_vertices.col(i);
+        template_cloud->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
+    }
+	return template_cloud;
+}
+
+static mm::MeshGeometryStamped obsParam2meshMsg(const obsParam& obs,
+												const string& frame_id,
+												const ros::Time& time)
+{
+	mm::MeshGeomretyStamped mesh_msg;
+	mesh_msg.header.stamp = time;
+	mesh_msg.header.frame_id = frame_id;
+	
+	for(int pt_ind = 0; pt_ind < obs.verts.cols(); pt_ind++)
+	{
+		gm::Point vert;
+		gm::Point normal;
+
+		vert.x = obs.verts(0, pt_ind);
+		vert.y = obs.verts(1, pt_ind);
+		vert.z = obs.verts(2, pt_ind);
+		
+		normal.x = obs.normals(0, pt_ind);
+		normal.y = obs.normals(1, pt_ind);
+		normal.z = obs.normals(2, pt_ind);
+
+		mesh_msg.mesh_geometry.vertices.push_back(vert);
+		mesh_msg.mesh_geometry.vertex_normals.push_back(normal);
+	}
+	
+	for(int face_ind = 0; face_ind < obs.faces.cols(); face_ind++)
+	{
+		mm::TriangleIndices face;
+		for(int i = 0; i < 3; i++)
+		{
+			face.vertex_indices[i] = uint32_t(obs.faces(i, face_ind));
+		}
+	}
+	return mesh_msg;
+}
+
+// static void pub_pc() {
+	// TODO
+// }
+
 int main(int argc, char* argv[])
 {
     // test_nearest_line();
@@ -392,51 +464,34 @@ int main(int argc, char* argv[])
     int cloth_width_num = 20;
     int cloth_height_num = 20;
     #endif
+	
+	std::string cleancmd = "exec rm -rf " + workingDir + "/*";
+	if (system(cleancmd.c_str()) != 0) {
+		std::cerr << "wrong clean files" << std::endl;
+		exit(1);
+	}	
 
-    #ifdef DEBUG
-    clean_file(workingDir + "/cpp_entire_cloud.txt");
-    clean_file(workingDir + "/cpp_downsample.txt");
-    clean_file(workingDir + "/cpp_TY.txt");
-    clean_file(workingDir + "/cpp_Y_opt.txt");
-    clean_file(workingDir + "/cpp_TY-1.txt");
-    clean_file(workingDir + "/cpp_hsv.txt");
-    clean_file(workingDir + "/cpp_mask.txt");
-    clean_file(workingDir + "/cpp_intrinsics.txt");
-    #endif
+    // #ifdef DEBUG
+    // clean_file(workingDir + "/cpp_entire_cloud.txt");
+    // clean_file(workingDir + "/cpp_downsample.txt");
+    // clean_file(workingDir + "/cpp_TY.txt");
+    // clean_file(workingDir + "/cpp_Y_opt.txt");
+    // clean_file(workingDir + "/cpp_TY-1.txt");
+    // clean_file(workingDir + "/cpp_hsv.txt");
+    // clean_file(workingDir + "/cpp_mask.txt");
+    // clean_file(workingDir + "/cpp_intrinsics.txt");
+    // #endif
     // clean_file(workingDir + "/occluded_index.txt");
-    clean_file(workingDir + "/error.txt");
-    clean_file(workingDir + "/error_no_pred.txt");
+    // clean_file(workingDir + "/error.txt");
+    // clean_file(workingDir + "/error_no_pred.txt");
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    for (int i = 0; i < template_vertices.cols(); ++i)
-    {
-        const auto& c = template_vertices.col(i);
-        template_cloud->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
-    }
-
-    #ifdef COMP
-    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_constrain(new pcl::PointCloud<pcl::PointXYZ>);
-    for (int i = 0; i < template_vertices.cols(); ++i)
-    {
-        const auto& c = template_vertices.col(i);
-        template_cloud_without_constrain->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
-    }
-    #endif
-
-    #ifdef COMP_NOPRED
-    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction(new pcl::PointCloud<pcl::PointXYZ>);
-    for (int i = 0; i < template_vertices.cols(); ++i)
-    {
-        const auto& c = template_vertices.col(i);
-        template_cloud_without_prediction->push_back(pcl::PointXYZ(c(0), c(1), c(2)));
-    }
-    #endif
-
-    ros::NodeHandle nh;
+	ros::NodeHandle nh;
     ros::NodeHandle ph("~");
 
     // Publsihers for the data, some visualizations, others consumed by other nodes
-    auto original_publisher = nh.advertise<PointCloud> ("cdcpd/original", 1);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
+
+	auto original_publisher = nh.advertise<PointCloud> ("cdcpd/original", 1);
     auto masked_publisher = nh.advertise<PointCloud> ("cdcpd/masked", 1);
     auto downsampled_publisher = nh.advertise<PointCloud> ("cdcpd/downsampled", 1);
     auto template_publisher = nh.advertise<PointCloud> ("cdcpd/template", 1);
@@ -445,20 +500,15 @@ int main(int argc, char* argv[])
     #endif
     // auto cpd_iters_publisher = nh.advertise<PointCloud> ("cdcpd/cpd_iters", 1);
     auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
-    #ifdef COMP
-    auto output_without_constrain_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_constrain", 1);
-    #endif
-    #ifdef COMP_NOPRED
-    auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
-    #endif
     auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
     auto right_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/right_gripper_prior", 1);
     #ifdef CYLINDER
     auto cylinder_pub = nh.advertise<vm::Marker>("cdcpd/cylinder", 0);
     #endif
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
+	auto mesh_pub = nh.advertise<mm::MeshGeometryStamped>("cdcpd/mesh", 1);
 
-    BagSubscriber<sm::Image> rgb_sub, depth_sub;
+	BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
     #ifdef SIMULATION
     BagSubscriber<stdm::Float32MultiArray> config_sub, dot_sub, ind_sub, truth_sub;
@@ -482,6 +532,9 @@ int main(int argc, char* argv[])
     topics.push_back(std::string("gripper_velocity"));
     topics.push_back(std::string("gripper_info"));
     topics.push_back(std::string("gripper_config"));
+	topics.push_back(std::string("comp_vertices"));
+	topics.push_back(std::string("comp_faces"));
+	topics.push_back(std::string("comp_normals"));
     #else
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -596,6 +649,45 @@ int main(int argc, char* argv[])
                 cout << "NULL initiation!" << endl;
             }
         }
+		else if (m.getTopic() == topics[7])
+		{
+			auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                verts_ptr = info;
+                // config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+		}
+		else if (m.getTopic() == topics[8])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                faces_ptr = info;
+                // config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+        }
+		else if (m.getTopic() == topics[9])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                normals_ptr = info;
+                // config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+        }
         #endif
         else
         {
@@ -669,6 +761,11 @@ int main(int argc, char* argv[])
     }
 
     #ifdef SIMULATION
+	obsParam obstacle_param;
+	obstacle_param.verts = Float32MultiArrayPtr2MatrixXf(verts_ptr);
+	obstacle_param.faces = Float32MultiArrayPtr2MatrixXf(faces_ptr);
+	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr);
+
     auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
     std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
     double translation_dir_deformability = 10.0;
@@ -681,6 +778,7 @@ int main(int argc, char* argv[])
                 translation_dis_deformability,
                 rotation_deformability,
                 g_ind,
+				obstacle_param,
                 false,
                 alpha,
                 beta,
@@ -689,11 +787,17 @@ int main(int argc, char* argv[])
     #else
     CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
     #endif
+
     #ifdef COMP
-    CDCPD cdcpd_without_constrain(template_cloud, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_constrain = Matrix3Xf2pcptr(template_vertices);
+    auto output_without_constrain_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_constrain", 1);   
+	CDCPD cdcpd_without_constrain(template_cloud_without_constrain, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
     #endif
+
     #ifdef COMP_NOPRED
-    CDCPD cdcpd_without_prediction(template_cloud,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction = Matrix3Xf2pcptr(template_vertices);
+    auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
+	CDCPD cdcpd_without_prediction(template_cloud,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -707,7 +811,40 @@ int main(int argc, char* argv[])
                 k_spring);
     #endif
 
+	#ifdef COMP_PRED1
+	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred1 = Matrix3Xf2pcptr(template_vertices);
+    auto output_pred1_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_deform_model", 1);
+	CDCPD cdcpd_pred1(template_cloud_pred1,
+                template_edges,
+                nh_ptr,
+                translation_dir_deformability,
+                translation_dis_deformability,
+                rotation_deformability,
+                g_ind,
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
+    #endif	
 
+	#ifdef COMP_PRED2
+	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred2 = Matrix3Xf2pcptr(template_vertices);
+    auto output_pred2_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_J_model", 1);
+	CDCPD cdcpd_pred2(template_cloud_pred2,
+                template_edges,
+                nh_ptr,
+                translation_dir_deformability,
+                translation_dis_deformability,
+                rotation_deformability,
+                g_ind,
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
+    #endif	
+	
     // Let's also grab the gripper positions. Note that in practice, you'd do this in real time.
     geometry_msgs::TransformStamped leftTS;
     geometry_msgs::TransformStamped rightTS;
@@ -836,8 +973,10 @@ int main(int argc, char* argv[])
         cv::imwrite(workingDir + "/hsv_mask.png", hsv_mask);
         #endif
 
-        #ifdef SIMULATION
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, false, true, fixed_points);
+        auto frame_id = "kinect2_rgb_optical_frame";
+        
+		#ifdef SIMULATION
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, false, true, 0, fixed_points);
         std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         template_cloud = out.gurobi_output;
         #else
@@ -848,14 +987,30 @@ int main(int argc, char* argv[])
         #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
         template_cloud_without_constrain = out_without_constrain.gurobi_output;
+		out_without_constrain.gurobi_output->header.frame_id = frame_id;
         #endif
 
         #ifdef COMP_NOPRED
         auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, true, false, false, fixed_points);
-        std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+        template_cloud_without_prediction = out_without_prediction.gurobi_output;
+		out_without_prediction.gurobi_output->header.frame_id = frame_id;
+		std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         #endif
 
-        auto frame_id = "kinect2_rgb_optical_frame";
+        #ifdef COMP_PRED1
+        auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, false, true, 1, fixed_points);
+        template_cloud_pred1 = out_pred1.gurobi_output;
+		out_pred1.gurobi_output->header.frame_id = frame_id;
+		std::ofstream(workingDir + "/error_pred1.txt", std::ofstream::app) << calc_mean_error(out_pred1.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+        #endif
+
+        #ifdef COMP_PRED2
+        auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, false, true, 2, fixed_points);
+        template_cloud_pred2 = out_pred2.gurobi_output;
+		out_pred2.gurobi_output->header.frame_id = frame_id;
+		std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+        #endif
+
 
         #ifdef ENTIRE
         out.original_cloud->header.frame_id = frame_id;
@@ -868,14 +1023,6 @@ int main(int argc, char* argv[])
 
         #ifdef PREDICT
         out.cpd_predict->header.frame_id = frame_id;
-        #endif
-
-        #ifdef COMP
-        out_without_constrain.gurobi_output->header.frame_id = frame_id;
-        #endif
-
-        #ifdef COMP_NOPRED
-        out_without_prediction.gurobi_output->header.frame_id = frame_id;
         #endif
 
         // draw cylinder
@@ -1231,7 +1378,11 @@ int main(int argc, char* argv[])
             #endif
         }
 
-        auto time = ros::Time::now();
+		auto time = ros::Time::now();
+
+		mm::MeshGeometryStamped mesh_msg = obsParam2meshMsg(obstacle_param, frame_id, time);
+		mesh_pub.publish(mesh_msg);
+		
         #ifdef ENTIRE
         pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
         #endif
@@ -1239,14 +1390,8 @@ int main(int argc, char* argv[])
         pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
         pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
-        #ifdef COMP
-        pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
-        #endif
         #ifdef PREDICT
         pcl_conversions::toPCL(time, out.cpd_predict->header.stamp);
-        #endif
-        #ifdef COMP_NOPRED
-        pcl_conversions::toPCL(time, out_without_prediction.gurobi_output->header.stamp);
         #endif
 
         #ifdef ENTIRE
@@ -1259,17 +1404,32 @@ int main(int argc, char* argv[])
         pred_publisher.publish(out.cpd_predict);
         #endif
         output_publisher.publish(out.gurobi_output);
+
+
         #ifdef COMP
+        pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
         output_without_constrain_publisher.publish(out_without_constrain.gurobi_output);
-        #endif
+		#endif
+		
         #ifdef COMP_NOPRED
-        output_without_prediction_publisher.publish(out_without_prediction.gurobi_output);
+        pcl_conversions::toPCL(time, out_without_prediction.gurobi_output->header.stamp);
+		output_without_prediction_publisher.publish(out_without_prediction.gurobi_output);
+        #endif
+
+        #ifdef COMP_PRED1
+        pcl_conversions::toPCL(time, out_pred1.gurobi_output->header.stamp);
+		output_pred1_publisher.publish(out_pred1.gurobi_output);
+        #endif
+
+        #ifdef COMP_PRED2
+        pcl_conversions::toPCL(time, out_pred2.gurobi_output->header.stamp);
+		output_pred2_publisher.publish(out_pred2.gurobi_output);
         #endif
 
         ++color_iter;
         ++depth_iter;
         ++info_iter;
-        #ifdef SIMULATION
+visualize mesh in ros        #ifdef SIMULATION
         ++config_iter;
         ++velocity_iter;
         ++ind_iter;
