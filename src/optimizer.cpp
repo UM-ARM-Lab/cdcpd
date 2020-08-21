@@ -1,10 +1,14 @@
 #include "cdcpd/optimizer.h"
 
 #ifdef SHAPE_COMP
+#include <CGAL/Surface_mesh.h>
+
+#include <CGAL/Polygon_mesh_processing/locate.h>
 #include <CGAL/AABB_tree.h>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
 typedef K::Point_3                                                      Point_3;
+typedef CGAL::Surface_mesh<Point_3> 									Mesh
 #endif
 
 using Eigen::Matrix3Xf;
@@ -202,10 +206,6 @@ static VectorXf Pt3toVec(const Point_3 pt)
 }
 
 // TODO:
-// - match .h file in include/
-// - run pipeline of shape_completion
-// - pass in obs_mesh & obs_normal
-// - use functions properly (seem no work)
 // - visualize mesh
 // - test
 
@@ -447,9 +447,15 @@ void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const Ma
     }
 }
 
-Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
-    : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
+Optimizer::Optimaizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const obsParam& obstacle_param)
+	: initial_template(_init_temp),
+	  last_template(_last_temp),
+	  stretch_lambda(_stretch_lambda),
+	  obs_mesh(obstacle_param.verts),
+	  obs_normal(obstacle_param.normals),
+	  mesh(initObstacle(obstacle_param))
 {
+	
 }
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points, const bool self_intersection, const bool interation_constrain)
@@ -643,3 +649,22 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
     }
     return true;
 }
+
+Mesh initObstacle(obsParam obs_param)
+{
+	Mesh mesh;
+	for(int face_ind = 0; face_ind < obs_param.faces.cols(); face_ind++)
+	{
+		std::vector<Mesh::Vertex_index> indices;
+		for(int i = 0; i < 3; i++)
+		{
+			int pt_ind = int(obs_param.faces(i, face_ind));
+			indices.append(mesh.add_vertex(Point_3(obs_para.verts(0, pt_ind),
+												   obs_para.verts(1, pt_ind),
+												   obs_para.verts(2, pt_ind))));
+		}
+		mesh.add_face(indices[0], indices[1], indices[2]);
+	}
+	return mesh;
+}
+

@@ -7,7 +7,6 @@
 #include <gurobi_c++.h>
 #include "cdcpd.h"
 
-
 ////////////////////////////////////////////////////////////////
 // Internally used static objects
 ////////////////////////////////////////////////////////////////
@@ -20,10 +19,11 @@
 
 void Wsolver(const Eigen::MatrixXf& P, const Eigen::Matrix3Xf& X, const Eigen::Matrix3Xf& Y, const Eigen::MatrixXf& G, const Eigen::MatrixXf& L, const double sigma2, const double alpha, const double lambda, Eigen::MatrixXf& W);
 
+
 class Optimizer
 {
 public:
-    Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda);
+    Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const obsParam& obstacle_param);
 
     Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf& Y,
                                 const Eigen::Matrix2Xi& E,
@@ -32,10 +32,14 @@ public:
                                 const bool interation_constrain = true);
 private:
     bool all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>& fixed_points) const;
+	Mesh initObstacle(obsParam obs_param);
 
     Eigen::Matrix3Xf initial_template;
     Eigen::Matrix3Xf last_template;
     float stretch_lambda;
+	const Eigen::Matrix3Xf obs_mesh;
+	const Eigen::Matrix3Xf obs_normal;
+	const Mesh mesh;
 };
 
 #endif

@@ -7,7 +7,7 @@
 #include <pcl/io/pcd_io.h>
 
 #include <smmap/constraint_jacobian_model.h>
-#include <smmap/deformable_model.h>
+#include <smmap/diminishing_rigidity_model.h>
 #include <smmap_utilities/grippers.h>
 
 #include "cdcpd/past_template_matcher.h"
@@ -28,13 +28,13 @@
 // #define COMP
 // #endif
 
-#ifndef COMP_PRED1
-#define COMP_PRED1
-#endif
+// #ifndef COMP_PRED1
+// #define COMP_PRED1
+// #endif
 
-#ifndef COMP_PRED2
-#define COMP_PRED2
-#endif
+// #ifndef COMP_PRED2
+// #define COMP_PRED2
+// #endif
 
 // #ifndef CPDLOG
 // #define CPDLOG
@@ -70,6 +70,13 @@ Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPt
                                          int lle_neighbors,
                                          double reg);
 
+struct obsParam
+{
+    Eigen::Matrix3Xf verts;
+	Eigen::Matrix3Xf normals;
+	Eigen::Matrix3Xf faces;
+}
+
 class CDCPD {
 public:
     struct Output {
@@ -99,6 +106,7 @@ public:
           const double rotation_deformability,
           const Eigen::MatrixXi& gripper_idx,
           #endif
+		  const obsParam& obs_param,
           const bool _use_recovery = true,
           const double alpha = 0.5,
           const double beta = 1.0,
@@ -162,7 +170,7 @@ private:
 							 const int pred_choice);
 
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
-	std::shared_ptr<smmap::DeformableModel> deformModel;
+	std::shared_ptr<smmap::DiminishingRigidityModel> deformModel;
 #endif
 
     PastTemplateMatcher template_matcher;
@@ -190,6 +198,7 @@ private:
     #ifdef PREDICT
     const Eigen::MatrixXi& gripper_idx;
     #endif
+	const obsParam obs_param;
 };
 
 #endif

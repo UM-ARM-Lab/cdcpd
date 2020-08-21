@@ -310,6 +310,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double rotation_deformability,
              const Eigen::MatrixXi& grippers,
              #endif
+			 const obsParam& _obs_param,
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
@@ -333,10 +334,11 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     k(_k),
     max_iterations(100), // TODO make configurable?
     kvis(1e3),
-    use_recovery(_use_recovery)
+    use_recovery(_use_recovery),
     #ifdef PREDICT
-    , gripper_idx(grippers)
+    gripper_idx(grippers),
     #endif
+	obs_param(_obs_param)
 {
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(template_cloud);
@@ -391,7 +393,12 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
                         rotation_deformability,
                         sdf_ptr);
     
-	deformModel = std::make_shared<smmap::DeformableModel>(nh);
+	deformModel->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
+
+	deformModel = std::make_shared<smmap::DiminishingRigidityModel>(
+						nh,
+						translation_dir_deformability,
+						rotation_deformability);
 	#endif
 }
 
@@ -1245,8 +1252,10 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
         	// cout << q_dot[i] << endl << endl;
     	// }
 		if (pred_choice == 1) {
-			return model->getObjectDelta_impl(world, grippers_pose_delta) + P;
+			cout << "L1253" << endl;
+			return model->getObjectDelta(world, grippers_pose_delta) + P;
 		} else {
+			cout << "L1256" << endl;
 			return deformModel->getObjectDelta(world, grippers_pose_delta) + P;
 		}
 	}
@@ -1385,7 +1394,7 @@ CDCPD::Output CDCPD::operator()(
 
     // Next step: optimization.
     // ???: most likely not 1.0
-    Optimizer opt(original_template, Y, 1.0);
+    Optimizer opt(original_template, Y, 1.0, obs_param);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
     // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
