@@ -60,6 +60,10 @@
 // #define COMP_NOPRED
 // #endif
 
+#ifndef SHAPE_COMP
+#define SHAPE_COMP
+#endif
+
 // void test_nearest_line();
 
 Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
@@ -75,7 +79,7 @@ struct obsParam
     Eigen::Matrix3Xf verts;
 	Eigen::Matrix3Xf normals;
 	Eigen::Matrix3Xf faces;
-}
+};
 
 class CDCPD {
 public:

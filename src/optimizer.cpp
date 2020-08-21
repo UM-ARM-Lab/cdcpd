@@ -1,21 +1,20 @@
 #include "cdcpd/optimizer.h"
 
-#ifdef SHAPE_COMP
-#include <CGAL/Surface_mesh.h>
-
-#include <CGAL/Polygon_mesh_processing/locate.h>
-#include <CGAL/AABB_tree.h>
-
 typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
+typedef K::FT                                                           FT;
 typedef K::Point_3                                                      Point_3;
-typedef CGAL::Surface_mesh<Point_3> 									Mesh
-#endif
+typedef CGAL::Surface_mesh<Point_3>                                     Mesh;
+
+namespace PMP = CGAL::Polygon_mesh_processing;
+
+typedef PMP::Face_location<Mesh, FT>                                    Face_location;
 
 using Eigen::Matrix3Xf;
 using Eigen::MatrixXf;
 using Eigen::Matrix3Xd;
 using Eigen::Matrix2Xi;
 using Eigen::Vector3f;
+using Eigen::VectorXf;
 
 #include <iostream>
 using std::cout;
@@ -200,17 +199,13 @@ std::tuple<Matrix3Xf, Matrix3Xf>
 
 #ifdef SHAPE_COMP
 
-static VectorXf Pt3toVec(const Point_3 pt)
+static Vector3f Pt3toVec(const Point_3 pt)
 {
-	return VectorXf(pt.x(), pt.y(), pt.z());
+	return Vector3f(float(pt.x()), float(pt.y()), float(pt.z()));
 }
 
-// TODO:
-// - visualize mesh
-// - test
-
 std::tuple<Matrix3Xf, Matrix3Xf>
-        nearest_points_and_normal(const Matrix3Xf& last_template)
+        Optimizer::nearest_points_and_normal(const Matrix3Xf& last_template)
 {
 	Matrix3Xf nearestPts(3, last_template.cols());
     Matrix3Xf normalVecs(3, last_template.cols());
@@ -221,7 +216,7 @@ std::tuple<Matrix3Xf, Matrix3Xf>
 				   last_template(1, pt_ind),
 				   last_template(2, pt_ind));
 		Face_location query_location = PMP::locate(pt, mesh);
-		Point_3 nearestPt = PMP.construct_point(query_location, tm);
+		Point_3 nearestPt = PMP::construct_point(query_location, mesh);
 		nearestPts.col(pt_ind) = Pt3toVec(nearestPt);
 
 		double w[3];
@@ -230,11 +225,11 @@ std::tuple<Matrix3Xf, Matrix3Xf>
 		}
 
 		MatrixXf verts_of_face(3, 3);
-		verts_of_face.col(0) = Pt3toVec(tm.point(source(halfedge(query_location.first,tm),tm)));
-		verts_of_face.col(1) = Pt3toVec(tm.point(target(halfedge(query_location.first,tm),tm)));
-		verts_of_face.col(2) = Pt3toVec(tm.point(target(next(halfedge(query_location.first,tm),tm),tm)));
+		verts_of_face.col(0) = Pt3toVec(mesh.point(source(halfedge(query_location.first,mesh),mesh)));
+		verts_of_face.col(1) = Pt3toVec(mesh.point(target(halfedge(query_location.first,mesh),mesh)));
+		verts_of_face.col(2) = Pt3toVec(mesh.point(target(next(halfedge(query_location.first,mesh),mesh),mesh)));
 		
-		VectorXf normalVec(0, 0, 0);
+		Vector3f normalVec(0.0, 0.0, 0.0);
 		for (int i = 0; i < 3; i++) {
 			for (int mesh_ind = 0; mesh_ind < obs_mesh.cols(); mesh_ind++)
 			{
@@ -447,7 +442,7 @@ void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const Ma
     }
 }
 
-Optimizer::Optimaizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const obsParam& obstacle_param)
+Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const obsParam& obstacle_param)
 	: initial_template(_init_temp),
 	  last_template(_last_temp),
 	  stretch_lambda(_stretch_lambda),
@@ -650,7 +645,7 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
     return true;
 }
 
-Mesh initObstacle(obsParam obs_param)
+Mesh Optimizer::initObstacle(obsParam obs_param)
 {
 	Mesh mesh;
 	for(int face_ind = 0; face_ind < obs_param.faces.cols(); face_ind++)
@@ -659,9 +654,9 @@ Mesh initObstacle(obsParam obs_param)
 		for(int i = 0; i < 3; i++)
 		{
 			int pt_ind = int(obs_param.faces(i, face_ind));
-			indices.append(mesh.add_vertex(Point_3(obs_para.verts(0, pt_ind),
-												   obs_para.verts(1, pt_ind),
-												   obs_para.verts(2, pt_ind))));
+			indices.push_back(mesh.add_vertex(Point_3(obs_param.verts(0, pt_ind),
+												      obs_param.verts(1, pt_ind),
+												      obs_param.verts(2, pt_ind))));
 		}
 		mesh.add_face(indices[0], indices[1], indices[2]);
 	}

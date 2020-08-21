@@ -7,6 +7,17 @@
 #include <gurobi_c++.h>
 #include "cdcpd.h"
 
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Surface_mesh.h>
+
+#include <CGAL/Polygon_mesh_processing/locate.h>
+#include <CGAL/AABB_tree.h>
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
+typedef K::Point_3                                                      Point_3;
+typedef CGAL::Surface_mesh<Point_3>                                     Mesh;
+
+
 ////////////////////////////////////////////////////////////////
 // Internally used static objects
 ////////////////////////////////////////////////////////////////
@@ -33,7 +44,8 @@ public:
 private:
     bool all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>& fixed_points) const;
 	Mesh initObstacle(obsParam obs_param);
-
+	std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf> nearest_points_and_normal(const Eigen::Matrix3Xf& last_template);
+	
     Eigen::Matrix3Xf initial_template;
     Eigen::Matrix3Xf last_template;
     float stretch_lambda;
