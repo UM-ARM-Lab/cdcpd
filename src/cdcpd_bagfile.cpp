@@ -23,8 +23,6 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/simple_filter.h>
 #include <message_filters/time_synchronizer.h>
-#include <mesh_msgs/TriangleIndices.h>
-#include <mesh_msgs/MeshGeometryStamped.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <std_msgs/Float32MultiArray.h>
@@ -39,6 +37,7 @@
 
 using std::cout;
 using std::endl;
+using std::string;
 using Eigen::MatrixXd;
 using Eigen::MatrixXf;
 using Eigen::MatrixXi;
@@ -56,7 +55,6 @@ namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace sm = sensor_msgs;
 namespace stdm = std_msgs;
-namespace mm = mesh_msg;
 
 using namespace cv;
 using namespace std::chrono_literals;
@@ -226,8 +224,8 @@ std::tuple<AllGrippersSinglePose,
 
 MatrixXf Float32MultiArrayPtr2MatrixXf(const stdm::Float32MultiArray::ConstPtr& array_ptr)
 {
-	int row = (array_ptr->layout).dim[0];
-	int col = (array_ptr->layout).dim[1];
+	int row = (array_ptr->layout).dim[0].size;
+	int col = (array_ptr->layout).dim[1].size;
 	MatrixXf mat(row, col);
 
 	for (int r = 0; r < row; r++)
@@ -408,37 +406,44 @@ static pcl::PointCloud<pcl::PointXYZ>::Ptr Matrix3Xf2pcptr(const Eigen::Matrix3X
 	return template_cloud;
 }
 
-static mm::MeshGeometryStamped obsParam2meshMsg(const obsParam& obs,
-												const string& frame_id,
-												const ros::Time& time)
+static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, const ros::Time time)
 {
-	mm::MeshGeomretyStamped mesh_msg;
-	mesh_msg.header.stamp = time;
+	vm::Marker mesh_msg;
+	mesh_msg.type = vm::Marker::TRIANGLE_LIST;
 	mesh_msg.header.frame_id = frame_id;
+    mesh_msg.header.stamp = time;
+    mesh_msg.ns = "mesh";
+    mesh_msg.id = 0; 
+    mesh_msg.action = vm::Marker::ADD;
 	
-	for(int pt_ind = 0; pt_ind < obs.verts.cols(); pt_ind++)
-	{
-		gm::Point vert;
-		gm::Point normal;
-
-		vert.x = obs.verts(0, pt_ind);
-		vert.y = obs.verts(1, pt_ind);
-		vert.z = obs.verts(2, pt_ind);
-		
-		normal.x = obs.normals(0, pt_ind);
-		normal.y = obs.normals(1, pt_ind);
-		normal.z = obs.normals(2, pt_ind);
-
-		mesh_msg.mesh_geometry.vertices.push_back(vert);
-		mesh_msg.mesh_geometry.vertex_normals.push_back(normal);
-	}
+	mesh_msg.pose.position.x = 0.0;
+    mesh_msg.pose.position.y = 0.0;
+    mesh_msg.pose.position.z = 0.0;
+    mesh_msg.pose.orientation.x = 0.0;
+    mesh_msg.pose.orientation.y = 0.0;
+    mesh_msg.pose.orientation.z = 0.0;
+    mesh_msg.pose.orientation.w = 1.0;
+    mesh_msg.scale.x = 1.0;
+    mesh_msg.scale.y = 1.0;
+    mesh_msg.scale.z = 1.0;
 	
+	mesh_msg.color.a = 1.0;
+	mesh_msg.color.r = 1.0;
+	mesh_msg.color.g = 0.0;
+	mesh_msg.color.b = 0.0;
+
 	for(int face_ind = 0; face_ind < obs.faces.cols(); face_ind++)
 	{
-		mm::TriangleIndices face;
-		for(int i = 0; i < 3; i++)
+		for(int i = 2; i >= 0; i--)
 		{
-			face.vertex_indices[i] = uint32_t(obs.faces(i, face_ind));
+			uint32_t pt_ind = uint32_t(obs.faces(i, face_ind));
+			
+			gm::Point vert;
+        	vert.x = obs.verts(0, pt_ind);
+        	vert.y = obs.verts(1, pt_ind);
+        	vert.z = obs.verts(2, pt_ind);
+
+			mesh_msg.points.push_back(vert);
 		}
 	}
 	return mesh_msg;
@@ -506,7 +511,7 @@ int main(int argc, char* argv[])
     auto cylinder_pub = nh.advertise<vm::Marker>("cdcpd/cylinder", 0);
     #endif
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
-	auto mesh_pub = nh.advertise<mm::MeshGeometryStamped>("cdcpd/mesh", 1);
+	auto mesh_pub = nh.advertise<vm::Marker>("cdcpd/mesh", 10);
 
 	BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
@@ -1203,7 +1208,7 @@ int main(int argc, char* argv[])
             vm::Marker order_without_constrain;
             order_without_constrain.header.frame_id = frame_id;
             order_without_constrain.header.stamp = ros::Time();
-            order_without_constrain.ns = "line_order_comp";
+            order_without_constrain.ns = "line_order_comp";marker.mesh resource
             order_without_constrain.action = vm::Marker::ADD;
             order_without_constrain.pose.orientation.w = 1.0;
             order_without_constrain.id = 2;
@@ -1380,7 +1385,7 @@ int main(int argc, char* argv[])
 
 		auto time = ros::Time::now();
 
-		mm::MeshGeometryStamped mesh_msg = obsParam2meshMsg(obstacle_param, frame_id, time);
+		vm::Marker mesh_msg = obsParam2Mesh(obstacle_param, frame_id, time);
 		mesh_pub.publish(mesh_msg);
 		
         #ifdef ENTIRE
@@ -1429,7 +1434,7 @@ int main(int argc, char* argv[])
         ++color_iter;
         ++depth_iter;
         ++info_iter;
-visualize mesh in ros        #ifdef SIMULATION
+		#ifdef SIMULATION
         ++config_iter;
         ++velocity_iter;
         ++ind_iter;
