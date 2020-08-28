@@ -310,7 +310,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double rotation_deformability,
              const Eigen::MatrixXi& grippers,
              #endif
+             #ifdef SHAPE_COMP
 			 const obsParam& _obs_param,
+             #endif
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
@@ -336,9 +338,11 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     kvis(1e3),
     use_recovery(_use_recovery),
     #ifdef PREDICT
-    gripper_idx(grippers),
+    gripper_idx(grippers)
     #endif
-	obs_param(_obs_param)
+    #ifdef SHAPE_COMP
+	, obs_param(_obs_param)
+    #endif
 {
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(template_cloud);
@@ -1394,7 +1398,11 @@ CDCPD::Output CDCPD::operator()(
 
     // Next step: optimization.
     // ???: most likely not 1.0
+    #ifdef SHAPE_COMP
     Optimizer opt(original_template, Y, 1.0, obs_param);
+    #else
+    Optimizer opt(original_template, Y, 1.0);
+    #endif
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
     // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;

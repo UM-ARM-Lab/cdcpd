@@ -442,16 +442,26 @@ void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const Ma
     }
 }
 
+#ifdef SHAPE_COMP
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const obsParam& obstacle_param)
-	: initial_template(_init_temp),
-	  last_template(_last_temp),
-	  stretch_lambda(_stretch_lambda),
-	  obs_mesh(obstacle_param.verts),
-	  obs_normal(obstacle_param.normals),
-	  mesh(initObstacle(obstacle_param))
+    : initial_template(_init_temp),
+      last_template(_last_temp),
+      stretch_lambda(_stretch_lambda),
+      obs_mesh(obstacle_param.verts),
+      obs_normal(obstacle_param.normals),
+      mesh(initObstacle(obstacle_param))
 {
-	
+    
 }
+#else
+Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
+    : initial_template(_init_temp),
+      last_template(_last_temp),
+      stretch_lambda(_stretch_lambda)
+{
+    
+}
+#endif
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points, const bool self_intersection, const bool interation_constrain)
 {
@@ -501,7 +511,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 
         if (interation_constrain)
         {
-#ifdef CYLINDER_INTER
+#ifdef SHAPE_COMP
             auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
             cout << "added interaction constrain" << endl;
             for (ssize_t i = 0; i < num_vectors; ++i) {
@@ -645,6 +655,7 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
     return true;
 }
 
+#ifdef SHAPE_COMP
 Mesh Optimizer::initObstacle(obsParam obs_param)
 {
 	Mesh mesh;
@@ -662,4 +673,5 @@ Mesh Optimizer::initObstacle(obsParam obs_param)
 	}
 	return mesh;
 }
+#endif
 

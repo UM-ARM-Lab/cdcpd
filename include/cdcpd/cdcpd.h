@@ -20,21 +20,21 @@
 #define ENTIRE
 #endif
 
-// #ifndef ROPE
-// #define ROPE
-// #endif
+#ifndef ROPE
+#define ROPE
+#endif
 
 // #ifndef COMP
 // #define COMP
 // #endif
 
-// #ifndef COMP_PRED1
-// #define COMP_PRED1
-// #endif
+#ifndef COMP_PRED1
+#define COMP_PRED1
+#endif
 
-// #ifndef COMP_PRED2
-// #define COMP_PRED2
-// #endif
+#ifndef COMP_PRED2
+#define COMP_PRED2
+#endif
 
 // #ifndef CPDLOG
 // #define CPDLOG
@@ -56,13 +56,13 @@
 #define PREDICT
 #endif
 
-// #ifndef COMP_NOPRED
-// #define COMP_NOPRED
-// #endif
-
-#ifndef SHAPE_COMP
-#define SHAPE_COMP
+#ifndef COMP_NOPRED
+#define COMP_NOPRED
 #endif
+
+// #ifndef SHAPE_COMP
+// #define SHAPE_COMP
+// #endif
 
 // void test_nearest_line();
 
@@ -110,7 +110,9 @@ public:
           const double rotation_deformability,
           const Eigen::MatrixXi& gripper_idx,
           #endif
-		  const obsParam& obs_param,
+          #ifdef SHAPE_COMP
+		      const obsParam& obs_param,
+          #endif
           const bool _use_recovery = true,
           const double alpha = 0.5,
           const double beta = 1.0,
@@ -202,7 +204,9 @@ private:
     #ifdef PREDICT
     const Eigen::MatrixXi& gripper_idx;
     #endif
-	const obsParam obs_param;
+    #ifdef SHAPE_COMP
+	  const obsParam obs_param;
+    #endif
 };
 
 #endif
