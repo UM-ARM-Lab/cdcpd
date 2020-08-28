@@ -227,6 +227,9 @@ MatrixXf Float32MultiArrayPtr2MatrixXf(const stdm::Float32MultiArray::ConstPtr& 
 	int row = (array_ptr->layout).dim[0].size;
 	int col = (array_ptr->layout).dim[1].size;
 	MatrixXf mat(row, col);
+    cout << "row: " << row << endl;
+    cout << "col: " << col << endl;
+    cout << (array_ptr->data).size();
 
 	for (int r = 0; r < row; r++)
 	{
@@ -325,13 +328,13 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
     #ifdef ROPE
 
-    float left_x = -2.0f;
+    float left_x = -1.0f;
     float left_y = 0.0f;
-    float left_z = 6.0f;
+    float left_z = 3.0f;
 
-    float right_x = -1.0f;
+    float right_x = 0.0f;
     float right_y = 0.0f;
-    float right_z = 6.0f;
+    float right_z = 3.0f;
     
     int points_on_rope = 50;
 
@@ -449,6 +452,24 @@ static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, con
 	return mesh_msg;
 }
 
+void test_velocity_calc() {
+	Eigen::Isometry3d g_current;
+	Eigen::Isometry3d g_next;
+	g_current(0,0) = -0.28453702; g_current(0,1) = -0.95784968; g_current(0,2) = 0.03952325; g_current(0,3) =  0.49164355;
+	g_current(1,0) =  0.27036124; g_current(1,1) = -0.04062294; g_current(1,2) = 0.96190161; g_current(1,3) = -0.49191713;
+	g_current(2,0) = -0.91975188; g_current(2,1) =  0.28438324; g_current(2,2) = 0.27052405; g_current(2,3) =  2.973032  ;
+	g_current(3,0) =  0.        ; g_current(3,1) =  0.        ; g_current(3,2) = 0.        ; g_current(3,3) =  1.        ;
+    
+	g_next(0,0) = -0.44558436; g_next(0,1) = -0.88946199; g_next(0,2) =  0.10154484; g_next(0,3) =  0.47975183;
+    g_next(1,0) =  0.4167676 ; g_next(1,1) = -0.1057118 ; g_next(1,2) =  0.90284544; g_next(1,3) = -0.4806639 ;
+    g_next(2,0) = -0.79231262; g_next(2,1) =  0.44461477; g_next(2,2) =  0.41780227; g_next(2,3) =  2.94883704;
+    g_next(3,0) =  0.        ; g_next(3,1) =  0.        ; g_next(3,2) =  0.        ; g_next(3,3) =  1.        ;
+	
+	cout << "v: " << kinematics::calculateVelocity(g_current, g_next, 1.0) << endl;	
+
+	exit(-1);
+}
+
 // static void pub_pc() {
 	// TODO
 // }
@@ -458,6 +479,7 @@ int main(int argc, char* argv[])
     // test_nearest_line();
     // test_lle();
     // ENHANCE: more smart way to get Y^0 and E
+	//test_velocity_calc();
     ros::init(argc, argv, "cdcpd_bagfile");
     cout << "Starting up..." << endl;
 
@@ -537,9 +559,11 @@ int main(int argc, char* argv[])
     topics.push_back(std::string("gripper_velocity"));
     topics.push_back(std::string("gripper_info"));
     topics.push_back(std::string("gripper_config"));
+    #ifdef SHAPE_COMP
 	topics.push_back(std::string("comp_vertices"));
 	topics.push_back(std::string("comp_faces"));
 	topics.push_back(std::string("comp_normals"));
+    #endif
     #else
     topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -654,6 +678,7 @@ int main(int argc, char* argv[])
                 cout << "NULL initiation!" << endl;
             }
         }
+        #ifdef SHAPE_COMP
 		else if (m.getTopic() == topics[7])
 		{
 			auto info = m.instantiate<stdm::Float32MultiArray>();
@@ -693,6 +718,7 @@ int main(int argc, char* argv[])
                 cout << "NULL initiation!" << endl;
             }
         }
+        #endif
         #endif
         else
         {
@@ -765,14 +791,17 @@ int main(int argc, char* argv[])
         return EXIT_SUCCESS;
     }
 
-    #ifdef SIMULATION
-	obsParam obstacle_param;
-	obstacle_param.verts = Float32MultiArrayPtr2MatrixXf(verts_ptr);
-	obstacle_param.faces = Float32MultiArrayPtr2MatrixXf(faces_ptr);
-	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr);
+    #ifdef SIMULATION 
+    cout << "788" << endl;
+	obsParam obstacle_param; cout << "789A" << endl;
+    #ifdef SHAPE_COMP
+	obstacle_param.verts = Float32MultiArrayPtr2MatrixXf(verts_ptr); cout << "789" << endl;
+	obstacle_param.faces = Float32MultiArrayPtr2MatrixXf(faces_ptr); cout << "790" << endl;
+	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr); cout << "791" << endl;
+    #endif
 
-    auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
-    std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
+    auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter); cout << "793" << endl;
+    std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh); cout << "794" << endl;
     double translation_dir_deformability = 10.0;
     double translation_dis_deformability = 10.0;
     double rotation_deformability = 10.0;
@@ -783,12 +812,15 @@ int main(int argc, char* argv[])
                 translation_dis_deformability,
                 rotation_deformability,
                 g_ind,
+                #ifdef SHAPE_COMP
 				obstacle_param,
+                #endif
                 false,
                 alpha,
                 beta,
                 lambda,
                 k_spring);
+    cout << "811" << endl;
     #else
     CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
     #endif
@@ -809,6 +841,9 @@ int main(int argc, char* argv[])
                 translation_dis_deformability,
                 rotation_deformability,
                 g_ind,
+                #ifdef SHAPE_COMP
+                obstacle_param,
+                #endif
                 false,
                 alpha,
                 beta,
@@ -826,6 +861,9 @@ int main(int argc, char* argv[])
                 translation_dis_deformability,
                 rotation_deformability,
                 g_ind,
+                #ifdef SHAPE_COMP
+                obstacle_param,
+                #endif
                 false,
                 alpha,
                 beta,
@@ -843,6 +881,9 @@ int main(int argc, char* argv[])
                 translation_dis_deformability,
                 rotation_deformability,
                 g_ind,
+                #ifdef SHAPE_COMP
+                obstacle_param,
+                #endif
                 false,
                 alpha,
                 beta,
@@ -981,7 +1022,7 @@ int main(int argc, char* argv[])
         auto frame_id = "kinect2_rgb_optical_frame";
         
 		#ifdef SIMULATION
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, false, true, 0, fixed_points);
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points);
         std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         template_cloud = out.gurobi_output;
         #else
@@ -996,7 +1037,7 @@ int main(int argc, char* argv[])
         #endif
 
         #ifdef COMP_NOPRED
-        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, true, false, false, fixed_points);
+        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, true, false, false, 0, fixed_points);
         template_cloud_without_prediction = out_without_prediction.gurobi_output;
 		out_without_prediction.gurobi_output->header.frame_id = frame_id;
 		std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
