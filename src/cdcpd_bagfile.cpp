@@ -328,12 +328,12 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
     #ifdef ROPE
 
-    float left_x = -1.0f;
-    float left_y = 0.0f;
+    float left_x = -0.5f;
+    float left_y = -0.5f;
     float left_z = 3.0f;
 
-    float right_x = 0.0f;
-    float right_y = 0.0f;
+    float right_x = 0.5f;
+    float right_y = -0.5f;
     float right_z = 3.0f;
     
     int points_on_rope = 50;
@@ -1026,7 +1026,7 @@ int main(int argc, char* argv[])
         std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         template_cloud = out.gurobi_output;
         #else
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, false, true, fixed_points);
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, true, true, fixed_points);
         template_cloud = out.gurobi_output;
         #endif
 
@@ -1037,21 +1037,21 @@ int main(int argc, char* argv[])
         #endif
 
         #ifdef COMP_NOPRED
-        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, true, false, false, 0, fixed_points);
+        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, true, true, false, 0, fixed_points);
         template_cloud_without_prediction = out_without_prediction.gurobi_output;
 		out_without_prediction.gurobi_output->header.frame_id = frame_id;
 		std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         #endif
 
         #ifdef COMP_PRED1
-        auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, false, true, 1, fixed_points);
+        auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, true, true, 1, fixed_points);
         template_cloud_pred1 = out_pred1.gurobi_output;
 		out_pred1.gurobi_output->header.frame_id = frame_id;
 		std::ofstream(workingDir + "/error_pred1.txt", std::ofstream::app) << calc_mean_error(out_pred1.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         #endif
 
         #ifdef COMP_PRED2
-        auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, false, true, 2, fixed_points);
+        auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, true, true, 2, fixed_points);
         template_cloud_pred2 = out_pred2.gurobi_output;
 		out_pred2.gurobi_output->header.frame_id = frame_id;
 		std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
