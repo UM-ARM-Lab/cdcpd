@@ -938,7 +938,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
-        float zeta = 1.0;
+        float zeta = 10.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
         
@@ -1256,10 +1256,8 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
         	// cout << q_dot[i] << endl << endl;
     	// }
 		if (pred_choice == 1) {
-			cout << "L1253" << endl;
 			return model->getObjectDelta(world, grippers_pose_delta) + P;
 		} else {
-			cout << "L1256" << endl;
 			return deformModel->getObjectDelta(world, grippers_pose_delta) + P;
 		}
 	}
@@ -1358,23 +1356,30 @@ CDCPD::Output CDCPD::operator()(
     // NOTE: order of P cannot influence delta_P, but influence P+delta_P
     // std::chrono::time_point<std::chrono::system_clock> start, end;
     std::vector<FixedPoint> pred_fixed_points;
+    for (int col = 0; col < gripper_idx.cols(); ++col)
+    {
+        FixedPoint pt;
+        pt.template_index = gripper_idx(2, col);
+        pt.position(0) = q_config[col](0, 3);
+        pt.position(1) = q_config[col](1, 3);
+        pt.position(2) = q_config[col](2, 3);
+        pred_fixed_points.push_back(pt);
+    }
     Matrix3Xf TY, TY_pred;
     if (is_prediction) {
         // start = std::chrono::system_clock::now(); 
         TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>(); // end = std::chrono::system_clock::now(); std::cout << "predict: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
         // TY_pred = Y;
-		if (pred_choice != 0) {
-        	for (int col = 0; col < gripper_idx.cols(); ++col)
-        	{
-            	for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-            	{
-                	FixedPoint pt;
-                	pt.template_index = gripper_idx(row, col);
-                	pt.position = TY_pred.col(pt.template_index);
-                	pred_fixed_points.push_back(pt);
-            	}
-        	}
-		}
+        // for (int col = 0; col < gripper_idx.cols(); ++col)
+        // {
+        //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+        //     {
+        //         FixedPoint pt;
+        //         pt.template_index = gripper_idx(row, col);
+        //         pt.position = TY_pred.col(pt.template_index);
+        //         pred_fixed_points.push_back(pt);
+        //     }
+        // }
         // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
         // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
         TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
@@ -1382,6 +1387,16 @@ CDCPD::Output CDCPD::operator()(
     }
     else
     {
+        // for (int col = 0; col < gripper_idx.cols(); ++col)
+        // {
+        //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+        //     {
+        //         FixedPoint pt;
+        //         pt.template_index = gripper_idx(row, col);
+        //         pt.position = TY_pred.col(pt.template_index);
+        //         pred_fixed_points.push_back(pt);
+        //     }
+        // }
         TY = cpd(X, Y, depth, mask);
     } 
     #else

@@ -33,6 +33,7 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
 find_package(Fgt REQUIRED)
+find_package(Ceres REQUIRED)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
 
 # horrid hack to remove the space at the beginning of the list 
@@ -54,7 +55,8 @@ include_directories(include SYSTEM PUBLIC
 include_directories(include SYSTEM PRIVATE 
     ${catkin_INCLUDE_DIRS}
     ${GUROBI_INCLUDE_DIRS}
-    ${FAISS_INCLUDE_DIRS})
+    ${FAISS_INCLUDE_DIRS}
+    ${CERES_INCLUDE_DIRS})
 
 ### The library itself
 add_library(cdcpd SHARED
@@ -86,6 +88,7 @@ target_link_libraries(cdcpd PRIVATE
     ${catkin_LIBRARIES}
     ${GUROBI_LIBRARIES}
     ${FAISS_LIBRARY}
+    ${CERES_LIBRARIES}
     Fgt::Library-C++)
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})

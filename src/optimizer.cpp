@@ -3,7 +3,13 @@
 typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
 typedef K::FT                                                           FT;
 typedef K::Point_3                                                      Point_3;
+typedef K::Ray_3                                                        Ray_3;
+typedef K::Vector_3                                                     Vector;
 typedef CGAL::Surface_mesh<Point_3>                                     Mesh;
+typedef boost::graph_traits<Mesh>::vertex_descriptor                    vertex_descriptor;
+typedef boost::graph_traits<Mesh>::face_descriptor                      face_descriptor;
+typedef CGAL::AABB_face_graph_triangle_primitive<Mesh>                  AABB_face_graph_primitive;
+typedef CGAL::AABB_traits<K, AABB_face_graph_primitive>                 AABB_face_graph_traits;
 
 namespace PMP = CGAL::Polygon_mesh_processing;
 
@@ -138,6 +144,10 @@ static GRBEnv& getGRBEnv()
     return env;
 }
 
+static Vector3f cgalVec2EigenVec(Vector cgal_v) {
+    return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]);
+}
+
 #ifdef CYLINDER_INTER
 std::tuple<Matrix3Xf, Matrix3Xf>
         nearest_points_and_normal(const Matrix3Xf& last_template) {
@@ -215,32 +225,66 @@ std::tuple<Matrix3Xf, Matrix3Xf>
 		Point_3 pt(last_template(0, pt_ind),
 				   last_template(1, pt_ind),
 				   last_template(2, pt_ind));
+        Ray_3 ray(pt, pt);
 		Face_location query_location = PMP::locate(pt, mesh);
-		Point_3 nearestPt = PMP::construct_point(query_location, mesh);
-		nearestPts.col(pt_ind) = Pt3toVec(nearestPt);
+  //       Face_location query_location = PMP::locate_with_AABB_tree(ray, tree, mesh);
+		// Point_3 nearestPt = PMP::construct_point(query_location, mesh);
+  //       nearestPts.col(pt_ind) = Pt3toVec(nearestPt);
+        // cout << "nearestPt of " << pt << " is on " << source(halfedge(query_location.first,mesh),mesh) << endl;
 
 		double w[3];
 		for(int i = 0; i < 3; i++){
 			w[i] = query_location.second[i];
 		}
 
-		MatrixXf verts_of_face(3, 3);
-		verts_of_face.col(0) = Pt3toVec(mesh.point(source(halfedge(query_location.first,mesh),mesh)));
-		verts_of_face.col(1) = Pt3toVec(mesh.point(target(halfedge(query_location.first,mesh),mesh)));
-		verts_of_face.col(2) = Pt3toVec(mesh.point(target(next(halfedge(query_location.first,mesh),mesh),mesh)));
+        if (isnan(w[0]) || isnan(w[1]) || isnan(w[2])) {
+            w[0] = w[1] = w[2] = 1/3;
+        }
+
+        for (vertex_descriptor vd: verices_around_face(mesh.halfedge(query_location.first), mesh)) {
+            cout << vd << endl;
+        }        
+        // cout << "242" << endl;
+
+        MatrixXf verts_of_face(3, 3); // cout << "243" << endl;
+        verts_of_face.col(0) = Pt3toVec(mesh.point(source(halfedge(query_location.first,mesh),mesh))); // cout << "244" << endl;
+        verts_of_face.col(1) = Pt3toVec(mesh.point(target(halfedge(query_location.first,mesh),mesh))); // cout << "245" << endl;
+        verts_of_face.col(2) = Pt3toVec(mesh.point(target(next(halfedge(query_location.first,mesh),mesh),mesh))); // cout << "246" << endl;
+        nearestPts.col(pt_ind) = verts_of_face.col(0) * w[0] + verts_of_face.col(1)* w[1] + verts_of_face.col(2) * w[2];
+        // cout << "248" << endl;
+
+
+        // std::cout << "Vertex normals :" << std::endl; 
+        // for(vertex_descriptor vd: vertices(mesh)){
+        //     std::cout << vnormals[vd][0] << std::endl;
+        // }
+
+		// MatrixXf verts_of_face(3, 3);
+		// verts_of_face.col(0) = Pt3toVec(mesh.point(source(halfedge(query_location.first,mesh),mesh)));
+		// verts_of_face.col(1) = Pt3toVec(mesh.point(target(halfedge(query_location.first,mesh),mesh)));
+		// verts_of_face.col(2) = Pt3toVec(mesh.point(target(next(halfedge(query_location.first,mesh),mesh),mesh)));
 		
 		Vector3f normalVec(0.0, 0.0, 0.0);
-		for (int i = 0; i < 3; i++) {
-			for (int mesh_ind = 0; mesh_ind < obs_mesh.cols(); mesh_ind++)
-			{
-				if (verts_of_face.col(i).isApprox(obs_mesh.col(mesh_ind))) {
-					normalVec = normalVec + obs_normal.col(mesh_ind) * w[i];
-				}
-			}
-		}
+        // cout << "262" << endl;
+        normalVec = cgalVec2EigenVec(
+                        vnormals[source(halfedge(query_location.first,mesh),mesh)] * w[0] +
+                        vnormals[target(halfedge(query_location.first,mesh),mesh)] * w[1] +
+                        vnormals[target(next(halfedge(query_location.first,mesh),mesh),mesh)] * w[2]
+                    );
+        // normalVec = cgalVec2EigenVec(fnormals[query_location.first]);
+
+		// for (int i = 0; i < 3; i++) {
+		// 	for (int mesh_ind = 0; mesh_ind < obs_mesh.cols(); mesh_ind++)
+		// 	{
+		// 		if (verts_of_face.col(i).isApprox(obs_mesh.col(mesh_ind))) {
+		// 			normalVec = normalVec + obs_normal.col(mesh_ind) * w[i];
+		// 		}
+		// 	}
+		// }
 		
-		normalVecs.col(pt_ind) = normalVec;
+		normalVecs.col(pt_ind) = -normalVec;
 	}
+    return {nearestPts, normalVecs};
 }
 #endif
 
@@ -430,7 +474,7 @@ void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const Ma
         }
     }
     delete[] vars;
-}
+    }
     catch(GRBException& e)
     {
         std::cout << "Error code = " << e.getErrorCode() << std::endl;
@@ -447,11 +491,28 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
     : initial_template(_init_temp),
       last_template(_last_temp),
       stretch_lambda(_stretch_lambda),
-      obs_mesh(obstacle_param.verts),
-      obs_normal(obstacle_param.normals),
+      // obs_mesh(obstacle_param.verts),
+      // obs_normal(obstacle_param.normals),
       mesh(initObstacle(obstacle_param))
 {
+    // typedef boost::property_map<Mesh, CGAL::edge_is_feature_t>::type EIFMap;
+    // EIFMap eif = get(CGAL::edge_is_feature, mesh);
+    // PMP::detect_sharp_edges(mesh, 30, eif);
+    // PMP::smooth_mesh(mesh, PMP::parameters::number_of_iterations(3)
+    //                                      .use_safety_constraints(false) // authorize all moves
+    //                                      .edge_is_constrained_map(eif));
+    // CGAL::Subdivision_method_3::CatmullClark_subdivision(mesh, CGAL::parameters::number_of_iterations(4));
     
+    fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
+    vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
+    
+    // CGAL::Polygon_mesh_processing::compute_normals(mesh,
+    //     vnormals,
+    //     fnormals,
+    //     CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
+    //     geom_traits(K()));
+
+    // PMP::build_AABB_tree(mesh, tree);
 }
 #else
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
@@ -514,6 +575,12 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 #ifdef SHAPE_COMP
             auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
             cout << "added interaction constrain" << endl;
+            cout << "last_template:" << endl;
+            cout << last_template << endl << endl;
+            cout << "nearestPts:" << endl;
+            cout << nearestPts << endl << endl;
+            cout << "normalVecs:" << endl;
+            cout << normalVecs << endl << endl;
             for (ssize_t i = 0; i < num_vectors; ++i) {
                 model.addConstr(
                         (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
@@ -659,18 +726,24 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
 Mesh Optimizer::initObstacle(obsParam obs_param)
 {
 	Mesh mesh;
+    std::vector<Point_3> points;
 	for(int face_ind = 0; face_ind < obs_param.faces.cols(); face_ind++)
 	{
-		std::vector<Mesh::Vertex_index> indices;
+		// std::vector<Mesh::Vertex_index> indices;
 		for(int i = 0; i < 3; i++)
 		{
-			int pt_ind = int(obs_param.faces(i, face_ind));
-			indices.push_back(mesh.add_vertex(Point_3(obs_param.verts(0, pt_ind),
-												      obs_param.verts(1, pt_ind),
-												      obs_param.verts(2, pt_ind))));
+            points.push_back(Point_3(obs_param.verts(0, pt_ind),
+                                     obs_param.verts(1, pt_ind),
+                                     obs_param.verts(2, pt_ind)));
+			// int pt_ind = int(obs_param.faces(i, face_ind));
+			// indices.push_back(mesh.add_vertex(Point_3(obs_param.verts(0, pt_ind),
+			// 									      obs_param.verts(1, pt_ind),
+			// 									      obs_param.verts(2, pt_ind))));
 		}
-		mesh.add_face(indices[0], indices[1], indices[2]);
+		// mesh.add_face(indices[0], indices[1], indices[2]);
 	}
+    CGAL::convex_hull_3(points.begin(), points.end(), mesh);
+    
 	return mesh;
 }
 #endif
