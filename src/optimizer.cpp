@@ -241,9 +241,9 @@ std::tuple<Matrix3Xf, Matrix3Xf>
             w[0] = w[1] = w[2] = 1/3;
         }
 
-        for (vertex_descriptor vd: verices_around_face(mesh.halfedge(query_location.first), mesh)) {
-            cout << vd << endl;
-        }        
+        // for (vertex_descriptor vd: vertices_around_face(mesh.halfedge(query_location.first), mesh)) {
+        //     cout << vd << endl;
+        // }        
         // cout << "242" << endl;
 
         MatrixXf verts_of_face(3, 3); // cout << "243" << endl;
@@ -282,7 +282,7 @@ std::tuple<Matrix3Xf, Matrix3Xf>
 		// 	}
 		// }
 		
-		normalVecs.col(pt_ind) = -normalVec;
+		normalVecs.col(pt_ind) = normalVec;
 	}
     return {nearestPts, normalVecs};
 }
@@ -506,11 +506,11 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
     fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
     vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
     
-    // CGAL::Polygon_mesh_processing::compute_normals(mesh,
-    //     vnormals,
-    //     fnormals,
-    //     CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
-    //     geom_traits(K()));
+    CGAL::Polygon_mesh_processing::compute_normals(mesh,
+        vnormals,
+        fnormals,
+        CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
+        geom_traits(K()));
 
     // PMP::build_AABB_tree(mesh, tree);
 }
@@ -727,23 +727,27 @@ Mesh Optimizer::initObstacle(obsParam obs_param)
 {
 	Mesh mesh;
     std::vector<Point_3> points;
-	for(int face_ind = 0; face_ind < obs_param.faces.cols(); face_ind++)
+	for(int pt_ind = 0; pt_ind < obs_param.verts.cols(); pt_ind++)
 	{
 		// std::vector<Mesh::Vertex_index> indices;
-		for(int i = 0; i < 3; i++)
-		{
-            points.push_back(Point_3(obs_param.verts(0, pt_ind),
-                                     obs_param.verts(1, pt_ind),
-                                     obs_param.verts(2, pt_ind)));
-			// int pt_ind = int(obs_param.faces(i, face_ind));
-			// indices.push_back(mesh.add_vertex(Point_3(obs_param.verts(0, pt_ind),
-			// 									      obs_param.verts(1, pt_ind),
-			// 									      obs_param.verts(2, pt_ind))));
-		}
+		points.push_back(Point_3(obs_param.verts(0, pt_ind),
+							 	 obs_param.verts(1, pt_ind),
+							 	 obs_param.verts(2, pt_ind)));
+		// int pt_ind = int(obs_param.faces(i, face_ind));
+		// indices.push_back(mesh.add_vertex(Point_3(obs_param.verts(0, pt_ind),
+		// 									      obs_param.verts(1, pt_ind),
+		// 									      obs_param.verts(2, pt_ind))));
 		// mesh.add_face(indices[0], indices[1], indices[2]);
 	}
     CGAL::convex_hull_3(points.begin(), points.end(), mesh);
-    
+	std::vector<face_descriptor> newfaces;
+	std::vector<vertex_descriptor> newvertices;
+    CGAL::Polygon_mesh_processing::refine(mesh,
+										  faces(mesh),
+										  std::back_inserter(newfaces),
+										  std::back_inserter(newvertices),
+										  CGAL::Polygon_mesh_processing::parameters::density_control_factor(10.));
+	// CGAL::draw(mesh);
 	return mesh;
 }
 #endif

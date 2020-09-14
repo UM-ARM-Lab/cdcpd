@@ -34,6 +34,8 @@ find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
 find_package(Fgt REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(CGAL REQUIRED COMPONENTS Core Qt5)
+find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
 
 # horrid hack to remove the space at the beginning of the list 
@@ -65,6 +67,8 @@ add_library(cdcpd SHARED
     src/past_template_matcher.cpp
 )
 
+# qt5_use_modules(cdcpd Xml Script OpenGL Svg)
+
 #target_include_directories(cdcpd PUBLIC 
 #    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 #    $<INSTALL_INTERFACE:include>)
@@ -89,7 +93,10 @@ target_link_libraries(cdcpd PRIVATE
     ${GUROBI_LIBRARIES}
     ${FAISS_LIBRARY}
     ${CERES_LIBRARIES}
-    Fgt::Library-C++)
+    Fgt::Library-C++
+	CGAL::CGAL
+	CGAL::CGAL_Qt5
+	Qt5::Gui)
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
 target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -g)

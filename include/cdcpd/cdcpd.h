@@ -28,13 +28,13 @@
 // #define COMP
 // #endif
 
-// #ifndef COMP_PRED1
-// #define COMP_PRED1
-// #endif
+#ifndef COMP_PRED1
+#define COMP_PRED1
+#endif
 
-// #ifndef COMP_PRED2
-// #define COMP_PRED2
-// #endif
+#ifndef COMP_PRED2
+#define COMP_PRED2
+#endif
 
 // #ifndef CPDLOG
 // #define CPDLOG
@@ -56,9 +56,9 @@
 #define PREDICT
 #endif
 
-// #ifndef COMP_NOPRED
-// #define COMP_NOPRED
-// #endif
+#ifndef COMP_NOPRED
+#define COMP_NOPRED
+#endif
 
 #ifndef SHAPE_COMP
 #define SHAPE_COMP

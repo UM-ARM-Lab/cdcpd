@@ -2,6 +2,7 @@
 #define OPTIMIZER_H
 
 #define CGAL_PMP_USE_CERES_SOLVER
+#define CGAL_USE_BASIC_VIEWER
 
 #include <algorithm>
 
@@ -11,13 +12,15 @@
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Surface_mesh.h>
-
+#include <CGAL/draw_surface_mesh.h>
+#include <CGAL/convex_hull_3.h>
 #include <CGAL/subdivision_method_3.h>
 
 #include <CGAL/Polygon_mesh_processing/locate.h>
 #include <CGAL/Polygon_mesh_processing/smooth_mesh.h>
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/Polygon_mesh_processing/refine.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
