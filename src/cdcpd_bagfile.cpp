@@ -328,12 +328,12 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
     #ifdef ROPE
 
-    float left_x = -0.5f;
-    float left_y = -0.5f;
+    float left_x = -1.0f;
+    float left_y = 0.0f;
     float left_z = 3.0f;
 
-    float right_x = 0.5f;
-    float right_y = -0.5f;
+    float right_x = 0.0f;
+    float right_y = 0.0f;
     float right_z = 3.0f;
     
     int points_on_rope = 50;
