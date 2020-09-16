@@ -148,9 +148,25 @@ static Vector3f cgalVec2EigenVec(Vector cgal_v) {
     return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]);
 }
 
+static Matrix3Xf force_pts(const Matrix3Xf& nearest,
+						   const Matrix3Xf& normal,
+						   const Matrix3Xf& Y) {
+	Matrix3Xf Y_force = Y;
+	MatrixXf dist_to_obs = ((Y-nearest).array() * normal.array()).colwise().sum();
+	for(int idx = 0; idx < Y.cols(); idx++)
+	{
+		if(dist_to_obs(0, idx) < 0)
+		{
+			Y_force.col(idx) = nearest.col(idx);
+		}
+	}
+	return Y_force;
+}
+
 #ifdef CYLINDER_INTER
 std::tuple<Matrix3Xf, Matrix3Xf>
         nearest_points_and_normal(const Matrix3Xf& last_template) {
+	/*
     // find of the nearest points and corresponding normal vector on the cylinder
     Matrix3Xf nearestPts(3, last_template.cols());
     Matrix3Xf normalVecs(3, last_template.cols());
@@ -203,7 +219,8 @@ std::tuple<Matrix3Xf, Matrix3Xf>
             normalVecs(j, i) = normalVec(j);
         }
     }
-    return {nearestPts, normalVecs};
+	 */
+    return nearest_points_and_normal_help(last_template, mesh, vormals);
 }
 #endif
 
@@ -528,7 +545,8 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 {
     // Y: Y^t in Eq. (21)
     // E: E in Eq. (21)
-
+    // auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
+    // auto Y_force = force_pts(nearestPts, normalVecs, Y);
     Matrix3Xf Y_opt(Y.rows(), Y.cols());
     GRBVar* vars = nullptr;
     try
@@ -541,8 +559,10 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Disables logging to file and logging to console (with a 0 as the value of the flag)
         env.set(GRB_IntParam_OutputFlag, 0);
         GRBModel model(env);
-        model.set("ScaleFlag", "2");
-        // model.set("OutputFlag", "1");
+        model.set("ScaleFlag", "0");
+		// model.set("DualReductions", 0);
+        model.set("FeasibilityTol", "0.01");
+		model.set("OutputFlag", "1");
 
         // Add the vars to the model
         {
@@ -570,12 +590,12 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Add interaction constraints
 
 
-        if (interation_constrain)
+        if (false)
         {
 #ifdef SHAPE_COMP
             auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
             cout << "added interaction constrain" << endl;
-            cout << "last_template:" << endl;
+            cout << "last template:" << endl;
             cout << last_template << endl << endl;
             cout << "nearestPts:" << endl;
             cout << nearestPts << endl << endl;
@@ -585,12 +605,12 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                 model.addConstr(
                         (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
                         (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
-                        (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0, "interaction constrain for point " +std::to_string(i));
+                        (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0.0, "interaction constrain for point " +std::to_string(i));
             }
 #endif
         }
 
-        if (self_intersection)
+        if (false)
         {
             cout << "added self intersection constrain" << endl;
             auto [startPts, endPts] = nearest_points_line_segments(last_template, E);
@@ -671,7 +691,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Find the optimal solution, and extract it
         {
             model.optimize();
-            if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL)
+            if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL)  // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC || modelGRB_INF_OR_UNBD)
             {
                 // std::cout << "Y" << std::endl;
                 // std::cout << Y << std::endl;
@@ -700,7 +720,9 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
     }
 
     delete[] vars;
-    return Y_opt;
+	// auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
+    // return force_pts(nearestPts, normalVecs, Y_opt);
+	return Y_opt;
 }
 
 bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>& fixed_points) const
@@ -722,33 +744,5 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
     return true;
 }
 
-#ifdef SHAPE_COMP
-Mesh Optimizer::initObstacle(obsParam obs_param)
-{
-	Mesh mesh;
-    std::vector<Point_3> points;
-	for(int pt_ind = 0; pt_ind < obs_param.verts.cols(); pt_ind++)
-	{
-		// std::vector<Mesh::Vertex_index> indices;
-		points.push_back(Point_3(obs_param.verts(0, pt_ind),
-							 	 obs_param.verts(1, pt_ind),
-							 	 obs_param.verts(2, pt_ind)));
-		// int pt_ind = int(obs_param.faces(i, face_ind));
-		// indices.push_back(mesh.add_vertex(Point_3(obs_param.verts(0, pt_ind),
-		// 									      obs_param.verts(1, pt_ind),
-		// 									      obs_param.verts(2, pt_ind))));
-		// mesh.add_face(indices[0], indices[1], indices[2]);
-	}
-    CGAL::convex_hull_3(points.begin(), points.end(), mesh);
-	std::vector<face_descriptor> newfaces;
-	std::vector<vertex_descriptor> newvertices;
-    CGAL::Polygon_mesh_processing::refine(mesh,
-										  faces(mesh),
-										  std::back_inserter(newfaces),
-										  std::back_inserter(newvertices),
-										  CGAL::Polygon_mesh_processing::parameters::density_control_factor(10.));
-	// CGAL::draw(mesh);
-	return mesh;
-}
-#endif
+
 

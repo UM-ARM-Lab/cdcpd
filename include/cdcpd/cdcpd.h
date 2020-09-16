@@ -11,6 +11,22 @@
 #include <smmap_utilities/grippers.h>
 
 #include "cdcpd/past_template_matcher.h"
+#include "cdcpd/obs_util.h"
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/draw_surface_mesh.h>
+#include <CGAL/convex_hull_3.h>
+#include <CGAL/subdivision_method_3.h>
+
+#include <CGAL/Polygon_mesh_processing/locate.h>
+#include <CGAL/Polygon_mesh_processing/smooth_mesh.h>
+#include <CGAL/Polygon_mesh_processing/detect_features.h>
+#include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/Polygon_mesh_processing/refine.h>
+#include <CGAL/AABB_face_graph_triangle_primitive.h>
+#include <CGAL/AABB_tree.h>
+#include <CGAL/AABB_traits.h>
+
 
 // #ifndef DEBUG
 // #define DEBUG
@@ -64,6 +80,21 @@
 #define SHAPE_COMP
 #endif
 
+typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;  
+typedef K::FT                                                           FT;
+typedef K::Point_3                                                      Point_3;
+typedef K::Ray_3                                                        Ray_3;
+typedef K::Vector_3                                                     Vector;
+typedef CGAL::Surface_mesh<Point_3>                                     Mesh;
+typedef boost::graph_traits<Mesh>::vertex_descriptor                    vertex_descriptor;
+typedef boost::graph_traits<Mesh>::face_descriptor                      face_descriptor;
+typedef CGAL::AABB_face_graph_triangle_primitive<Mesh>                  AABB_face_graph_primitive;
+typedef CGAL::AABB_traits<K, AABB_face_graph_primitive>                 AABB_face_graph_traits;
+
+namespace PMP = CGAL::Polygon_mesh_processing;
+
+typedef PMP::Face_location<Mesh, FT>                                    Face_location;
+
 // void test_nearest_line();
 
 Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ>& kdtree,
@@ -73,13 +104,6 @@ Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ
 Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
                                          int lle_neighbors,
                                          double reg);
-
-struct obsParam
-{
-    Eigen::Matrix3Xf verts;
-	Eigen::Matrix3Xf normals;
-	Eigen::Matrix3Xf faces;
-};
 
 class CDCPD {
 public:
@@ -205,7 +229,10 @@ private:
     const Eigen::MatrixXi& gripper_idx;
     #endif
     #ifdef SHAPE_COMP
-	  const obsParam obs_param;
+	const obsParam obs_param;
+	Mesh mesh;
+	Mesh::Property_map<face_descriptor, Vector> fnormals;
+    Mesh::Property_map<vertex_descriptor, Vector> vnormals;
     #endif
 };
 

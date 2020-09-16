@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include <gurobi_c++.h>
 #include "cdcpd.h"
+#include "obs_util.h"
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Surface_mesh.h>
@@ -67,9 +68,6 @@ public:
                                 const bool interation_constrain = true);
 private:
     bool all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>& fixed_points) const;
-    #ifdef SHAPE_COMP
-	Mesh initObstacle(obsParam obs_param);
-    #endif
 	std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf> nearest_points_and_normal(const Eigen::Matrix3Xf& last_template);
 	
     Eigen::Matrix3Xf initial_template;

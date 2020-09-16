@@ -21,8 +21,9 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <fgt.hpp>
 
-#include "cdcpd/optimizer.h"
+#include "cdcpd/obs_util.h"
 #include "cdcpd/cdcpd.h"
+#include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"
 #include "depth_traits.h"
 
@@ -341,7 +342,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     gripper_idx(grippers)
     #endif
     #ifdef SHAPE_COMP
-	, obs_param(_obs_param)
+	, obs_param(_obs_param),
+	mesh(initObstacle(_obs_param))
     #endif
 {
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
@@ -403,6 +405,15 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 						nh,
 						translation_dir_deformability,
 						rotation_deformability);
+	#endif
+	#ifdef SHAPE_COMP
+	fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
+    vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
+	CGAL::Polygon_mesh_processing::compute_normals(mesh,
+        										   vnormals,
+        										   fnormals,
+        										   CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
+        										   geom_traits(K()));
 	#endif
 }
 
@@ -862,13 +873,15 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
     std::chrono::time_point<std::chrono::system_clock> start, end;
     start = std::chrono::system_clock::now();
-
+	
     #ifdef CPDLOG
     std::cout << "\nCPD loop\n";
     std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << std::endl;
     #endif
-
-    while (iterations <= max_iterations && error > tolerance)
+	
+	auto [nearestPts, normalVecs] = nearest_points_and_normal_help(Y, mesh, vnormals);
+    
+	while (iterations <= max_iterations && error > tolerance)
     {
         double qprev = sigma2;
         // Expectation step
@@ -941,15 +954,33 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
         float zeta = 10.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
+
+		// obstacle normalization
+		float obs_cons = 500.0;
+		MatrixXf dist_to_obs = ((TY-nearestPts).array() * normalVecs.array()).colwise().sum();
+		VectorXf mask_vec(dist_to_obs.cols());
+		for(int idx = 0; idx < dist_to_obs.cols(); idx++)
+		{
+			if (dist_to_obs(0, idx) < 0.0)
+			{
+				mask_vec(idx) = 1.0;
+			} else
+			{
+				mask_vec(idx) = 0.0;
+			}
+		}
+		cout << "mask:" << endl;
+		cout << mask_vec << endl << endl; 
+		MatrixXf obs_reg = obs_cons * sigma2 * mask_vec.asDiagonal() * normalVecs.transpose();
         
-        MatrixXf A = (P1.asDiagonal() * G)
+		MatrixXf A = (P1.asDiagonal() * G)
             + alpha * sigma2 * MatrixXf::Identity(M, M)
             + sigma2 * lambda * (m_lle * G)
             + zeta * G;// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
 
         MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() - Y.transpose()); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
 
-        MatrixXf W = A.householderQr().solve(B);
+        MatrixXf W = (A).householderQr().solve(B+obs_reg);
         // MatrixXf lastW = W;
 
         // int W_int = 0;
@@ -1382,7 +1413,7 @@ CDCPD::Output CDCPD::operator()(
         // }
         // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
         // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-        TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+		TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
         // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     }
     else

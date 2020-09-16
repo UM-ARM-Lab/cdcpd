@@ -64,6 +64,7 @@ include_directories(include SYSTEM PRIVATE
 add_library(cdcpd SHARED
     src/cdcpd.cpp
     src/optimizer.cpp
+	src/obs_util.cpp
     src/past_template_matcher.cpp
 )
 
@@ -115,7 +116,8 @@ configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" 
 install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES
 	include/cdcpd/cdcpd.h 
-	include/cdcpd/optimizer.h 
+	include/cdcpd/optimizer.h
+	include/cdcpd/obs_util.h 
 	include/cdcpd/past_template_matcher.h 
 	DESTINATION 
 	include/cdcpd)
