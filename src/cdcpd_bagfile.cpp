@@ -34,6 +34,7 @@
 
 #include <arc_utilities/ros_helpers.hpp>
 #include <cdcpd/cdcpd.h>
+#include <cdcpd/optimizer.h>
 
 using std::cout;
 using std::endl;
@@ -58,6 +59,15 @@ namespace stdm = std_msgs;
 
 using namespace cv;
 using namespace std::chrono_literals;
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
+typedef K::FT                                                           FT;
+typedef K::Point_3                                                      Point_3;
+typedef K::Ray_3                                                        Ray_3;
+typedef K::Vector_3                                                     Vector;
+typedef CGAL::Surface_mesh<Point_3>                                     Mesh;
+typedef boost::graph_traits<Mesh>::vertex_descriptor                    vertex_descriptor;
+typedef boost::graph_traits<Mesh>::face_descriptor                      face_descriptor;
 
 std::vector<sm::Image::ConstPtr> color_images;
 std::vector<sm::Image::ConstPtr> depth_images;
@@ -328,12 +338,12 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
     #ifdef ROPE
 
-    float left_x = -1.0f;
-    float left_y = 0.0f;
+    float left_x = -0.5f;
+    float left_y = -0.5f;
     float left_z = 3.0f;
 
-    float right_x = 0.0f;
-    float right_y = 0.0f;
+    float right_x = 0.5f;
+    float right_y = -0.5f;
     float right_z = 3.0f;
     
     int points_on_rope = 50;
@@ -422,6 +432,56 @@ static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, con
 	mesh_msg.pose.position.x = 0.0;
     mesh_msg.pose.position.y = 0.0;
     mesh_msg.pose.position.z = 0.0;
+
+    mesh_msg.pose.orientation.x = 0.0;
+    mesh_msg.pose.orientation.y = 0.0;
+    mesh_msg.pose.orientation.z = 0.0;
+    mesh_msg.pose.orientation.w = 1.0;
+    mesh_msg.scale.x = 1.0;
+    mesh_msg.scale.y = 1.0;
+    mesh_msg.scale.z = 1.0;
+	
+	mesh_msg.color.a = 1.0;
+	mesh_msg.color.r = 1.0;
+	mesh_msg.color.g = 0.0;
+	mesh_msg.color.b = 0.0;
+	
+	Mesh mesh = initObstacle(obs);
+
+	for(auto fd: faces(mesh))
+	{
+		for(auto vd: vertices_around_face(mesh.halfedge(fd), mesh))
+		{
+			K::Point_3 pt = mesh.point(vd);
+			
+			gm::Point vert;
+        	vert.x = pt.x();
+        	vert.y = pt.y();
+        	vert.z = pt.z();
+
+			mesh_msg.points.push_back(vert);
+		}
+	}
+	return mesh_msg;
+
+}
+
+/*
+static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, const ros::Time time)
+{
+	vm::Marker mesh_msg;
+	mesh_msg.type = vm::Marker::TRIANGLE_LIST;
+	mesh_msg.header.frame_id = frame_id;
+    mesh_msg.header.stamp = time;
+    mesh_msg.ns = "mesh";
+    mesh_msg.id = 0; 
+    mesh_msg.action = vm::Marker::ADD;
+	
+	mesh_msg.pose.position.x = 0.0;
+    mesh_msg.pose.position.y = 0.0;
+    mesh_msg.pose.position.z = 0.0;
+
+
     mesh_msg.pose.orientation.x = 0.0;
     mesh_msg.pose.orientation.y = 0.0;
     mesh_msg.pose.orientation.z = 0.0;
@@ -451,7 +511,7 @@ static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, con
 	}
 	return mesh_msg;
 }
-
+ */
 void test_velocity_calc() {
 	Eigen::Isometry3d g_current;
 	Eigen::Isometry3d g_next;
@@ -1022,6 +1082,7 @@ int main(int argc, char* argv[])
         auto frame_id = "kinect2_rgb_optical_frame";
         
 		#ifdef SIMULATION
+		cout << "prediction choice: 0" << endl;
         auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points);
         std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         template_cloud = out.gurobi_output;
@@ -1037,13 +1098,15 @@ int main(int argc, char* argv[])
         #endif
 
         #ifdef COMP_NOPRED
-        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, true, true, false, 0, fixed_points);
+		cout << "no prediction used" << endl;
+        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
         template_cloud_without_prediction = out_without_prediction.gurobi_output;
 		out_without_prediction.gurobi_output->header.frame_id = frame_id;
 		std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         #endif
 
         #ifdef COMP_PRED1
+		cout << "prediction choice: 1" << endl;
         auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, true, true, 1, fixed_points);
         template_cloud_pred1 = out_pred1.gurobi_output;
 		out_pred1.gurobi_output->header.frame_id = frame_id;
@@ -1051,6 +1114,7 @@ int main(int argc, char* argv[])
         #endif
 
         #ifdef COMP_PRED2
+		cout << "prediction choice: 2" << endl;
         auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, true, true, 2, fixed_points);
         template_cloud_pred2 = out_pred2.gurobi_output;
 		out_pred2.gurobi_output->header.frame_id = frame_id;
