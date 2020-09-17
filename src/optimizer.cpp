@@ -541,7 +541,7 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
 }
 #endif
 
-Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points, const bool self_intersection, const bool interation_constrain)
+Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points, const bool self_intersection, const bool interaction_constrain)
 {
     // Y: Y^t in Eq. (21)
     // E: E in Eq. (21)
@@ -574,7 +574,6 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         }
 
         // Add the edge constraints
-        // ???: why multiply stretch_lambda twice
         {
             for (ssize_t i = 0; i < E.cols(); ++i)
             {
@@ -590,7 +589,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Add interaction constraints
 
 
-        if (false)
+        if (interaction_constrain)
         {
 #ifdef SHAPE_COMP
             auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
@@ -601,12 +600,29 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
             cout << nearestPts << endl << endl;
             cout << "normalVecs:" << endl;
             cout << normalVecs << endl << endl;
-            for (ssize_t i = 0; i < num_vectors; ++i) {
-                model.addConstr(
+            for (ssize_t i = 0; i < num_vectors; ++i)
+			{
+				// ssize_t fixed_idx = 0;
+				// for (fixed_idx = 0; fixed_idx < fixed_points.size(); fixed_idx++)
+				// {
+				//  	if (i <= int(fixed_points[fixed_idx].template_index) + 5 && i >= int(fixed_points[fixed_idx].template_index) - 5) {
+				//  		break;
+				//  	}
+				// }
+				// if (fixed_idx == fixed_points.size())
+				// {
+					model.addConstr(
                         (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
                         (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
                         (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) >= 0.0, "interaction constrain for point " +std::to_string(i));
+				// }
             }
+			// for (ssize_t i = 0; i < num_vectors; ++i) {
+            //     model.addConstr(
+            //             (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
+            //             (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
+            //             (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) <= 1.0, "interaction constrain for point " +std::to_string(i));
+            // }
 #endif
         }
 
@@ -650,7 +666,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // TODO make this more
         // First, make sure that the constraints can be satisfied
         GRBQuadExpr gripper_objective_fn(0);
-        if (all_constraints_satisfiable(fixed_points))
+		if (all_constraints_satisfiable(fixed_points))
         {
             // If that's possible, we'll require that all constraints are equal
             for (const auto& fixed_point : fixed_points)
@@ -740,6 +756,14 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
                 return false;
             }
         }
+		Matrix3Xf pt(3, 1);
+		pt.col(0) = first_elem->position;
+		auto [nearestPt, normalVec] = nearest_points_and_normal_help(pt, mesh, vnormals);
+		auto dist = ((pt - nearestPt).array()*normalVec.array()).colwise().sum();
+		// if (dist(0, 0)<0)
+		// {
+		//  	return false;
+		// }
     }
     return true;
 }

@@ -879,7 +879,6 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
     std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << std::endl;
     #endif
 	
-	auto [nearestPts, normalVecs] = nearest_points_and_normal_help(Y, mesh, vnormals);
     
 	while (iterations <= max_iterations && error > tolerance)
     {
@@ -956,12 +955,13 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
 		// obstacle normalization
-		float obs_cons = 500.0;
+		float obs_cons = 100.0;
+		auto [nearestPts, normalVecs] = nearest_points_and_normal_help(TY, mesh, vnormals);
 		MatrixXf dist_to_obs = ((TY-nearestPts).array() * normalVecs.array()).colwise().sum();
 		VectorXf mask_vec(dist_to_obs.cols());
 		for(int idx = 0; idx < dist_to_obs.cols(); idx++)
 		{
-			if (dist_to_obs(0, idx) < 0.0)
+			if (dist_to_obs(0, idx) < 0.2)
 			{
 				mask_vec(idx) = 1.0;
 			} else
@@ -969,8 +969,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 				mask_vec(idx) = 0.0;
 			}
 		}
-		cout << "mask:" << endl;
-		cout << mask_vec << endl << endl; 
+		// cout << "mask:" << endl;
+		// cout << mask_vec << endl << endl; 
 		MatrixXf obs_reg = obs_cons * sigma2 * mask_vec.asDiagonal() * normalVecs.transpose();
         
 		MatrixXf A = (P1.asDiagonal() * G)
@@ -980,7 +980,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() - Y.transpose()); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
 
-        MatrixXf W = (A).householderQr().solve(B+obs_reg);
+        MatrixXf W = (A).householderQr().solve(B); //+obs_reg);
         // MatrixXf lastW = W;
 
         // int W_int = 0;
