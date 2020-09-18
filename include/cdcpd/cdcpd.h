@@ -36,9 +36,9 @@
 #define ENTIRE
 #endif
 
-#ifndef ROPE
-#define ROPE
-#endif
+// #ifndef ROPE
+// #define ROPE
+// #endif
 
 // #ifndef COMP
 // #define COMP
@@ -76,9 +76,9 @@
 #define COMP_NOPRED
 #endif
 
-#ifndef SHAPE_COMP
-#define SHAPE_COMP
-#endif
+// #ifndef SHAPE_COMP
+// #define SHAPE_COMP
+// #endif
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;  
 typedef K::FT                                                           FT;

@@ -756,10 +756,10 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>
                 return false;
             }
         }
-		Matrix3Xf pt(3, 1);
-		pt.col(0) = first_elem->position;
-		auto [nearestPt, normalVec] = nearest_points_and_normal_help(pt, mesh, vnormals);
-		auto dist = ((pt - nearestPt).array()*normalVec.array()).colwise().sum();
+		// Matrix3Xf pt(3, 1);
+		// pt.col(0) = first_elem->position;
+		// auto [nearestPt, normalVec] = nearest_points_and_normal_help(pt, mesh, vnormals);
+		// auto dist = ((pt - nearestPt).array()*normalVec.array()).colwise().sum();
 		// if (dist(0, 0)<0)
 		// {
 		//  	return false;
