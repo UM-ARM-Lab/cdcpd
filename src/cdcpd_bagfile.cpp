@@ -419,6 +419,7 @@ static pcl::PointCloud<pcl::PointXYZ>::Ptr Matrix3Xf2pcptr(const Eigen::Matrix3X
 	return template_cloud;
 }
 
+#ifdef SHAPE_COMP
 static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, const ros::Time time)
 {
 	vm::Marker mesh_msg;
@@ -465,6 +466,7 @@ static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, con
 	return mesh_msg;
 
 }
+#endif
 
 /*
 static vm::Marker obsParam2Mesh(const obsParam& obs, const string& frame_id, const ros::Time time)
@@ -852,12 +854,11 @@ int main(int argc, char* argv[])
     }
 
     #ifdef SIMULATION 
-    cout << "788" << endl;
-	obsParam obstacle_param; cout << "789A" << endl;
     #ifdef SHAPE_COMP
-	obstacle_param.verts = Float32MultiArrayPtr2MatrixXf(verts_ptr); cout << "789" << endl;
-	obstacle_param.faces = Float32MultiArrayPtr2MatrixXf(faces_ptr); cout << "790" << endl;
-	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr); cout << "791" << endl;
+	obsParam obstacle_param;
+	obstacle_param.verts = Float32MultiArrayPtr2MatrixXf(verts_ptr);
+	obstacle_param.faces = Float32MultiArrayPtr2MatrixXf(faces_ptr);
+	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr);
     #endif
 
     auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter); cout << "793" << endl;
@@ -1489,9 +1490,11 @@ int main(int argc, char* argv[])
         }
 
 		auto time = ros::Time::now();
-
+		
+		#ifdef SHAPE_COMP
 		vm::Marker mesh_msg = obsParam2Mesh(obstacle_param, frame_id, time);
 		mesh_pub.publish(mesh_msg);
+		#endif
 		
         #ifdef ENTIRE
         pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
