@@ -950,7 +950,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
-        float zeta = 10.0;
+        float zeta = 2.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
@@ -1387,10 +1387,16 @@ CDCPD::Output CDCPD::operator()(
     // NOTE: order of P cannot influence delta_P, but influence P+delta_P
     // std::chrono::time_point<std::chrono::system_clock> start, end;
     std::vector<FixedPoint> pred_fixed_points;
+	cout << "gripper_idx" << endl;
+	cout << gripper_idx << endl << endl;
     for (int col = 0; col < gripper_idx.cols(); ++col)
     {
         FixedPoint pt;
+		#ifdef ROPE
         pt.template_index = gripper_idx(2, col);
+		#else
+		pt.template_index = gripper_idx(0, col);
+		#endif
         pt.position(0) = q_config[col](0, 3);
         pt.position(1) = q_config[col](1, 3);
         pt.position(2) = q_config[col](2, 3);
