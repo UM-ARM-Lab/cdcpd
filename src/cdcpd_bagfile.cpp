@@ -547,6 +547,7 @@ int main(int argc, char* argv[])
 
     auto [template_vertices, template_edges] = init_template();
 
+	cout << template_vertices << endl;
     #ifdef ROPE
     int points_on_rope = 50;
     #else
