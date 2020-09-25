@@ -64,9 +64,9 @@
 // #define CYL_CLOTH4
 // #endif
 
-#ifndef SIMULATION
-#define SIMULATION
-#endif
+// #ifndef SIMULATION
+// #define SIMULATION
+// #endif
 
 #ifndef PREDICT
 #define PREDICT
@@ -76,9 +76,9 @@
 #define COMP_NOPRED
 #endif
 
-// #ifndef SHAPE_COMP
-// #define SHAPE_COMP
-// #endif
+#ifndef SHAPE_COMP
+#define SHAPE_COMP
+#endif
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;  
 typedef K::FT                                                           FT;

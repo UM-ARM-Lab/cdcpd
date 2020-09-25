@@ -594,12 +594,12 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 #ifdef SHAPE_COMP
             auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
             cout << "added interaction constrain" << endl;
-            cout << "last template:" << endl;
-            cout << last_template << endl << endl;
-            cout << "nearestPts:" << endl;
-            cout << nearestPts << endl << endl;
-            cout << "normalVecs:" << endl;
-            cout << normalVecs << endl << endl;
+            // cout << "last template:" << endl;
+            // cout << last_template << endl << endl;
+            // cout << "nearestPts:" << endl;
+            // cout << nearestPts << endl << endl;
+            // cout << "normalVecs:" << endl;
+            // cout << normalVecs << endl << endl;
             for (ssize_t i = 0; i < num_vectors; ++i)
 			{
 				// ssize_t fixed_idx = 0;
