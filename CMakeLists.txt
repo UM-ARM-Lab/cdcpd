@@ -36,6 +36,15 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 
+add_message_files(
+  FILES
+  Float32MultiArrayStamped.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs)
+
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
@@ -55,6 +64,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES cdcpd_ros
 #  CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs
+  CATKIN_DEPENDS message_runtime
 #  DEPENDS system_lib
 )
 

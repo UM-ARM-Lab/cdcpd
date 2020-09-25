@@ -628,10 +628,15 @@ int main(int argc, char* argv[])
 	topics.push_back(std::string("comp_normals"));
     #endif
     #else
-    topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
-    topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
-    topics.push_back(std::string("/kinect2/qhd/camera_info"));
-    #endif
+    topics.push_back(std::string("/kinect2_victor_head/qhd/image_color_rect"));
+    topics.push_back(std::string("/kinect2_victor_head/qhd/image_depth_rect"));
+    topics.push_back(std::string("/kinect2_victor_head/qhd/camera_info"));
+    topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_velocity"));
+    topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_info"));
+    topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_config"));
+	topics.push_back(std::string("/left_arm/gripper_status"));
+	topics.push_back(std::string("/right_arm/gripper_status"));
+	#endif
 
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
     #ifdef SIMULATION
