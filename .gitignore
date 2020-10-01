@@ -12,3 +12,5 @@ tags
 # CLion artifacts
 cmake-build-debug
 .idea
+
+src/cpd_physics/

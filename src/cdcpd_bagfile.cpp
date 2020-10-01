@@ -3,6 +3,7 @@
 #include <thread>
 #include <chrono>
 #include <map>
+#include <sstream>
 
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -39,6 +40,7 @@
 using std::cout;
 using std::endl;
 using std::string;
+using std::stringstream;
 using Eigen::MatrixXd;
 using Eigen::MatrixXf;
 using Eigen::MatrixXi;
@@ -268,7 +270,15 @@ double calculate_lle_reg(MatrixXf& L, PointCloud& pts) {
 }
 
 float calc_mean_error(const Matrix3Xf Y, const Matrix3Xf truth) {
-    return ((Y-truth).colwise().norm()).mean();
+	int num = std::min(int(Y.cols()), int(truth.cols()));
+	float error = 0;
+	for(int i = 0; i < num; i++)
+	{
+		error += (Y.col(i) - truth.col(i)).norm();
+	}
+	error /= float(num);
+    return error;
+	// return ((Y-truth).colwise().norm()).mean();
 }
 
 #if 0
@@ -597,7 +607,7 @@ int main(int argc, char* argv[])
     #endif
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 	auto mesh_pub = nh.advertise<vm::Marker>("cdcpd/mesh", 10);
-
+	auto cpd_physics_pub = nh.advertise<PointCloud> ("cdcpd/cpd_physics", 1);
 	BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
     #ifdef SIMULATION
@@ -1128,6 +1138,49 @@ int main(int argc, char* argv[])
 		std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         #endif
 
+		ifstream cpd_phy_result;
+		PointCloud::Ptr cpd_phy_pc(new PointCloud);
+  		cpd_phy_result.open(ros::package::getPath("cdcpd_ros") + "/src/cpd_physics/" + bagfile + "/result" + std::to_string(frame) + ".txt", ios::in);
+		// cout << "try to open cpd physics file " << ros::package::getPath("cdcpd_ros") + "/src/cpd_physics/" + bagfile + "/result" + std::to_string(frame) + ".txt" << endl;
+		if(cpd_phy_result.is_open())
+		{
+			// cout << "open successfully" << endl;
+			string line;
+			std::vector<float> xs, ys, zs;
+			for (int line_idx = 0; line_idx < 3; line_idx++)
+			{
+				float buf;
+				getline(cpd_phy_result, line);
+				stringstream stream(line);
+				while(!stream.eof())
+				{
+					stream >> buf;
+					if (line_idx == 0) {
+						xs.push_back(buf);
+					}
+					else if (line_idx == 1) {
+						ys.push_back(buf);
+					}
+					else {
+						zs.push_back(buf);
+					}
+				}
+			}
+			cpd_phy_pc->points.reserve(xs.size());
+			for(unsigned i = 0; i < xs.size(); i++)
+			{
+				cpd_phy_pc->push_back(pcl::PointXYZ(xs[i], ys[i], zs[i]));
+			}
+			// cout << "cpd physics" << endl;
+			// cout << cpd_phy_pc->getMatrixXfMap().topRows(3) << endl;
+			// cout << "ground truth" << endl;
+			// cout << one_frame_truth << endl;
+			// cout << "cpd phy error" << endl;
+			// cout << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << endl;
+		}
+		std::ofstream(workingDir + "/error_cpd_physics.txt", std::ofstream::app) << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << " ";
+
+		cpd_phy_pc->header.frame_id = frame_id;
 
         #ifdef ENTIRE
         out.original_cloud->header.frame_id = frame_id;
@@ -1512,7 +1565,7 @@ int main(int argc, char* argv[])
         #ifdef PREDICT
         pcl_conversions::toPCL(time, out.cpd_predict->header.stamp);
         #endif
-
+	
         #ifdef ENTIRE
         original_publisher.publish(out.original_cloud);
         #endif
@@ -1523,7 +1576,9 @@ int main(int argc, char* argv[])
         pred_publisher.publish(out.cpd_predict);
         #endif
         output_publisher.publish(out.gurobi_output);
-
+		
+		pcl_conversions::toPCL(time, cpd_phy_pc->header.stamp);	
+		cpd_physics_pub.publish(cpd_phy_pc);
 
         #ifdef COMP
         pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
