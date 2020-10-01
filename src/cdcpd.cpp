@@ -950,7 +950,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
-        float zeta = 2.0;
+        float zeta = 1.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
@@ -1451,9 +1451,9 @@ CDCPD::Output CDCPD::operator()(
     // Next step: optimization.
     // ???: most likely not 1.0
     #ifdef SHAPE_COMP
-    Optimizer opt(original_template, Y, 1.0, obs_param);
+    Optimizer opt(original_template, Y, 1.1, obs_param);
     #else
-    Optimizer opt(original_template, Y, 1.0);
+    Optimizer opt(original_template, Y, 1.1);
     #endif
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
