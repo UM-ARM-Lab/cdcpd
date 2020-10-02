@@ -29,6 +29,8 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   roscpp
   sensor_msgs
+  diagnostic_msgs
+  geometry_msgs
   std_msgs
   pcl_ros
   arc_utilities
@@ -41,10 +43,30 @@ find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 add_message_files(
   FILES
   Float32MultiArrayStamped.msg
+  CartesianControlModeLimits.msg
+  CartesianImpedanceParameters.msg
+  CartesianPathExecutionParameters.msg
+  CartesianValueQuantity.msg
+  ControlMode.msg
+  ControlModeParameters.msg
+  GraspStatus.msg
+  JointImpedanceParameters.msg
+  JointPathExecutionParameters.msg
+  JointValueQuantity.msg
+  MotionCommand.msg
+  MotionStatus.msg
+  Robotiq3FingerActuatorCommand.msg
+  Robotiq3FingerActuatorStatus.msg
+  Robotiq3FingerCommand.msg
+  Robotiq3FingerObjectStatus.msg
+  Robotiq3FingerStatus.msg
 )
 
 generate_messages(
   DEPENDENCIES
+  diagnostic_msgs
+  geometry_msgs
+  sensor_msgs
   std_msgs)
 
 ## Uncomment this if the package has a setup.py. This macro ensures

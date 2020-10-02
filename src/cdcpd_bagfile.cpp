@@ -39,6 +39,7 @@
 #include <cdcpd/optimizer.h>
 
 #include <cdcpd_ros/Float32MultiArrayStamped.h>
+#include <cdcpd_ros/Robotiq3FingerStatus.h>
 
 using std::cout;
 using std::endl;
@@ -78,7 +79,11 @@ typedef message_filters::sync_policies::ApproximateTime<sm::Image,
                                                         sm::Image,
                                                         sm::CameraInfo,
 														cdcpd_ros::Float32MultiArrayStamped,
-														cdcpd_ros::Float32MultiArrayStamped> SyncPolicy;
+														cdcpd_ros::Float32MultiArrayStamped,
+														cdcpd_ros::Robotiq3FingerStatus,
+														cdcpd_ros::Robotiq3FingerStatus> SyncPolicy;
+
+
 
 std::vector<sm::Image::ConstPtr> color_images;
 std::vector<sm::Image::ConstPtr> depth_images;
@@ -94,6 +99,8 @@ stdm::Float32MultiArray::ConstPtr faces_ptr;
 #else
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_config;
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_dot;
+std::vector<cdcpd_ros::Robotiq3FingerStatus::ConstPtr> l_status;
+std::vector<cdcpd_ros::Robotiq3FingerStatus::ConstPtr> r_status;
 // stdm::Float32MultiArray::ConstPtr verts_ptr;
 // stdm::Float32MultiArray::ConstPtr normals_ptr;
 // stdm::Float32MultiArray::ConstPtr faces_ptr;
@@ -136,14 +143,17 @@ void callback(
     const sm::Image::ConstPtr &depth_img,
     const sm::CameraInfo::ConstPtr &cam_info,
     const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_config,
-    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_dot
-    )
+    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_dot,
+	const cdcpd_ros::Robotiq3FingerStatus::ConstPtr &l_s,
+	const cdcpd_ros::Robotiq3FingerStatus::ConstPtr &r_s)
 {
     color_images.push_back(rgb_img);
     depth_images.push_back(depth_img);
     camera_infos.push_back(cam_info);
     grippers_config.push_back(g_config);
     grippers_dot.push_back(g_dot);
+	l_status.push_back(l_s);
+	r_status.push_back(r_s);
 }
 
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
@@ -627,6 +637,7 @@ int main(int argc, char* argv[])
     BagSubscriber<stdm::Float32MultiArray> config_sub, dot_sub, ind_sub, truth_sub;
 	#else
 	BagSubscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub, dot_sub;
+	BagSubscriber<cdcpd_ros::Robotiq3FingerStatus> l_sub, r_sub;
     // message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub(nh, "/kinect2_victor_head/qhd/gripper_config", 10);
 	// message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> dot_sub(nh, "/kinect2_victor_head/qhd/dot_config", 10);
 	#endif
@@ -682,8 +693,8 @@ int main(int argc, char* argv[])
     // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped>(
     //        rgb_sub, depth_sub, info_sub, config_sub, dot_sub, 25);
 	// TODO: check queue size of sync or approx sync
-	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub);
-    sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5));
+	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub);
+    sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
     // #endif
 	// ros::spin();
 
@@ -845,11 +856,35 @@ int main(int argc, char* argv[])
                 cout << "NULL initiation!" << endl;
             }
 		}
+		else if (m.getTopic() == topics[5])
+		{
+			auto info = m.instantiate<cdcpd_ros::Robotiq3FingerStatus>();
+            if (info != nullptr)
+            {
+                l_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+		}
+		else if (m.getTopic() == topics[6])
+		{
+			auto info = m.instantiate<cdcpd_ros::Robotiq3FingerStatus>();
+            if (info != nullptr)
+            {
+                r_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+		}
         #endif
         else
         {
-            // cerr << "Invalid topic: " << m.getTopic() << endl;
-            // exit(1);
+            cerr << "Invalid topic: " << m.getTopic() << endl;
+            exit(1);
         }
     }
     bag.close();

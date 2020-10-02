@@ -1,0 +1,4 @@
+cdcpd_ros/CartesianValueQuantity cartesian_stiffness
+float64 nullspace_stiffness
+cdcpd_ros/CartesianValueQuantity cartesian_damping
+float64 nullspace_damping

@@ -1,0 +1,5 @@
+cdcpd_ros/Robotiq3FingerActuatorCommand finger_a_command
+cdcpd_ros/Robotiq3FingerActuatorCommand finger_b_command
+cdcpd_ros/Robotiq3FingerActuatorCommand finger_c_command
+cdcpd_ros/Robotiq3FingerActuatorCommand scissor_command
+std_msgs/Header header

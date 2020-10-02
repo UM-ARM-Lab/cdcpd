@@ -1,0 +1,4 @@
+cdcpd_ros/CartesianValueQuantity max_velocity
+cdcpd_ros/CartesianValueQuantity max_acceleration
+float64 max_nullspace_velocity
+float64 max_nullspace_acceleration
