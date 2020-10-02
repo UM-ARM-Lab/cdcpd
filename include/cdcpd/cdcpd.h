@@ -64,9 +64,9 @@
 // #define CYL_CLOTH4
 // #endif
 
-#ifndef SIMULATION
-#define SIMULATION
-#endif
+// #ifndef SIMULATION
+// #define SIMULATION
+// #endif
 
 #ifndef PREDICT
 #define PREDICT
