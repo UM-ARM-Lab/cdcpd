@@ -24,6 +24,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
+  genmsg
   image_geometry
   image_transport
   roscpp
@@ -31,19 +32,20 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   pcl_ros
   arc_utilities
+  message_generation
   cdcpd
 )
 find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 
-# add_message_files(
-#   FILES
-#   Float32MultiArrayStamped.msg
-# )
+add_message_files(
+  FILES
+  Float32MultiArrayStamped.msg
+)
 
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs)
+generate_messages(
+  DEPENDENCIES
+  std_msgs)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -64,7 +66,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES cdcpd_ros
 #  CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs
-#  CATKIN_DEPENDS message_runtime
+  CATKIN_DEPENDS message_runtime
 #  DEPENDS system_lib
 )
 

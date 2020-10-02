@@ -24,6 +24,7 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/simple_filter.h>
 #include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <std_msgs/Float32MultiArray.h>
@@ -36,6 +37,8 @@
 #include <arc_utilities/ros_helpers.hpp>
 #include <cdcpd/cdcpd.h>
 #include <cdcpd/optimizer.h>
+
+#include <cdcpd_ros/Float32MultiArrayStamped.h>
 
 using std::cout;
 using std::endl;
@@ -71,6 +74,12 @@ typedef CGAL::Surface_mesh<Point_3>                                     Mesh;
 typedef boost::graph_traits<Mesh>::vertex_descriptor                    vertex_descriptor;
 typedef boost::graph_traits<Mesh>::face_descriptor                      face_descriptor;
 
+typedef message_filters::sync_policies::ApproximateTime<sm::Image, 
+                                                        sm::Image,
+                                                        sm::CameraInfo,
+														cdcpd_ros::Float32MultiArrayStamped,
+														cdcpd_ros::Float32MultiArrayStamped> SyncPolicy;
+
 std::vector<sm::Image::ConstPtr> color_images;
 std::vector<sm::Image::ConstPtr> depth_images;
 std::vector<sm::CameraInfo::ConstPtr> camera_infos;
@@ -82,6 +91,12 @@ std::vector<stdm::Float32MultiArray::ConstPtr> ground_truth;
 stdm::Float32MultiArray::ConstPtr verts_ptr;
 stdm::Float32MultiArray::ConstPtr normals_ptr;
 stdm::Float32MultiArray::ConstPtr faces_ptr;
+#else
+std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_config;
+std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_dot;
+// stdm::Float32MultiArray::ConstPtr verts_ptr;
+// stdm::Float32MultiArray::ConstPtr normals_ptr;
+// stdm::Float32MultiArray::ConstPtr faces_ptr;
 #endif
 
 #ifdef SIMULATION
@@ -119,25 +134,16 @@ public:
 void callback(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
-    const sm::CameraInfo::ConstPtr &cam_info
-    // #ifdef PREDICT
-    // ,
-    // const stdm::Float32MultiArray::ConstPtr &g_config,
-    // const stdm::Float32MultiArray::ConstPtr &g_dot,
-    // const stdm::Float32MultiArray::ConstPtr &g_ind,
-    // const stdm::Float32MultiArray::ConstPtr &one_truth
-    // #endif
+    const sm::CameraInfo::ConstPtr &cam_info,
+    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_config,
+    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_dot
     )
 {
     color_images.push_back(rgb_img);
     depth_images.push_back(depth_img);
     camera_infos.push_back(cam_info);
-    // #ifdef PREDICT
-    // grippers_config.push_back(g_config);
-    // grippers_dot.push_back(g_dot);
-    // grippers_ind.push_back(g_ind);
-    // ground_truth.push_back(one_truth);
-    // #endif
+    grippers_config.push_back(g_config);
+    grippers_dot.push_back(g_dot);
 }
 
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
@@ -554,16 +560,20 @@ int main(int argc, char* argv[])
 	//test_velocity_calc();
     ros::init(argc, argv, "cdcpd_bagfile");
     cout << "Starting up..." << endl;
+	
 
     auto [template_vertices, template_edges] = init_template();
 
 	cout << template_vertices << endl;
-    #ifdef ROPE
+    cout << template_edges << endl;
+	#ifdef NOUSE
+	#ifdef ROPE
     int points_on_rope = 50;
     #else
     int cloth_width_num = 20;
     int cloth_height_num = 20;
     #endif
+	#endif
 	
 	std::string cleancmd = "exec rm -rf " + workingDir + "/*";
 	if (system(cleancmd.c_str()) != 0) {
@@ -610,18 +620,27 @@ int main(int argc, char* argv[])
 	auto cpd_physics_pub = nh.advertise<PointCloud> ("cdcpd/cpd_physics", 1);
 	BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
-    #ifdef SIMULATION
+    // message_filters::Subscriber<sm::Image> rgb_sub(nh, "/kinect2_victor_head/qhd/image_color_rect", 10);
+	// message_filters::Subscriber<sm::Image> depth_sub(nh, "/kinect2_victor_head/qhd/image_depth_rect", 10);
+	// message_filters::Subscriber<sm::CameraInfo> info_sub(nh, "/kinect2_victor_head/qhd/camera_info", 10);
+	#ifdef SIMULATION
     BagSubscriber<stdm::Float32MultiArray> config_sub, dot_sub, ind_sub, truth_sub;
-    #endif
+	#else
+	BagSubscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub, dot_sub;
+    // message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub(nh, "/kinect2_victor_head/qhd/gripper_config", 10);
+	// message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> dot_sub(nh, "/kinect2_victor_head/qhd/dot_config", 10);
+	#endif
 
     cout << "Making buffer" << endl;
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
-
+	
+	#ifdef NOUSE
     const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
+	#endif
 
     std::vector<std::string> topics;
     #ifdef SIMULATION
@@ -641,9 +660,9 @@ int main(int argc, char* argv[])
     topics.push_back(std::string("/kinect2_victor_head/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2_victor_head/qhd/image_depth_rect"));
     topics.push_back(std::string("/kinect2_victor_head/qhd/camera_info"));
-    topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_velocity"));
-    topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_info"));
     topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_config"));
+    topics.push_back(std::string("/kinect2_victor_head/qhd/dot_config"));
+    // topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_info"));
 	topics.push_back(std::string("/left_arm/gripper_status"));
 	topics.push_back(std::string("/right_arm/gripper_status"));
 	#endif
@@ -652,7 +671,7 @@ int main(int argc, char* argv[])
     #ifdef SIMULATION
     auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
     #else
-    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/";
+    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/09_19_2020/";
     #endif
     rosbag::Bag bag(folder + bagfile + ".bag", rosbag::bagmode::Read);
     rosbag::View view(bag, rosbag::TopicQuery(topics));
@@ -660,10 +679,13 @@ int main(int argc, char* argv[])
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
     // #ifndef SIMULATION
-    auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
-            rgb_sub, depth_sub, info_sub, 25);
-    sync.registerCallback(boost::bind(&callback, _1, _2, _3));
+    // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped>(
+    //        rgb_sub, depth_sub, info_sub, config_sub, dot_sub, 25);
+	// TODO: check queue size of sync or approx sync
+	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub);
+    sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5));
     // #endif
+	// ros::spin();
 
     for(rosbag::MessageInstance const& m: view)
     {
@@ -797,16 +819,49 @@ int main(int argc, char* argv[])
             }
         }
         #endif
+		#else
+		// topics in exp bagfile
+		else if (m.getTopic() == topics[3])
+		{
+			auto info = m.instantiate<cdcpd_ros::Float32MultiArrayStamped>();
+            if (info != nullptr)
+            {
+				config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+		}
+		else if (m.getTopic() == topics[4])
+		{
+			auto info = m.instantiate<cdcpd_ros::Float32MultiArrayStamped>();
+            if (info != nullptr)
+            {
+                dot_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+		}
         #endif
         else
         {
-            cerr << "Invalid topic: " << m.getTopic() << endl;
-            exit(1);
+            // cerr << "Invalid topic: " << m.getTopic() << endl;
+            // exit(1);
         }
     }
     bag.close();
 
-    auto color_iter = color_images.cbegin();
+    cout << "rgb images size: " << color_images.size() << endl;
+    cout << "depth images size: " << depth_images.size() << endl;
+    cout << "camera infos size: " << camera_infos.size() << endl;
+	cout << "config size: " << grippers_config.size() << endl;
+    cout << "velocity size: " << grippers_dot.size() << endl;
+
+	#ifdef NOUSE
+	auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
     auto info_iter = camera_infos.cbegin();
     #ifdef SIMULATION
@@ -815,10 +870,6 @@ int main(int argc, char* argv[])
     auto ind_iter = grippers_ind.cbegin();
     auto truth_iter = ground_truth.cbegin();
     #endif
-
-    cout << "rgb images size: " << color_images.size() << endl;
-    cout << "depth images size: " << depth_images.size() << endl;
-    cout << "camera infos size: " << camera_infos.size() << endl;
 
     // Used to republish the images at the current timestamp for other usage
     // Exits at the end of the if statement
@@ -869,7 +920,6 @@ int main(int argc, char* argv[])
         return EXIT_SUCCESS;
     }
 
-    #ifdef SIMULATION 
     #ifdef SHAPE_COMP
 	obsParam obstacle_param;
 	obstacle_param.verts = Float32MultiArrayPtr2MatrixXf(verts_ptr);
@@ -877,8 +927,8 @@ int main(int argc, char* argv[])
 	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr);
     #endif
 
-    auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter); cout << "793" << endl;
-    std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh); cout << "794" << endl;
+    auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
+    std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
     double translation_dir_deformability = 10.0;
     double translation_dis_deformability = 10.0;
     double rotation_deformability = 10.0;
@@ -897,10 +947,6 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring);
-    cout << "811" << endl;
-    #else
-    CDCPD cdcpd(template_cloud, template_edges, false, alpha, beta, lambda, k_spring);
-    #endif
 
     #ifdef COMP
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_constrain = Matrix3Xf2pcptr(template_vertices);
@@ -1611,6 +1657,7 @@ int main(int argc, char* argv[])
         #endif
         ++frame;
     }
+	#endif
 
     cout << "Test ended" << endl;
 
