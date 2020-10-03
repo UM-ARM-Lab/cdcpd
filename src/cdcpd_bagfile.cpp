@@ -39,7 +39,9 @@
 #include <cdcpd/optimizer.h>
 
 #include <cdcpd_ros/Float32MultiArrayStamped.h>
-#include <cdcpd_ros/Robotiq3FingerStatus.h>
+#include <victor_hardware_interface/Robotiq3FingerStatus_sync.h>
+#include <victor_hardware_interface/Robotiq3FingerStatus.h>
+
 
 using std::cout;
 using std::endl;
@@ -80,8 +82,8 @@ typedef message_filters::sync_policies::ApproximateTime<sm::Image,
                                                         sm::CameraInfo,
 														cdcpd_ros::Float32MultiArrayStamped,
 														cdcpd_ros::Float32MultiArrayStamped,
-														cdcpd_ros::Robotiq3FingerStatus,
-														cdcpd_ros::Robotiq3FingerStatus> SyncPolicy;
+														victor_hardware_interface::Robotiq3FingerStatus_sync,
+														victor_hardware_interface::Robotiq3FingerStatus_sync> SyncPolicy;
 
 
 
@@ -99,8 +101,8 @@ stdm::Float32MultiArray::ConstPtr faces_ptr;
 #else
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_config;
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_dot;
-std::vector<cdcpd_ros::Robotiq3FingerStatus::ConstPtr> l_status;
-std::vector<cdcpd_ros::Robotiq3FingerStatus::ConstPtr> r_status;
+std::vector<victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr> l_status;
+std::vector<victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr> r_status;
 // stdm::Float32MultiArray::ConstPtr verts_ptr;
 // stdm::Float32MultiArray::ConstPtr normals_ptr;
 // stdm::Float32MultiArray::ConstPtr faces_ptr;
@@ -138,14 +140,36 @@ public:
     }
 };
 
+// static victor_hardware_interface::Robotiq3FingerStatus::ConstPtr gripper_status_sync_to_origin(
+// 	const victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr sync)
+// {
+// 	victor_hardware_interface::Robotiq3FingerStatus origin;
+// 	origin.header = sync->header;
+// 	origin.finger_a_status = sync->finger_a_status;
+// 	return std::make_shared<victor_hardware_interface::Robotiq3FingerStatus> (origin);
+// }
+
+static victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr gripper_status_origin_to_sync(
+	const victor_hardware_interface::Robotiq3FingerStatus::ConstPtr origin, int diff)
+{
+	victor_hardware_interface::Robotiq3FingerStatus_sync sync;
+	sync.header = origin->header;
+	sync.header.stamp.sec += diff;
+	sync.finger_a_status = origin->finger_a_status;
+	victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr syncptr(new victor_hardware_interface::Robotiq3FingerStatus_sync(sync));
+	cout << (syncptr->header).stamp << endl;
+	return syncptr;
+	// return std::make_shared<victor_hardware_interface::Robotiq3FingerStatus_sync> (sync const);
+}
+
 void callback(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
     const sm::CameraInfo::ConstPtr &cam_info,
     const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_config,
     const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_dot,
-	const cdcpd_ros::Robotiq3FingerStatus::ConstPtr &l_s,
-	const cdcpd_ros::Robotiq3FingerStatus::ConstPtr &r_s)
+	const victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr &l_s,
+	const victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr &r_s)
 {
     color_images.push_back(rgb_img);
     depth_images.push_back(depth_img);
@@ -637,7 +661,7 @@ int main(int argc, char* argv[])
     BagSubscriber<stdm::Float32MultiArray> config_sub, dot_sub, ind_sub, truth_sub;
 	#else
 	BagSubscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub, dot_sub;
-	BagSubscriber<cdcpd_ros::Robotiq3FingerStatus> l_sub, r_sub;
+	BagSubscriber<victor_hardware_interface::Robotiq3FingerStatus_sync> l_sub, r_sub;
     // message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub(nh, "/kinect2_victor_head/qhd/gripper_config", 10);
 	// message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> dot_sub(nh, "/kinect2_victor_head/qhd/dot_config", 10);
 	#endif
@@ -690,9 +714,8 @@ int main(int argc, char* argv[])
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
     // #ifndef SIMULATION
-    // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped>(
-    //        rgb_sub, depth_sub, info_sub, config_sub, dot_sub, 25);
-	// TODO: check queue size of sync or approx sync
+    // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped, victor_hardware_interface::Robotiq3FingerStatus, victor_hardware_interface::Robotiq3FingerStatus>(
+    //        rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub, 25);
 	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub);
     sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
     // #endif
@@ -858,10 +881,10 @@ int main(int argc, char* argv[])
 		}
 		else if (m.getTopic() == topics[5])
 		{
-			auto info = m.instantiate<cdcpd_ros::Robotiq3FingerStatus>();
+			auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
             if (info != nullptr)
             {
-                l_sub.newMessage(info);
+                l_sub.newMessage(gripper_status_origin_to_sync(info, -14564));
             }
             else
             {
@@ -870,10 +893,10 @@ int main(int argc, char* argv[])
 		}
 		else if (m.getTopic() == topics[6])
 		{
-			auto info = m.instantiate<cdcpd_ros::Robotiq3FingerStatus>();
+			auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
             if (info != nullptr)
             {
-                r_sub.newMessage(info);
+                r_sub.newMessage(gripper_status_origin_to_sync(info, -15097));
             }
             else
             {

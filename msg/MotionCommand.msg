@@ -1,5 +1,0 @@
-cdcpd_ros/JointValueQuantity joint_position
-cdcpd_ros/JointValueQuantity joint_velocity
-cdcpd_ros/ControlMode control_mode
-geometry_msgs/Pose cartesian_pose
-std_msgs/Header header

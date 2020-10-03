@@ -1,4 +1,0 @@
-cdcpd_ros/CartesianValueQuantity max_path_deviation
-cdcpd_ros/CartesianValueQuantity max_cartesian_velocity
-cdcpd_ros/CartesianValueQuantity max_control_force
-bool stop_on_max_control_force

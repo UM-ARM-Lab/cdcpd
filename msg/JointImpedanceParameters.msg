@@ -1,2 +1,0 @@
-cdcpd_ros/JointValueQuantity joint_stiffness
-cdcpd_ros/JointValueQuantity joint_damping

@@ -1,3 +1,0 @@
-float64 joint_relative_velocity
-float64 joint_relative_acceleration
-float64 override_joint_acceleration

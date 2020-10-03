@@ -36,6 +36,7 @@ find_package(catkin REQUIRED COMPONENTS
   arc_utilities
   message_generation
   cdcpd
+  victor_hardware_interface
 )
 find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
@@ -43,23 +44,6 @@ find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 add_message_files(
   FILES
   Float32MultiArrayStamped.msg
-  CartesianControlModeLimits.msg
-  CartesianImpedanceParameters.msg
-  CartesianPathExecutionParameters.msg
-  CartesianValueQuantity.msg
-  ControlMode.msg
-  ControlModeParameters.msg
-  GraspStatus.msg
-  JointImpedanceParameters.msg
-  JointPathExecutionParameters.msg
-  JointValueQuantity.msg
-  MotionCommand.msg
-  MotionStatus.msg
-  Robotiq3FingerActuatorCommand.msg
-  Robotiq3FingerActuatorStatus.msg
-  Robotiq3FingerCommand.msg
-  Robotiq3FingerObjectStatus.msg
-  Robotiq3FingerStatus.msg
 )
 
 generate_messages(
