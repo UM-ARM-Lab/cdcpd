@@ -36,21 +36,21 @@
 #define ENTIRE
 #endif
 
-// #ifndef ROPE
-// #define ROPE
-// #endif
+#ifndef ROPE
+#define ROPE
+#endif
 
 // #ifndef COMP
 // #define COMP
 // #endif
 
-#ifndef COMP_PRED1
-#define COMP_PRED1
-#endif
+// #ifndef COMP_PRED1
+// #define COMP_PRED1
+// #endif
 
-#ifndef COMP_PRED2
-#define COMP_PRED2
-#endif
+// #ifndef COMP_PRED2
+// #define COMP_PRED2
+// #endif
 
 // #ifndef CPDLOG
 // #define CPDLOG
@@ -72,9 +72,9 @@
 #define PREDICT
 #endif
 
-#ifndef COMP_NOPRED
-#define COMP_NOPRED
-#endif
+// #ifndef COMP_NOPRED
+// #define COMP_NOPRED
+// #endif
 
 // #ifndef SHAPE_COMP
 // #define SHAPE_COMP
@@ -122,7 +122,7 @@ public:
 
     struct FixedPoint {
         Eigen::Vector3f position;
-        int template_index;
+       int template_index;
     };
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
@@ -135,7 +135,18 @@ public:
           const Eigen::MatrixXi& gripper_idx,
           #endif
           #ifdef SHAPE_COMP
-		      const obsParam& obs_param,
+		  const obsParam& obs_param,
+          #endif
+          const bool _use_recovery = true,
+          const double alpha = 0.5,
+          const double beta = 1.0,
+          const double lambda = 1.0,
+          const double k = 100.0);
+	
+	CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+          const Eigen::Matrix2Xi& _template_edges,
+          #ifdef SHAPE_COMP
+		  const obsParam& obs_param,
           #endif
           const bool _use_recovery = true,
           const double alpha = 0.5,
@@ -151,6 +162,27 @@ public:
 #ifdef PREDICT
                       const smmap::AllGrippersSinglePoseDelta& q_dot,
                       const smmap::AllGrippersSinglePose& q_config,
+#endif
+                      const bool self_intersection = true,
+                      const bool interation_constrain = true,
+                      const bool is_prediction = true,
+					  const int pred_choice = 0,
+                      const std::vector<FixedPoint>& fixed_points = {});
+
+
+    Output operator()(const cv::Mat& rgb, // RGB image
+                      const cv::Mat& depth, // Depth image
+                      const cv::Mat& mask,
+                      const cv::Matx33d& intrinsics,
+                      const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+#ifdef PREDICT
+                      const smmap::AllGrippersSinglePoseDelta& q_dot,
+                      const smmap::AllGrippersSinglePose& q_config,
+					  const std::vector<bool> is_grasped,
+				  	  std::shared_ptr<ros::NodeHandle> nh,
+				  	  const double translation_dir_deformability,
+				  	  const double translation_dis_deformability,
+				      const double rotation_deformability,
 #endif
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
@@ -226,7 +258,8 @@ private:
     // std::vector<Eigen::MatrixXf> Q;
     double last_sigma2;
     #ifdef PREDICT
-    const Eigen::MatrixXi& gripper_idx;
+    Eigen::MatrixXi gripper_idx;
+	std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
     #endif
     #ifdef SHAPE_COMP
 	const obsParam obs_param;

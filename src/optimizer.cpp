@@ -562,7 +562,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         model.set("ScaleFlag", "0");
 		// model.set("DualReductions", 0);
         model.set("FeasibilityTol", "0.01");
-		model.set("OutputFlag", "1");
+		// model.set("OutputFlag", "1");
 
         // Add the vars to the model
         {
