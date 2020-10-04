@@ -1252,8 +1252,8 @@ int main(int argc, char* argv[])
         cv::Mat mask1;
         cv::Mat mask2;
         cv::Mat hsv_mask;
-        cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-        cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+        cv::inRange(color_hsv, cv::Scalar(0, 0.5, 0.5), cv::Scalar(20, 1.0, 1.0), mask1);
+        cv::inRange(color_hsv, cv::Scalar(340, 0.5, 0.5), cv::Scalar(360, 1.0, 1.0), mask2);
         bitwise_or(mask1, mask2, hsv_mask);
         #else
         // Purple
