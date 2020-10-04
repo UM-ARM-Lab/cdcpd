@@ -157,7 +157,7 @@ static victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr gripper_st
 	sync.header.stamp.sec += diff;
 	sync.finger_a_status = origin->finger_a_status;
 	victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr syncptr(new victor_hardware_interface::Robotiq3FingerStatus_sync(sync));
-	cout << (syncptr->header).stamp << endl;
+	// cout << (syncptr->header).stamp << endl;
 	return syncptr;
 	// return std::make_shared<victor_hardware_interface::Robotiq3FingerStatus_sync> (sync const);
 }
@@ -221,6 +221,58 @@ Matrix3Xf toGroundTruth(
     }
 
     return one_frame_truth_eigen;
+}
+
+std::vector<bool> toGripperStatus(
+	const victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr &l_ptr,
+	const victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr &r_ptr)
+{
+	std::vector<bool> gripper_status;
+	gripper_status.resize(2);
+	gripper_status[0] = (l_ptr->finger_a_status).position > 0.4;
+	gripper_status[1] = (r_ptr->finger_a_status).position > 0.4;
+	return gripper_status;
+}
+
+std::tuple<AllGrippersSinglePose,
+           AllGrippersSinglePoseDelta> toGripperConfig(
+    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_config,
+    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_dot)
+{
+    uint32_t num_gripper = ((g_config->data).layout).dim[0].size;
+    uint32_t num_config = ((g_config->data).layout).dim[1].size;
+    uint32_t num_dot = ((g_dot->data).layout).dim[1].size;
+
+    std::cout << "num of gripper " << num_gripper << std::endl;
+    std::cout << "num of config " << num_config << std::endl;
+    std::cout << "num of gripper dot " << num_dot << std::endl;
+
+    AllGrippersSinglePose one_frame_config;
+    AllGrippersSinglePoseDelta one_frame_velocity;
+
+    for (uint32_t g = 0; g < num_gripper; ++g)
+    {
+        Isometry3d one_config;
+        Vector6d one_velocity;
+
+        for (uint32_t row = 0; row < 4; ++row)
+        {
+            for (uint32_t col = 0; col < 4; ++col)
+            {
+                one_config(row, col) = double(((g_config->data).data)[num_config*g + row*4 + col]);
+            }
+        }
+
+        for (uint32_t i = 0; i < num_dot; ++i)
+        {
+            one_velocity(i) = double(((g_dot->data).data)[num_dot*g + i]);
+        }
+
+        one_frame_config.push_back(one_config);
+        one_frame_velocity.push_back(one_velocity);
+    }
+
+    return {one_frame_config, one_frame_velocity};
 }
 
 std::tuple<AllGrippersSinglePose,
@@ -387,16 +439,13 @@ void test_lle() {
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
     #ifdef ROPE
-
-    float left_x = -0.5f;
-    float left_y = -0.5f;
-    float left_z = 3.0f;
-
-    float right_x = 0.5f;
-    float right_y = -0.5f;
-    float right_z = 3.0f;
+	// This is for simulation
+    // float left_x = -0.5f; float left_y = -0.5f; float left_z = 3.0f; float right_x = 0.5f; float right_y = -0.5f; float right_z = 3.0f;
     
-    int points_on_rope = 50;
+	// rope_edge_cover_1
+	float left_x = -0.5f; float left_y = -0.0f; float left_z = 1.0f; float right_x = 0.3f; float right_y = -0.0f; float right_z = 1.0f;
+    
+    int points_on_rope = 40;
 
     MatrixXf vertices(3, points_on_rope); // Y^0 in the paper
     vertices.setZero();
@@ -598,16 +647,16 @@ int main(int argc, char* argv[])
 
     auto [template_vertices, template_edges] = init_template();
 
-	cout << template_vertices << endl;
-    cout << template_edges << endl;
-	#ifdef NOUSE
+	// cout << template_vertices << endl;
+    // cout << template_edges << endl;
+	
 	#ifdef ROPE
     int points_on_rope = 50;
     #else
     int cloth_width_num = 20;
     int cloth_height_num = 20;
     #endif
-	#endif
+	
 	
 	std::string cleancmd = "exec rm -rf " + workingDir + "/*";
 	if (system(cleancmd.c_str()) != 0) {
@@ -670,12 +719,12 @@ int main(int argc, char* argv[])
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
 	
-	#ifdef NOUSE
+	
     const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
-	#endif
+	
 
     std::vector<std::string> topics;
     #ifdef SIMULATION
@@ -918,7 +967,7 @@ int main(int argc, char* argv[])
 	cout << "config size: " << grippers_config.size() << endl;
     cout << "velocity size: " << grippers_dot.size() << endl;
 
-	#ifdef NOUSE
+	
 	auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
     auto info_iter = camera_infos.cbegin();
@@ -927,6 +976,11 @@ int main(int argc, char* argv[])
     auto velocity_iter = grippers_dot.cbegin();
     auto ind_iter = grippers_ind.cbegin();
     auto truth_iter = ground_truth.cbegin();
+	#else
+	auto config_iter = grippers_config.cbegin();
+    auto velocity_iter = grippers_dot.cbegin();
+    auto l_iter = l_status.cbegin();
+	auto r_iter = r_status.cbegin();
     #endif
 
     // Used to republish the images at the current timestamp for other usage
@@ -984,7 +1038,8 @@ int main(int argc, char* argv[])
 	obstacle_param.faces = Float32MultiArrayPtr2MatrixXf(faces_ptr);
 	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr);
     #endif
-
+	
+	#ifdef SIMULATION
     auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
     std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
     double translation_dir_deformability = 10.0;
@@ -1005,6 +1060,22 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring);
+	#else
+    std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
+    double translation_dir_deformability = 10.0;
+    double translation_dis_deformability = 10.0;
+    double rotation_deformability = 10.0;
+    CDCPD cdcpd(template_cloud,
+                template_edges,
+                #ifdef SHAPE_COMP
+				obstacle_param,
+                #endif
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
+	#endif
 
     #ifdef COMP
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_constrain = Matrix3Xf2pcptr(template_vertices);
@@ -1147,6 +1218,8 @@ int main(int argc, char* argv[])
         #ifdef SIMULATION
         Matrix3Xf one_frame_truth = toGroundTruth(*truth_iter);
         tie(g_config, g_dot, g_ind) = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
+		#else
+    	auto [g_config, g_dot] = toGripperConfig(*config_iter, *velocity_iter);
         #endif
 
         /// Color filter
@@ -1208,7 +1281,8 @@ int main(int argc, char* argv[])
         std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         template_cloud = out.gurobi_output;
         #else
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, true, true, fixed_points);
+		auto is_grasped = toGripperStatus(*l_iter, *r_iter);
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
         template_cloud = out.gurobi_output;
         #endif
 
@@ -1281,8 +1355,10 @@ int main(int argc, char* argv[])
 			// cout << one_frame_truth << endl;
 			// cout << "cpd phy error" << endl;
 			// cout << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << endl;
+			#ifdef SIMULATION
+				std::ofstream(workingDir + "/error_cpd_physics.txt", std::ofstream::app) << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << " ";
+			#endif
 		}
-		std::ofstream(workingDir + "/error_cpd_physics.txt", std::ofstream::app) << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << " ";
 
 		cpd_phy_pc->header.frame_id = frame_id;
 
@@ -1712,10 +1788,14 @@ int main(int argc, char* argv[])
         ++velocity_iter;
         ++ind_iter;
         ++truth_iter;
+		#else
+        ++config_iter;
+        ++velocity_iter;
+		++l_iter;
+		++r_iter;
         #endif
         ++frame;
     }
-	#endif
 
     cout << "Test ended" << endl;
 
