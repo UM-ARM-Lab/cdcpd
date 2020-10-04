@@ -446,7 +446,10 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     k(_k),
     max_iterations(100), // TODO make configurable?
     kvis(1e3),
-    use_recovery(_use_recovery)
+    use_recovery(_use_recovery),
+	#ifdef PREDICT
+	last_grasp_status({false, false})
+	#endif
     #ifdef SHAPE_COMP
 	, obs_param(_obs_param),
 	mesh(initObstacle(_obs_param))
@@ -1017,7 +1020,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
-        float zeta = 10.0;
+        float zeta = 1.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
@@ -1689,10 +1692,10 @@ CDCPD::Output CDCPD::operator()(
     AllGrippersSinglePose q_config_valid;
         
 	std::vector<int> idx_map;
-	if (is_grasped[0]) {
+	if (is_grasped[0] && !is_grasped[1]) {
 		idx_map = {0};
 	}
-	else if (is_grasped[1]) {
+	else if (is_grasped[1] && !is_grasped[0]) {
 		idx_map = {1};
 	}
 	else if (is_grasped[0] && is_grasped[1]) {
@@ -1707,7 +1710,11 @@ CDCPD::Output CDCPD::operator()(
 	}
 
 	// if a model is not created (i.e. no grasping)
-	if (model == NULL && (is_grasped[0] || is_grasped[1])) {
+	if (!is_grasped[0] && !is_grasped[1]) {
+		deformModel = NULL;
+		model = NULL;
+	}
+	else if (is_grasped != last_grasp_status) {
 		MatrixXi grippers(1, num_gripper);	
 
 		for(int g_idx = 0; g_idx < num_gripper; g_idx++)
@@ -1717,7 +1724,7 @@ CDCPD::Output CDCPD::operator()(
 			MatrixXf::Index minRow, minCol;
   			float min = dist.minCoeff(&minRow, &minCol);
 			cout << "closest point index: " << minCol << endl;
-			grippers(0, idx_map[g_idx]) = int(minCol);
+			grippers(0, g_idx) = int(minCol);
 		}
 
 		gripper_idx = grippers;
@@ -1760,12 +1767,9 @@ CDCPD::Output CDCPD::operator()(
 						nh,
 						translation_dir_deformability,
 						rotation_deformability);
-
 	}
-	else if (!is_grasped[0] && !is_grasped[1]) {
-		deformModel = NULL;
-		model = NULL;
-	}
+	
+	last_grasp_status = is_grasped;
 
     #ifdef PREDICT
     // NOTE: order of P cannot influence delta_P, but influence P+delta_P

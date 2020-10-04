@@ -260,7 +260,10 @@ private:
     #ifdef PREDICT
     Eigen::MatrixXi gripper_idx;
 	std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
-    #endif
+	#endif
+	#ifndef SIMULATION
+    std::vector<bool> last_grasp_status;
+	#endif
     #ifdef SHAPE_COMP
 	const obsParam obs_param;
 	Mesh mesh;
