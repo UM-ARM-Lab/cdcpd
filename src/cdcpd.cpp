@@ -1020,7 +1020,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
-        float zeta = 1.0;
+        float zeta = 2.0;
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
