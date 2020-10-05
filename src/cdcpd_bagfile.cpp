@@ -470,7 +470,7 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
     float right_up_x = 0.19f;
     float left_bottom_y = -0.19f;
     float left_bottom_x = -0.19f;
-    float z = 2.0f;
+    float z = 1.0f;
 
     Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
     Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
@@ -1282,7 +1282,7 @@ int main(int argc, char* argv[])
         template_cloud = out.gurobi_output;
         #else
 		auto is_grasped = toGripperStatus(*l_iter, *r_iter);
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 2, fixed_points);
         template_cloud = out.gurobi_output;
         #endif
 
