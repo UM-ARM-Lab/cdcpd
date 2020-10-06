@@ -130,6 +130,37 @@ void to_file(const std::string fname, const cv::Mat m) {
     ofs.close();
 }
 
+vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
+	vm::Marker order;
+    order.header.frame_id = frame_id;
+    order.header.stamp = ros::Time();
+	order.ns = "line_order";
+	order.action = vm::Marker::ADD;
+	order.pose.orientation.w = 1.0;
+	order.id = 1;
+	order.scale.x = 0.002;
+	order.color.r = 1.0;
+	order.color.a = 1.0;
+
+    order.type = vm::Marker::LINE_LIST;
+	for (int e = 0; e < edges.cols(); e++) {
+		geometry_msgs::Point pt1;
+		geometry_msgs::Point pt2;
+
+		pt1.x = pc->points[edges(0, e)].x;
+		pt1.y = pc->points[edges(0, e)].y;
+		pt1.z = pc->points[edges(0, e)].z;
+		
+		pt2.x = pc->points[edges(1, e)].x;
+		pt2.y = pc->points[edges(1, e)].y;
+		pt2.z = pc->points[edges(1, e)].z;
+
+		order.points.push_back(pt1);
+		order.points.push_back(pt2);
+	}
+	return order;
+}
+
 template <class M>
 class BagSubscriber : public message_filters::SimpleFilter<M>
 {
@@ -464,13 +495,9 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 
     #else
 
-    int num_width = 20;
-    int num_height = 20;
-    float right_up_y = 0.19f;
-    float right_up_x = 0.19f;
-    float left_bottom_y = -0.19f;
-    float left_bottom_x = -0.19f;
-    float z = 1.0f;
+	// This is for simulation
+    // int num_width = 20; int num_height = 20; float right_up_y = 0.19f; float right_up_x = 0.19f; float left_bottom_y = -0.19f; float left_bottom_x = -0.19f; float z = 2.0f;
+    int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
 
     Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
     Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
@@ -653,8 +680,8 @@ int main(int argc, char* argv[])
 	#ifdef ROPE
     int points_on_rope = 50;
     #else
-    int cloth_width_num = 20;
-    int cloth_height_num = 20;
+    // int cloth_width_num = 20;
+    // int cloth_height_num = 20;
     #endif
 	
 	
@@ -1282,6 +1309,10 @@ int main(int argc, char* argv[])
         template_cloud = out.gurobi_output;
         #else
 		auto is_grasped = toGripperStatus(*l_iter, *r_iter);
+		for (auto& dot: g_dot)
+		{
+			dot = dot/100;
+		}
         auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 2, fixed_points);
         template_cloud = out.gurobi_output;
         #endif
@@ -1537,193 +1568,10 @@ int main(int argc, char* argv[])
 
         // draw line order
         {
-            vm::Marker order;
-            order.header.frame_id = frame_id;
-            order.header.stamp = ros::Time();
-            order.ns = "line_order";
-            order.action = vm::Marker::ADD;
-            order.pose.orientation.w = 1.0;
-            order.id = 1;
-            order.scale.x = 0.002;
-            order.color.r = 1.0;
-            order.color.a = 1.0;
-            auto pc_iter = out.gurobi_output->begin();
-
-            #ifdef COMP
-            vm::Marker order_without_constrain;
-            order_without_constrain.header.frame_id = frame_id;
-            order_without_constrain.header.stamp = ros::Time();
-            order_without_constrain.ns = "line_order_comp";marker.mesh resource
-            order_without_constrain.action = vm::Marker::ADD;
-            order_without_constrain.pose.orientation.w = 1.0;
-            order_without_constrain.id = 2;
-            order_without_constrain.scale.x = 0.002;
-            order_without_constrain.color.b = 1.0;
-            order_without_constrain.color.a = 1.0;
-            auto pc_iter_comp = out_without_constrain.gurobi_output->begin();
-            #endif
-
-            #ifdef ROPE
-            // rope order
-            order.type = vm::Marker::LINE_STRIP;
-            for (int i = 0; i < points_on_rope; ++i, ++pc_iter) {
-                geometry_msgs::Point p;
-                p.x = pc_iter->x;
-                p.y = pc_iter->y;
-                p.z = pc_iter->z;
-                order.points.push_back(p);
-            }
-
-            #ifdef COMP
-            order_without_constrain.type = vm::Marker::LINE_STRIP;
-            for (int i = 0; i < points_on_rope; ++i, ++pc_iter_comp) {
-                geometry_msgs::Point p;
-                p.x = pc_iter_comp->x;
-                p.y = pc_iter_comp->y;
-                p.z = pc_iter_comp->z;
-
-                order_without_constrain.points.push_back(p);
-            }
-            #endif
-            #else
-            // cloth order
-            order.type = vm::Marker::LINE_LIST;
-            for (int row = 0; row < cloth_height_num; ++row) {
-                for (int col = 0; col < cloth_width_num; ++col) {
-                    if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
-                        geometry_msgs::Point cur;
-                        geometry_msgs::Point right;
-                        geometry_msgs::Point below;
-                        int cur_ind = col*cloth_height_num + row;
-                        int right_ind = cur_ind + cloth_height_num;
-                        int below_ind = cur_ind + 1;
-
-                        cur.x = (pc_iter+cur_ind)->x;
-                        cur.y = (pc_iter+cur_ind)->y;
-                        cur.z = (pc_iter+cur_ind)->z;
-
-                        right.x = (pc_iter+right_ind)->x;
-                        right.y = (pc_iter+right_ind)->y;
-                        right.z = (pc_iter+right_ind)->z;
-
-                        below.x = (pc_iter+below_ind)->x;
-                        below.y = (pc_iter+below_ind)->y;
-                        below.z = (pc_iter+below_ind)->z;
-
-                        order.points.push_back(cur);
-                        order.points.push_back(right);
-
-                        order.points.push_back(cur);
-                        order.points.push_back(below);
-                    }
-                    else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
-                        geometry_msgs::Point cur;
-                        geometry_msgs::Point right;
-                        int cur_ind = col*cloth_height_num + row;
-                        int right_ind = cur_ind + cloth_height_num;
-
-                        cur.x = (pc_iter+cur_ind)->x;
-                        cur.y = (pc_iter+cur_ind)->y;
-                        cur.z = (pc_iter+cur_ind)->z;
-
-                        right.x = (pc_iter+right_ind)->x;
-                        right.y = (pc_iter+right_ind)->y;
-                        right.z = (pc_iter+right_ind)->z;
-
-                        order.points.push_back(cur);
-                        order.points.push_back(right);
-                    }
-                    else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
-                        geometry_msgs::Point cur;
-                        geometry_msgs::Point below;
-                        int cur_ind = col*cloth_height_num + row;
-                        int below_ind = cur_ind + 1;
-
-                        cur.x = (pc_iter+cur_ind)->x;
-                        cur.y = (pc_iter+cur_ind)->y;
-                        cur.z = (pc_iter+cur_ind)->z;
-
-                        below.x = (pc_iter+below_ind)->x;
-                        below.y = (pc_iter+below_ind)->y;
-                        below.z = (pc_iter+below_ind)->z;
-
-                        order.points.push_back(cur);
-                        order.points.push_back(below);
-                    }
-                }
-            }
-
-            #ifdef COMP
-                    order_without_constrain.type = vm::Marker::LINE_LIST;
-                    for (int row = 0; row < cloth_height_num; ++row) {
-                        for (int col = 0; col < cloth_width_num; ++col) {
-                            if (row != cloth_height_num - 1 && col != cloth_width_num - 1) {
-                                geometry_msgs::Point cur;
-                                geometry_msgs::Point right;
-                                geometry_msgs::Point below;
-                                int cur_ind = col*cloth_height_num + row;
-                                int right_ind = cur_ind + cloth_height_num;
-                                int below_ind = cur_ind + 1;
-
-                                cur.x = (pc_iter_comp+cur_ind)->x;
-                                cur.y = (pc_iter_comp+cur_ind)->y;
-                                cur.z = (pc_iter_comp+cur_ind)->z;
-
-                                right.x = (pc_iter_comp+right_ind)->x;
-                                right.y = (pc_iter_comp+right_ind)->y;
-                                right.z = (pc_iter_comp+right_ind)->z;
-
-                                below.x = (pc_iter_comp+below_ind)->x;
-                                below.y = (pc_iter_comp+below_ind)->y;
-                                below.z = (pc_iter_comp+below_ind)->z;
-
-                                order_without_constrain.points.push_back(cur);
-                                order_without_constrain.points.push_back(right);
-
-                                order_without_constrain.points.push_back(cur);
-                                order_without_constrain.points.push_back(below);
-                            }
-                            else if (row == cloth_height_num - 1 && col != cloth_width_num - 1) {
-                                geometry_msgs::Point cur;
-                                geometry_msgs::Point right;
-                                int cur_ind = col*cloth_height_num + row;
-                                int right_ind = cur_ind + cloth_height_num;
-
-                                cur.x = (pc_iter_comp+cur_ind)->x;
-                                cur.y = (pc_iter_comp+cur_ind)->y;
-                                cur.z = (pc_iter_comp+cur_ind)->z;
-
-                                right.x = (pc_iter_comp+right_ind)->x;
-                                right.y = (pc_iter_comp+right_ind)->y;
-                                right.z = (pc_iter_comp+right_ind)->z;
-
-                                order_without_constrain.points.push_back(cur);
-                                order_without_constrain.points.push_back(right);
-                            }
-                            else if (row != cloth_height_num - 1 && col == cloth_width_num - 1) {
-                                geometry_msgs::Point cur;
-                                geometry_msgs::Point below;
-                                int cur_ind = col*cloth_height_num + row;
-                                int below_ind = cur_ind + 1;
-
-                                cur.x = (pc_iter_comp+cur_ind)->x;
-                                cur.y = (pc_iter_comp+cur_ind)->y;
-                                cur.z = (pc_iter_comp+cur_ind)->z;
-
-                                below.x = (pc_iter_comp+below_ind)->x;
-                                below.y = (pc_iter_comp+below_ind)->y;
-                                below.z = (pc_iter_comp+below_ind)->z;
-
-                                order_without_constrain.points.push_back(cur);
-                                order_without_constrain.points.push_back(below);
-                            }
-                        }
-                    }
-            #endif
-            #endif
-
+            vm::Marker order = pc_to_marker(out.gurobi_output, template_edges, frame_id);
             order_pub.publish(order);
             #ifdef COMP
+            vm::Marker order_without_constrain = pc_to_marker(out.gurobi_output, template_edges);
             order_without_constrain_pub.publish(order_without_constrain);
             #endif
         }
