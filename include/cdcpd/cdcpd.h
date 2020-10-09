@@ -6,6 +6,8 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/io/pcd_io.h>
 
+#include <arc_utilities/ros_helpers.hpp>
+
 #include <smmap/constraint_jacobian_model.h>
 #include <smmap/diminishing_rigidity_model.h>
 #include <smmap_utilities/grippers.h>
@@ -36,20 +38,12 @@
 #define ENTIRE
 #endif
 
-// #ifndef ROPE
-// #define ROPE
-// #endif
+#ifndef ROPE
+#define ROPE
+#endif
 
 // #ifndef COMP
 // #define COMP
-// #endif
-
-// #ifndef COMP_PRED1
-// #define COMP_PRED1
-// #endif
-
-// #ifndef COMP_PRED2
-// #define COMP_PRED2
 // #endif
 
 // #ifndef CPDLOG
@@ -66,14 +60,6 @@
 
 // #ifndef SIMULATION
 // #define SIMULATION
-// #endif
-
-#ifndef PREDICT
-#define PREDICT
-#endif
-
-// #ifndef COMP_NOPRED
-// #define COMP_NOPRED
 // #endif
 
 // #ifndef SHAPE_COMP
@@ -114,9 +100,7 @@ public:
         pcl::PointCloud<pcl::PointXYZ>::Ptr masked_point_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_output;
-        #ifdef PREDICT
         pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_predict;
-        #endif
         pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
     };
 
@@ -127,13 +111,11 @@ public:
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
-          #ifdef PREDICT
           std::shared_ptr<ros::NodeHandle> nh,
           const double translation_dir_deformability,
           const double translation_dis_deformability,
           const double rotation_deformability,
           const Eigen::MatrixXi& gripper_idx,
-          #endif
           #ifdef SHAPE_COMP
 		  const obsParam& obs_param,
           #endif
@@ -141,7 +123,8 @@ public:
           const double alpha = 0.5,
           const double beta = 1.0,
           const double lambda = 1.0,
-          const double k = 100.0);
+          const double k = 100.0,
+		  const float zeta = 10.0);
 	
 	CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
@@ -152,17 +135,16 @@ public:
           const double alpha = 0.5,
           const double beta = 1.0,
           const double lambda = 1.0,
-          const double k = 100.0);
+          const double k = 100.0,
+		  const float zeta = 10.0);
 
     Output operator()(const cv::Mat& rgb, // RGB image
                       const cv::Mat& depth, // Depth image
                       const cv::Mat& mask,
                       const cv::Matx33d& intrinsics,
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-#ifdef PREDICT
                       const smmap::AllGrippersSinglePoseDelta& q_dot,
                       const smmap::AllGrippersSinglePose& q_config,
-#endif
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
                       const bool is_prediction = true,
@@ -175,7 +157,6 @@ public:
                       const cv::Mat& mask,
                       const cv::Matx33d& intrinsics,
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-#ifdef PREDICT
                       const smmap::AllGrippersSinglePoseDelta& q_dot,
                       const smmap::AllGrippersSinglePose& q_config,
 					  const std::vector<bool> is_grasped,
@@ -183,12 +164,23 @@ public:
 				  	  const double translation_dir_deformability,
 				  	  const double translation_dis_deformability,
 				      const double rotation_deformability,
-#endif
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
                       const bool is_prediction = true,
 					  const int pred_choice = 0,
                       const std::vector<FixedPoint>& fixed_points = {});
+    
+	Output operator()(const cv::Mat& rgb, // RGB image
+                      const cv::Mat& depth, // Depth image
+                      const cv::Mat& mask,
+                      const cv::Matx33d& intrinsics,
+                      const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                      const bool self_intersection = true,
+                      const bool interation_constrain = true,
+                      const bool is_prediction = true,
+					  const int pred_choice = 0,
+                      const std::vector<FixedPoint>& fixed_points = {});
+
 
 private:
     Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf& vertices,
@@ -225,7 +217,7 @@ private:
                          const Eigen::Matrix3Xf& Y,
                          const cv::Mat& depth,
                          const cv::Mat& mask);
-#ifdef PREDICT
+ 
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
                              const smmap::AllGrippersSinglePoseDelta& q_dot,
                              const smmap::AllGrippersSinglePose& q_config,
@@ -233,7 +225,6 @@ private:
 
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
 	std::shared_ptr<smmap::DiminishingRigidityModel> deformModel;
-#endif
 
     PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
@@ -254,13 +245,12 @@ private:
     const double k;
     const int max_iterations;
     const float kvis;
+	const float zeta;
     bool use_recovery;
     // std::vector<Eigen::MatrixXf> Q;
     double last_sigma2;
-    #ifdef PREDICT
     Eigen::MatrixXi gripper_idx;
 	std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
-	#endif
 	#ifndef SIMULATION
     std::vector<bool> last_grasp_status;
 	#endif

@@ -19,6 +19,7 @@
 #include <sdf_tools/collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/ros_helpers.hpp>
 #include <fgt.hpp>
 
 #include "cdcpd/obs_util.h"
@@ -304,13 +305,11 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
 
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi& _template_edges,
-             #ifdef PREDICT
              std::shared_ptr<ros::NodeHandle> nh,
              const double translation_dir_deformability,
              const double translation_dis_deformability,
              const double rotation_deformability,
              const Eigen::MatrixXi& grippers,
-             #endif
              #ifdef SHAPE_COMP
 			 const obsParam& _obs_param,
              #endif
@@ -318,7 +317,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _alpha,
              const double _beta,
              const double _lambda,
-             const double _k) :
+             const double _k,
+			 const float _zeta) :
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
@@ -337,10 +337,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     k(_k),
     max_iterations(100), // TODO make configurable?
     kvis(1e3),
+	zeta(_zeta),
     use_recovery(_use_recovery),
-    #ifdef PREDICT
     gripper_idx(grippers)
-    #endif
     #ifdef SHAPE_COMP
 	, obs_param(_obs_param),
 	mesh(initObstacle(_obs_param))
@@ -352,7 +351,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
     // Qconstructor(template_edges, Q, original_template.cols());
 
-    #ifdef PREDICT
     // TODO: how to configure nh so that the it can get correct sdf
     // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
     // const auto sdf = smmap::GetEnvironmentSDF(*nh);
@@ -405,7 +403,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 						nh,
 						translation_dir_deformability,
 						rotation_deformability);
-	#endif
 	#ifdef SHAPE_COMP
 	fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
     vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
@@ -427,7 +424,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _alpha,
              const double _beta,
              const double _lambda,
-             const double _k) :
+             const double _k,
+			 const float _zeta) :
     template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
@@ -446,10 +444,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     k(_k),
     max_iterations(100), // TODO make configurable?
     kvis(1e3),
+	zeta(_zeta),
     use_recovery(_use_recovery),
-	#ifdef PREDICT
 	last_grasp_status({false, false})
-	#endif
     #ifdef SHAPE_COMP
 	, obs_param(_obs_param),
 	mesh(initObstacle(_obs_param))
@@ -461,7 +458,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
     // Qconstructor(template_edges, Q, original_template.cols());
 
-    #ifdef PREDICT
     // TODO: how to configure nh so that the it can get correct sdf
     // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
     // const auto sdf = smmap::GetEnvironmentSDF(*nh);
@@ -1020,7 +1016,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 
         // NOTE: lambda means gamma here
         // Corresponding to Eq. (18) in the paper
-        float zeta = 2.0;
+		ros::NodeHandle ph("~");
+        const float zeta = ROSHelpers::GetParam<float>(ph, "zeta", 10.0);
         float lambda = start_lambda;
         MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
@@ -1296,7 +1293,6 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
     return TY;
 }
 
-#ifdef PREDICT
 Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
                          const AllGrippersSinglePoseDelta& q_dot,
                          const AllGrippersSinglePose& q_config,
@@ -1363,8 +1359,6 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd& P,
 		}
 	}
 }
-#endif
-
 
 CDCPD::Output CDCPD::operator()(
         const Mat& rgb,
@@ -1372,10 +1366,8 @@ CDCPD::Output CDCPD::operator()(
         const Mat& mask,
         const cv::Matx33d& intrinsics,
         const PointCloud::Ptr template_cloud,
-        #ifdef PREDICT
         const AllGrippersSinglePoseDelta& q_dot,
         const AllGrippersSinglePose& q_config,
-        #endif
         const bool self_intersection,
         const bool interation_constrain,
         const bool is_prediction,
@@ -1453,7 +1445,6 @@ CDCPD::Output CDCPD::operator()(
     const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
     #endif
 
-    #ifdef PREDICT
     // NOTE: order of P cannot influence delta_P, but influence P+delta_P
     // std::chrono::time_point<std::chrono::system_clock> start, end;
     std::vector<FixedPoint> pred_fixed_points;
@@ -1462,11 +1453,7 @@ CDCPD::Output CDCPD::operator()(
     for (int col = 0; col < gripper_idx.cols(); ++col)
     {
         FixedPoint pt;
-		#ifdef ROPE
-        pt.template_index = gripper_idx(2, col);
-		#else
 		pt.template_index = gripper_idx(0, col);
-		#endif
         pt.position(0) = q_config[col](0, 3);
         pt.position(1) = q_config[col](1, 3);
         pt.position(2) = q_config[col](2, 3);
@@ -1506,10 +1493,6 @@ CDCPD::Output CDCPD::operator()(
         // }
         TY = cpd(X, Y, depth, mask);
     } 
-    #else
-    Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
-    #endif
-
 
     #ifdef DEBUG
     to_file(workingDir + "/cpp_entire_cloud.txt", entire);
@@ -1521,9 +1504,9 @@ CDCPD::Output CDCPD::operator()(
     // Next step: optimization.
     // ???: most likely not 1.0
     #ifdef SHAPE_COMP
-    Optimizer opt(original_template, Y, 1.1, obs_param);
+    Optimizer opt(original_template, Y, 1.0, obs_param);
     #else
-    Optimizer opt(original_template, Y, 1.1);
+    Optimizer opt(original_template, Y, 1.0);
     #endif
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
@@ -1532,54 +1515,13 @@ CDCPD::Output CDCPD::operator()(
     to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
     #endif
 
-    // If we're doing tracking recovery, do that now
-    #ifndef PREDICT
-    if (use_recovery)
-    {
-        std::cout << "matcher size: " << template_matcher.size() << std::endl;
-
-        float cost = smooth_free_space_cost(Y_opt, intrinsics_eigen, depth, mask);
-        std::cout << "cost" << std::endl;
-        std::cout << cost << std::endl;
-
-        if (cost > recovery_cost_threshold && template_matcher.size() > recovery_knn_k)
-        {
-            float best_cost = cost;
-            Matrix3Xf final_tracking_result = Y_opt;
-
-            std::vector<Matrix3Xf> matched_templates = template_matcher.query_template(cloud_downsampled, recovery_knn_k);
-
-            // TODO there's potentially a lot of copying going on here. We should be able to avoid that.
-            for (const Matrix3Xf& templ : matched_templates)
-            {
-                Matrix3Xf proposed_recovery = cpd(cloud_downsampled->getMatrixXfMap().topRows(3), templ, depth, mask);
-                // TODO if we end up being able to disable optimization, we should not call this
-                proposed_recovery = opt(proposed_recovery, template_edges, fixed_points);
-                float proposal_cost = smooth_free_space_cost(proposed_recovery, intrinsics_eigen, depth, mask);
-                if (proposal_cost < best_cost)
-                {
-                    final_tracking_result = proposed_recovery;
-                    best_cost = proposal_cost;
-                }
-            }
-            Y_opt = final_tracking_result;
-        }
-        else
-        {
-            template_matcher.add_template(cloud_downsampled, Y_opt);
-        }
-    }
-    #endif
-
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
     last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
 
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
-    #ifdef PREDICT
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
-    #endif
 
     return CDCPD::Output {
         #ifdef ENTIRE
@@ -1588,9 +1530,7 @@ CDCPD::Output CDCPD::operator()(
         cloud,
         cloud_downsampled,
         cdcpd_cpd,
-        #ifdef PREDICT
         cdcpd_pred,
-        #endif
         cdcpd_out
     };
 }
@@ -1601,7 +1541,6 @@ CDCPD::Output CDCPD::operator()(
         const Mat& mask,
         const cv::Matx33d& intrinsics,
         const PointCloud::Ptr template_cloud,
-        #ifdef PREDICT
         const AllGrippersSinglePoseDelta& q_dot,
         const AllGrippersSinglePose& q_config,
         const std::vector<bool> is_grasped,
@@ -1609,7 +1548,6 @@ CDCPD::Output CDCPD::operator()(
         const double translation_dir_deformability,
         const double translation_dis_deformability,
         const double rotation_deformability,
-		#endif
         const bool self_intersection,
         const bool interation_constrain,
         const bool is_prediction,
@@ -1771,7 +1709,6 @@ CDCPD::Output CDCPD::operator()(
 	
 	last_grasp_status = is_grasped;
 
-    #ifdef PREDICT
     // NOTE: order of P cannot influence delta_P, but influence P+delta_P
     // std::chrono::time_point<std::chrono::system_clock> start, end;
     std::vector<FixedPoint> pred_fixed_points;
@@ -1835,9 +1772,6 @@ CDCPD::Output CDCPD::operator()(
         // }
         TY = cpd(X, Y, depth, mask);
     } 
-    #else
-    Eigen::Matrix3Xf TY = cpd(X, Y, depth, mask);
-    #endif
 
 
     #ifdef DEBUG
@@ -1867,9 +1801,7 @@ CDCPD::Output CDCPD::operator()(
 
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
-    #ifdef PREDICT
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
-    #endif
 
     return CDCPD::Output {
         #ifdef ENTIRE
@@ -1878,9 +1810,163 @@ CDCPD::Output CDCPD::operator()(
         cloud,
         cloud_downsampled,
         cdcpd_cpd,
-        #ifdef PREDICT
         cdcpd_pred,
+        cdcpd_out
+    };
+}
+
+CDCPD::Output CDCPD::operator()(
+        const Mat& rgb,
+        const Mat& depth,
+        const Mat& mask,
+        const cv::Matx33d& intrinsics,
+        const PointCloud::Ptr template_cloud,
+        const bool self_intersection,
+        const bool interation_constrain,
+        const bool is_prediction,
+		const int pred_choice,
+        const std::vector<CDCPD::FixedPoint>& fixed_points)
+{
+    // rgb: CV_8U3C rgb image
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation
+    // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
+    // template_edges: (2, K) matrix corresponding to E in the paper
+    // fixed_points: fixed points during the tracking
+
+    assert(rgb.type() == CV_8UC3);
+    #ifdef SIMULATION
+    assert(depth.type() == CV_32F);
+    #else
+    assert(depth.type() == CV_16U);
+    #endif
+    assert(mask.type() == CV_8U);
+    assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
+
+    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
+
+    // Useful utility for outputting an Eigen matrix to a file
+    auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
+        std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
+    };
+
+    Eigen::Matrix3d intrinsics_eigen_tmp;
+    cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
+    Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
+
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+
+    // entire_cloud: pointer to the entire point cloud
+    // cloud: pointer to the point clouds selected
+    #ifdef ENTIRE
+    auto [entire_cloud, cloud]
+    #else
+    auto [cloud]
+    #endif
+        = point_clouds_from_images(
+                depth,
+                rgb,
+                mask,
+                intrinsics_eigen,
+                last_lower_bounding_box - bounding_box_extend,
+                last_upper_bounding_box + bounding_box_extend);
+    std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
+
+    /// VoxelGrid filter downsampling
+    PointCloud::Ptr cloud_downsampled(new PointCloud);
+    const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+    double sigma2 = 0.002;
+    // TODO: check whether the change is needed here for unit conversion
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
+    // std::cout << "P_vis:" << std::endl;
+    // std::cout << Y_emit_prior << std::endl << std::endl;
+    // sample_X_points(Y, Y_emit_prior, sigma2, cloud);
+
+    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    std::cout << "Points in cloud before leaf: " << cloud->width << std::endl;
+    sor.setInputCloud(cloud);
+    sor.setLeafSize(0.02f, 0.02f, 0.02f);
+    sor.filter(*cloud_downsampled);
+    std::cout << "Points in fully filtered: " << cloud_downsampled->width << std::endl;
+    Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
+    // Add points to X according to the previous template
+
+    #ifdef ENTIRE
+    const Matrix3Xf& entire = entire_cloud->getMatrixXfMap().topRows(3);
+    #endif
+
+    Matrix3Xf TY, TY_pred;
+    if (is_prediction) {
+		TY_pred = Y;
+        // TY_pred = Y;
+        // for (int col = 0; col < gripper_idx.cols(); ++col)
+        // {
+        //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+        //     {
+        //         FixedPoint pt;
+        //         pt.template_index = gripper_idx(row, col);
+        //         pt.position = TY_pred.col(pt.template_index);
+        //         pred_fixed_points.push_back(pt);
+        //     }
+        // }
+        // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
+        // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
+		TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+        // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
+    }
+    else
+    {
+        // for (int col = 0; col < gripper_idx.cols(); ++col)
+        // {
+        //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
+        //     {
+        //         FixedPoint pt;
+        //         pt.template_index = gripper_idx(row, col);
+        //         pt.position = TY_pred.col(pt.template_index);
+        //         pred_fixed_points.push_back(pt);
+        //     }
+        // }
+        TY = cpd(X, Y, depth, mask);
+    } 
+
+
+    #ifdef DEBUG
+    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
+    to_file(workingDir + "/cpp_downsample.txt", X);
+    to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
+    to_file(workingDir + "/cpp_TY.txt", TY);
+    #endif
+
+    // Next step: optimization.
+    // ???: most likely not 1.0
+    #ifdef SHAPE_COMP
+    Optimizer opt(original_template, Y, 1.1, obs_param);
+    #else
+    Optimizer opt(original_template, Y, 1.1);
+    #endif
+
+    Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain);
+    // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+    #ifdef DEBUG
+    to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
+    #endif
+
+    // Set the min and max for the box filter for next time
+    last_lower_bounding_box = Y_opt.rowwise().minCoeff();
+    last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
+
+    PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
+    PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
+    PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
+
+    return CDCPD::Output {
+        #ifdef ENTIRE
+        entire_cloud,
         #endif
+        cloud,
+        cloud_downsampled,
+        cdcpd_cpd,
+        cdcpd_pred,
         cdcpd_out
     };
 }
