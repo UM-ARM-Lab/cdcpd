@@ -42,7 +42,6 @@
 #include <victor_hardware_interface/Robotiq3FingerStatus_sync.h>
 #include <victor_hardware_interface/Robotiq3FingerStatus.h>
 
-
 using std::cout;
 using std::endl;
 using std::string;
@@ -77,6 +76,14 @@ typedef CGAL::Surface_mesh<Point_3>                                     Mesh;
 typedef boost::graph_traits<Mesh>::vertex_descriptor                    vertex_descriptor;
 typedef boost::graph_traits<Mesh>::face_descriptor                      face_descriptor;
 
+/*
+typedef message_filters::sync_policies::ApproximateTime<cdcpd_ros::Float32MultiArrayStamped,
+														cdcpd_ros::Float32MultiArrayStamped,
+														victor_hardware_interface::Robotiq3FingerStatus_sync,
+														victor_hardware_interface::Robotiq3FingerStatus_sync> SyncPolicy;
+ */
+
+#ifdef GRIPPER
 typedef message_filters::sync_policies::ApproximateTime<sm::Image, 
                                                         sm::Image,
                                                         sm::CameraInfo,
@@ -84,7 +91,11 @@ typedef message_filters::sync_policies::ApproximateTime<sm::Image,
 														cdcpd_ros::Float32MultiArrayStamped,
 														victor_hardware_interface::Robotiq3FingerStatus_sync,
 														victor_hardware_interface::Robotiq3FingerStatus_sync> SyncPolicy;
-
+#else
+typedef message_filters::sync_policies::ApproximateTime<sm::Image, 
+                                                        sm::Image,
+                                                        sm::CameraInfo> SyncPolicy;
+#endif
 
 
 std::vector<sm::Image::ConstPtr> color_images;
@@ -95,10 +106,8 @@ std::vector<stdm::Float32MultiArray::ConstPtr> grippers_config;
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_dot;
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_ind;
 std::vector<stdm::Float32MultiArray::ConstPtr> ground_truth;
-stdm::Float32MultiArray::ConstPtr verts_ptr;
-stdm::Float32MultiArray::ConstPtr normals_ptr;
-stdm::Float32MultiArray::ConstPtr faces_ptr;
 #else
+#ifdef GRIPPER
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_config;
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_dot;
 std::vector<victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr> l_status;
@@ -106,6 +115,13 @@ std::vector<victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr> r_st
 // stdm::Float32MultiArray::ConstPtr verts_ptr;
 // stdm::Float32MultiArray::ConstPtr normals_ptr;
 // stdm::Float32MultiArray::ConstPtr faces_ptr;
+#endif
+#endif
+
+#ifdef SHAPE_COMP
+stdm::Float32MultiArray::ConstPtr verts_ptr;
+stdm::Float32MultiArray::ConstPtr normals_ptr;
+stdm::Float32MultiArray::ConstPtr faces_ptr;
 #endif
 
 #ifdef SIMULATION
@@ -154,9 +170,24 @@ vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
 		pt2.x = pc->points[edges(1, e)].x;
 		pt2.y = pc->points[edges(1, e)].y;
 		pt2.z = pc->points[edges(1, e)].z;
-
-		order.points.push_back(pt1);
-		order.points.push_back(pt2);
+		
+		if ((pt1.x <  0.000001 && 
+			pt1.x > -0.000001 &&
+			pt1.y <  0.000001 && 
+			pt1.y > -0.000001 &&
+			pt1.z <  0.000001 && 
+			pt1.z > -0.000001) ||
+			(pt2.x <  0.000001 && 
+			pt2.x > -0.000001 &&
+			pt2.y <  0.000001 && 
+			pt2.y > -0.000001 &&
+			pt2.z <  0.000001 && 
+			pt2.z > -0.000001)) {
+			continue;
+		} else {
+			order.points.push_back(pt1);
+			order.points.push_back(pt2);
+		}
 	}
 	return order;
 }
@@ -180,6 +211,7 @@ public:
 // 	return std::make_shared<victor_hardware_interface::Robotiq3FingerStatus> (origin);
 // }
 
+#ifdef GRIPPER
 static victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr gripper_status_origin_to_sync(
 	const victor_hardware_interface::Robotiq3FingerStatus::ConstPtr origin, int diff)
 {
@@ -192,7 +224,33 @@ static victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr gripper_st
 	return syncptr;
 	// return std::make_shared<victor_hardware_interface::Robotiq3FingerStatus_sync> (sync const);
 }
+#endif
 
+/*
+void im_callback(
+    const sm::Image::ConstPtr &rgb_img,
+    const sm::Image::ConstPtr &depth_img,
+    const sm::CameraInfo::ConstPtr &cam_info)
+{
+    color_images.push_back(rgb_img);
+    depth_images.push_back(depth_img);
+    camera_infos.push_back(cam_info);
+}
+
+void callback(
+    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_config,
+    const cdcpd_ros::Float32MultiArrayStamped::ConstPtr &g_dot,
+	const victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr &l_s,
+	const victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr &r_s)
+{
+    grippers_config.push_back(g_config);
+    grippers_dot.push_back(g_dot);
+	l_status.push_back(l_s);
+	r_status.push_back(r_s);
+}
+ */
+
+#ifdef GRIPPER
 void callback(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
@@ -210,6 +268,18 @@ void callback(
 	l_status.push_back(l_s);
 	r_status.push_back(r_s);
 }
+#else
+void callback(
+    const sm::Image::ConstPtr &rgb_img,
+    const sm::Image::ConstPtr &depth_img,
+    const sm::CameraInfo::ConstPtr &cam_info)
+{
+    color_images.push_back(rgb_img);
+    depth_images.push_back(depth_img);
+    camera_infos.push_back(cam_info);
+}
+#endif
+
 
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
     const sm::Image::ConstPtr &rgb_img,
@@ -467,6 +537,88 @@ void test_lle() {
 }
 #endif
 
+#ifdef DEV
+std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
+{
+    if (is_rope) {
+		// This is for simulation
+    	// float left_x = -0.5f; float left_y = -0.5f; float left_z = 3.0f; float right_x = 0.5f; float right_y = -0.5f; float right_z = 3.0f;
+    
+		// rope_edge_cover_1
+		// float left_x = -0.5f; float left_y = -0.0f; float left_z = 1.0f; float right_x = 0.3f; float right_y = -0.0f; float right_z = 1.0f;
+	
+		// rope_winding_cylinder_exp_1_comp
+		// float left_x = -0.5f; float left_y = -0.2f; float left_z = 1.0f; float right_x = 0.3f; float right_y = -0.2f; float right_z = 1.0f;
+	
+		// rope_winding_cylinder_exp_2_comp
+		// float left_x = -0.5f; float left_y = 0.2f; float left_z = 1.0f; float right_x = 0.3f; float right_y = 0.2f; float right_z = 1.0f;
+    
+		// rope_by_hand_3
+		float left_x = -0.5f; float left_y = 0.2f; float left_z = 2.0f; float right_x = 0.3f; float right_y = 0.2f; float right_z = 2.0f;
+    
+		int points_on_rope = 40;
+
+    	MatrixXf vertices(3, points_on_rope); // Y^0 in the paper
+    	vertices.setZero();
+    	vertices.row(0).setLinSpaced(points_on_rope, left_x, right_x);
+    	vertices.row(1).setLinSpaced(points_on_rope, left_y, right_y);
+    	vertices.row(2).setLinSpaced(points_on_rope, left_z, right_z);
+
+    	MatrixXi edges(2, points_on_rope - 1);
+    	edges(0, 0) = 0;
+    	edges(1, edges.cols() - 1) = points_on_rope - 1;
+    	for (int i = 1; i <= edges.cols() - 1; ++i)
+    	{
+        	edges(0, i) = i;
+        	edges(1, i - 1) = i;
+    	}
+
+    } else {
+
+		// This is for simulation
+    	// int num_width = 20; int num_height = 20; float right_up_y = 0.19f; float right_up_x = 0.19f; float left_bottom_y = -0.19f; float left_bottom_x = -0.19f; float z = 2.0f;
+    // int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
+	// cloth_cover_by_hand
+    int num_width = 15; int num_height = 15; float right_up_y = 0.0f; float right_up_x = -0.1f; float left_bottom_y = -0.28f; float left_bottom_x = -0.38f; float z = 1.5f;
+
+    Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
+    Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
+
+    int edge_count = 0;
+    for (int i = 0; i < num_height; ++i)
+    {
+        for (int j = 0; j < num_width; ++j)
+        {
+            int index = j * num_height + i;
+            float ratio_x = static_cast<float>(j) / static_cast<float>(num_width - 1);
+            float ratio_y = static_cast<float>(i) / static_cast<float>(num_height - 1);
+            vertices(0, index) = (1-ratio_x) * right_up_x + (ratio_x) * left_bottom_x;
+            vertices(1, index) = (1-ratio_y) * right_up_y + (ratio_y) * left_bottom_y;
+            vertices(2, index) = z;
+            if (i + 1 < num_height)
+            {
+                int next_index = j * num_height + i + 1;
+                edges(0, edge_count) = index;
+                edges(1, edge_count) = next_index;
+                edge_count++;
+            }
+            if (j + 1 < num_width)
+            {
+                int next_index = (j + 1) * num_height + i;
+                edges(0, edge_count) = index;
+                edges(1, edge_count) = next_index;
+                edge_count++;
+            }
+        }
+    }
+	}
+    assert(edge_count == (num_width - 1) * num_height + (num_height - 1) * num_width);
+    
+
+    return std::make_tuple(vertices, edges);
+}
+#endif
+
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
     #ifdef ROPE
@@ -474,9 +626,18 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
     // float left_x = -0.5f; float left_y = -0.5f; float left_z = 3.0f; float right_x = 0.5f; float right_y = -0.5f; float right_z = 3.0f;
     
 	// rope_edge_cover_1
-	float left_x = -0.5f; float left_y = -0.0f; float left_z = 1.0f; float right_x = 0.3f; float right_y = -0.0f; float right_z = 1.0f;
+	// float left_x = -0.5f; float left_y = -0.0f; float left_z = 1.0f; float right_x = 0.3f; float right_y = -0.0f; float right_z = 1.0f;
+	
+	// rope_winding_cylinder_exp_1_comp
+	// float left_x = -0.5f; float left_y = -0.2f; float left_z = 1.0f; float right_x = 0.3f; float right_y = -0.2f; float right_z = 1.0f;
+	
+	// rope_winding_cylinder_exp_2_comp
+	// float left_x = -0.5f; float left_y = 0.2f; float left_z = 1.0f; float right_x = 0.3f; float right_y = 0.2f; float right_z = 1.0f;
     
-    int points_on_rope = 40;
+	// rope_by_hand_3
+	float left_x = -0.5f; float left_y = 0.2f; float left_z = 2.0f; float right_x = 0.44f; float right_y = 0.2f; float right_z = 2.0f;
+    
+	int points_on_rope = 48;
 
     MatrixXf vertices(3, points_on_rope); // Y^0 in the paper
     vertices.setZero();
@@ -497,7 +658,9 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 
 	// This is for simulation
     // int num_width = 20; int num_height = 20; float right_up_y = 0.19f; float right_up_x = 0.19f; float left_bottom_y = -0.19f; float left_bottom_x = -0.19f; float z = 2.0f;
-    int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
+    // int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
+	// cloth_cover_by_hand
+    int num_width = 15; int num_height = 15; float right_up_z = 1.28f; float right_up_x = -0.1f; float left_bottom_z = 1.00f; float left_bottom_x = -0.38f; float y = 0.0f;
 
     Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
     Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
@@ -511,8 +674,8 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
             float ratio_x = static_cast<float>(j) / static_cast<float>(num_width - 1);
             float ratio_y = static_cast<float>(i) / static_cast<float>(num_height - 1);
             vertices(0, index) = (1-ratio_x) * right_up_x + (ratio_x) * left_bottom_x;
-            vertices(1, index) = (1-ratio_y) * right_up_y + (ratio_y) * left_bottom_y;
-            vertices(2, index) = z;
+            vertices(1, index) = y; // (1-ratio_y) * right_up_y + (ratio_y) * left_bottom_y;
+            vertices(2, index) = (1-ratio_y) * right_up_z + (ratio_y) * left_bottom_z; // z;
             if (i + 1 < num_height)
             {
                 int next_index = j * num_height + i + 1;
@@ -677,14 +840,6 @@ int main(int argc, char* argv[])
 	// cout << template_vertices << endl;
     // cout << template_edges << endl;
 	
-	#ifdef ROPE
-    int points_on_rope = 50;
-    #else
-    // int cloth_width_num = 20;
-    // int cloth_height_num = 20;
-    #endif
-	
-	
 	std::string cleancmd = "exec rm -rf " + workingDir + "/*";
 	if (system(cleancmd.c_str()) != 0) {
 		std::cerr << "wrong clean files" << std::endl;
@@ -715,9 +870,7 @@ int main(int argc, char* argv[])
     auto masked_publisher = nh.advertise<PointCloud> ("cdcpd/masked", 1);
     auto downsampled_publisher = nh.advertise<PointCloud> ("cdcpd/downsampled", 1);
     auto template_publisher = nh.advertise<PointCloud> ("cdcpd/template", 1);
-    #ifdef PREDICT
     auto pred_publisher = nh.advertise<PointCloud>("cdcpd/prediction", 1);
-    #endif
     // auto cpd_iters_publisher = nh.advertise<PointCloud> ("cdcpd/cpd_iters", 1);
     auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
     auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
@@ -728,6 +881,7 @@ int main(int argc, char* argv[])
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 	auto mesh_pub = nh.advertise<vm::Marker>("cdcpd/mesh", 10);
 	auto cpd_physics_pub = nh.advertise<PointCloud> ("cdcpd/cpd_physics", 1);
+    auto order_cpdphysics_pub = nh.advertise<vm::Marker>("cdcpd/cpdphysics_order", 10);
 	BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
     // message_filters::Subscriber<sm::Image> rgb_sub(nh, "/kinect2_victor_head/qhd/image_color_rect", 10);
@@ -749,9 +903,16 @@ int main(int argc, char* argv[])
 	
     const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
+    const float zeta = ROSHelpers::GetParam<float>(ph, "zeta", 10.0);
     const double k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
-	
+	const bool is_pred1 = ROSHelpers::GetParam<bool>(ph, "is_pred1", true);
+	const bool is_pred2 = ROSHelpers::GetParam<bool>(ph, "is_pred2", true);
+	const bool is_no_pred = ROSHelpers::GetParam<bool>(ph, "is_no_pred", true)
+	const bool is_sim = ROSHelpers::GetParam<bool>(ph, "is_sim", true);
+	#ifdef DEV
+	const bool is_rope = ROSHelpers::GetParam<bool>(ph, "is_rope", true);
+	#endif
 
     std::vector<std::string> topics;
     #ifdef SIMULATION
@@ -762,12 +923,8 @@ int main(int argc, char* argv[])
     topics.push_back(std::string("gripper_velocity"));
     topics.push_back(std::string("gripper_info"));
     topics.push_back(std::string("gripper_config"));
-    #ifdef SHAPE_COMP
-	topics.push_back(std::string("comp_vertices"));
-	topics.push_back(std::string("comp_faces"));
-	topics.push_back(std::string("comp_normals"));
-    #endif
     #else
+	#ifdef GRIPPER
     topics.push_back(std::string("/kinect2_victor_head/qhd/image_color_rect"));
     topics.push_back(std::string("/kinect2_victor_head/qhd/image_depth_rect"));
     topics.push_back(std::string("/kinect2_victor_head/qhd/camera_info"));
@@ -776,7 +933,17 @@ int main(int argc, char* argv[])
     // topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_info"));
 	topics.push_back(std::string("/left_arm/gripper_status"));
 	topics.push_back(std::string("/right_arm/gripper_status"));
+	#else
+	topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
+    topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
+    topics.push_back(std::string("/kinect2/qhd/camera_info"));
 	#endif
+	#endif
+    #ifdef SHAPE_COMP
+	topics.push_back(std::string("comp_vertices"));
+	topics.push_back(std::string("comp_faces"));
+	topics.push_back(std::string("comp_normals"));
+    #endif
 
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
     #ifdef SIMULATION
@@ -790,13 +957,19 @@ int main(int argc, char* argv[])
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
     // #ifndef SIMULATION
-    // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped, victor_hardware_interface::Robotiq3FingerStatus, victor_hardware_interface::Robotiq3FingerStatus>(
-    //        rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub, 25);
+    // auto image_sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
+	//	rgb_sub, depth_sub, info_sub, 25);
+    // image_sync.registerCallback(boost::bind(&im_callback, _1, _2, _3));
+    // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped, victor_hardware_interface::Robotiq3FingerStatus_sync, victor_hardware_interface::Robotiq3FingerStatus_sync>(
+	// 	rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub, 25);
+	#ifdef GRIPPER
 	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub);
     sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
-    // #endif
+	#else
+	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub);
+    sync.registerCallback(boost::bind(&callback, _1, _2, _3));
+    #endif
 	// ros::spin();
-
     for(rosbag::MessageInstance const& m: view)
     {
         if (m.getTopic() == topics[0])
@@ -931,6 +1104,7 @@ int main(int argc, char* argv[])
         #endif
 		#else
 		// topics in exp bagfile
+		#ifdef GRIPPER
 		else if (m.getTopic() == topics[3])
 		{
 			auto info = m.instantiate<cdcpd_ros::Float32MultiArrayStamped>();
@@ -960,7 +1134,7 @@ int main(int argc, char* argv[])
 			auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
             if (info != nullptr)
             {
-                l_sub.newMessage(gripper_status_origin_to_sync(info, -14564));
+                l_sub.newMessage(gripper_status_origin_to_sync(info, -14567));
             }
             else
             {
@@ -972,13 +1146,55 @@ int main(int argc, char* argv[])
 			auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
             if (info != nullptr)
             {
-                r_sub.newMessage(gripper_status_origin_to_sync(info, -15097));
+                r_sub.newMessage(gripper_status_origin_to_sync(info, -15107));
             }
             else
             {
                 cout << "NULL initiation!" << endl;
             }
 		}
+		#endif
+		#ifdef SHAPE_COMP
+		else if (m.getTopic() == topics[7])
+		{
+			auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                verts_ptr = info;
+                // config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+		}
+		else if (m.getTopic() == topics[8])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                faces_ptr = info;
+                // config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+        }
+		else if (m.getTopic() == topics[9])
+        {
+            auto info = m.instantiate<stdm::Float32MultiArray>();
+            if (info != nullptr)
+            {
+                normals_ptr = info;
+                // config_sub.newMessage(info);
+            }
+            else
+            {
+                cout << "NULL initiation!" << endl;
+            }
+        }
+        #endif
         #endif
         else
         {
@@ -991,9 +1207,10 @@ int main(int argc, char* argv[])
     cout << "rgb images size: " << color_images.size() << endl;
     cout << "depth images size: " << depth_images.size() << endl;
     cout << "camera infos size: " << camera_infos.size() << endl;
+	#ifdef GRIPPER
 	cout << "config size: " << grippers_config.size() << endl;
     cout << "velocity size: " << grippers_dot.size() << endl;
-
+	#endif
 	
 	auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
@@ -1004,10 +1221,12 @@ int main(int argc, char* argv[])
     auto ind_iter = grippers_ind.cbegin();
     auto truth_iter = ground_truth.cbegin();
 	#else
+	#ifdef GRIPPER
 	auto config_iter = grippers_config.cbegin();
     auto velocity_iter = grippers_dot.cbegin();
     auto l_iter = l_status.cbegin();
 	auto r_iter = r_status.cbegin();
+	#endif
     #endif
 
     // Used to republish the images at the current timestamp for other usage
@@ -1088,10 +1307,12 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring);
 	#else
+	#ifdef GRIPPER
     std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
     double translation_dir_deformability = 10.0;
     double translation_dis_deformability = 10.0;
     double rotation_deformability = 10.0;
+	#endif
     CDCPD cdcpd(template_cloud,
                 template_edges,
                 #ifdef SHAPE_COMP
@@ -1110,10 +1331,12 @@ int main(int argc, char* argv[])
 	CDCPD cdcpd_without_constrain(template_cloud_without_constrain, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
     #endif
 
-    #ifdef COMP_NOPRED
+    if (is_no_pred) {
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction = Matrix3Xf2pcptr(template_vertices);
     auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
-	CDCPD cdcpd_without_prediction(template_cloud,
+	auto output_without_prediction_order_pub = nh.advertise<vm::Marker> ("cdcpd/output_without_prediction_order", 10);
+		if (is_sim) {
+			CDCPD cdcpd_without_prediction(template_cloud,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1128,12 +1351,25 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring);
-    #endif
+		} else {
+			CDCPD cdcpd_without_prediction(template_cloud,
+                template_edges,
+                #ifdef SHAPE_COMP
+                obstacle_param,
+                #endif
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
+		}
+	}
 
-	#ifdef COMP_PRED1
-	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred1 = Matrix3Xf2pcptr(template_vertices);
-    auto output_pred1_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_deform_model", 1);
-	CDCPD cdcpd_pred1(template_cloud_pred1,
+	if (is_pred1) {
+		pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred1 = Matrix3Xf2pcptr(template_vertices);
+    	auto output_pred1_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_deform_model", 1);
+		if (is_sim) {
+			CDCPD cdcpd_pred1(template_cloud_pred1,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1148,12 +1384,25 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring);
-    #endif	
+		} else {
+			CDCPD cdcpd_without_prediction(template_cloud,
+                template_edges,
+                #ifdef SHAPE_COMP
+                obstacle_param,
+                #endif
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
+		}
+	}
 
-	#ifdef COMP_PRED2
-	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred2 = Matrix3Xf2pcptr(template_vertices);
-    auto output_pred2_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_J_model", 1);
-	CDCPD cdcpd_pred2(template_cloud_pred2,
+	if (is_pred2) {
+		pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred2 = Matrix3Xf2pcptr(template_vertices);
+    	auto output_pred2_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_J_model", 1);
+		if (is_sim) {
+			CDCPD cdcpd_pred2(template_cloud_pred2,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1168,7 +1417,19 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring);
-    #endif	
+    	} else {
+			CDCPD cdcpd_without_prediction(template_cloud,
+                template_edges,
+                #ifdef SHAPE_COMP
+                obstacle_param,
+                #endif
+                false,
+                alpha,
+                beta,
+                lambda,
+                k_spring);
+		}
+	}
 	
     // Let's also grab the gripper positions. Note that in practice, you'd do this in real time.
     geometry_msgs::TransformStamped leftTS;
@@ -1246,7 +1507,9 @@ int main(int argc, char* argv[])
         Matrix3Xf one_frame_truth = toGroundTruth(*truth_iter);
         tie(g_config, g_dot, g_ind) = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
 		#else
+		#ifdef GRIPPER
     	auto [g_config, g_dot] = toGripperConfig(*config_iter, *velocity_iter);
+		#endif
         #endif
 
         /// Color filter
@@ -1308,14 +1571,18 @@ int main(int argc, char* argv[])
         std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         template_cloud = out.gurobi_output;
         #else
+		#ifdef GRIPPER
 		auto is_grasped = toGripperStatus(*l_iter, *r_iter);
 		for (auto& dot: g_dot)
 		{
-			dot = dot/100;
+			dot = dot/10;
 		}
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 2, fixed_points);
-        template_cloud = out.gurobi_output;
+        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
+        #else
+		auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, true, true, 0, fixed_points);
+		template_cloud = out.gurobi_output;
         #endif
+		#endif
 
         #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
@@ -1323,29 +1590,42 @@ int main(int argc, char* argv[])
 		out_without_constrain.gurobi_output->header.frame_id = frame_id;
         #endif
 
-        #ifdef COMP_NOPRED
+        if (is_no_pred) {
 		cout << "no prediction used" << endl;
-        auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
-        template_cloud_without_prediction = out_without_prediction.gurobi_output;
+			if (is_sim) {
+        		static auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
+        	} else {
+				cout << "You forgot to add w or w/o gripper info case, IDIOT!" << endl;
+        		static auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points);
+			}
+		template_cloud_without_prediction = out_without_prediction.gurobi_output;
 		out_without_prediction.gurobi_output->header.frame_id = frame_id;
 		std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
-        #endif
+		}
 
-        #ifdef COMP_PRED1
-		cout << "prediction choice: 1" << endl;
-        auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, true, true, 1, fixed_points);
-        template_cloud_pred1 = out_pred1.gurobi_output;
-		out_pred1.gurobi_output->header.frame_id = frame_id;
-		std::ofstream(workingDir + "/error_pred1.txt", std::ofstream::app) << calc_mean_error(out_pred1.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
-        #endif
+        if (is_pred1) {
+			cout << "prediction choice: 1" << endl;
+			if (is_sim) {
+        		static auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, true, true, 1, fixed_points);
+        	} else {
+        		static auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, is_grasped, nh, translational_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 1, fixed_points);
+			}
+			template_cloud_pred1 = out_pred1.gurobi_output;
+			out_pred1.gurobi_output->header.frame_id = frame_id;
+			std::ofstream(workingDir + "/error_pred1.txt", std::ofstream::app) << calc_mean_error(out_pred1.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+        }
 
-        #ifdef COMP_PRED2
-		cout << "prediction choice: 2" << endl;
-        auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, true, true, 2, fixed_points);
-        template_cloud_pred2 = out_pred2.gurobi_output;
-		out_pred2.gurobi_output->header.frame_id = frame_id;
-		std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
-        #endif
+        if (is_pred2) {
+			cout << "prediction choice: 2" << endl;
+			if (is_sim) {
+        		static auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, true, true, 2, fixed_points);
+        	} else {
+        		static auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, is_grasped, nh, translational_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 2, fixed_points);
+			}
+			template_cloud_pred2 = out_pred2.gurobi_output;
+			out_pred2.gurobi_output->header.frame_id = frame_id;
+			std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+        }
 
 		ifstream cpd_phy_result;
 		PointCloud::Ptr cpd_phy_pc(new PointCloud);
@@ -1401,10 +1681,7 @@ int main(int argc, char* argv[])
         out.downsampled_cloud->header.frame_id = frame_id;
         out.cpd_output->header.frame_id = frame_id;
         out.gurobi_output->header.frame_id = frame_id;
-
-        #ifdef PREDICT
         out.cpd_predict->header.frame_id = frame_id;
-        #endif
 
         // draw cylinder
         {
@@ -1590,9 +1867,7 @@ int main(int argc, char* argv[])
         pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
         pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
-        #ifdef PREDICT
         pcl_conversions::toPCL(time, out.cpd_predict->header.stamp);
-        #endif
 	
         #ifdef ENTIRE
         original_publisher.publish(out.original_cloud);
@@ -1600,33 +1875,39 @@ int main(int argc, char* argv[])
         masked_publisher.publish(out.masked_point_cloud);
         downsampled_publisher.publish(out.downsampled_cloud);
         template_publisher.publish(out.cpd_output);
-        #ifdef PREDICT
         pred_publisher.publish(out.cpd_predict);
-        #endif
         output_publisher.publish(out.gurobi_output);
 		
 		pcl_conversions::toPCL(time, cpd_phy_pc->header.stamp);	
 		cpd_physics_pub.publish(cpd_phy_pc);
+		if(cpd_phy_result.is_open())
+		{
+			vm::Marker order_cpdphysics = pc_to_marker(cpd_phy_pc, template_edges, frame_id);
+			order_cpdphysics_pub.publish(order_cpdphysics);
+			cpd_phy_result.close();
+		}        
 
         #ifdef COMP
         pcl_conversions::toPCL(time, out_without_constrain.gurobi_output->header.stamp);
         output_without_constrain_publisher.publish(out_without_constrain.gurobi_output);
 		#endif
 		
-        #ifdef COMP_NOPRED
-        pcl_conversions::toPCL(time, out_without_prediction.gurobi_output->header.stamp);
-		output_without_prediction_publisher.publish(out_without_prediction.gurobi_output);
-        #endif
+        if (is_no_pred) {
+        	pcl_conversions::toPCL(time, out_without_prediction.gurobi_output->header.stamp);
+			output_without_prediction_publisher.publish(out_without_prediction.gurobi_output);
+			vm::Marker order_without_pred = pc_to_marker(out_without_prediction.gurobi_output, template_edges, frame_id);
+			output_without_prediction_order_pub.publish(order_without_pred);
+       	}
 
-        #ifdef COMP_PRED1
-        pcl_conversions::toPCL(time, out_pred1.gurobi_output->header.stamp);
-		output_pred1_publisher.publish(out_pred1.gurobi_output);
-        #endif
+        if (is_pred1) {
+        	pcl_conversions::toPCL(time, out_pred1.gurobi_output->header.stamp);
+			output_pred1_publisher.publish(out_pred1.gurobi_output);
+        }
 
-        #ifdef COMP_PRED2
-        pcl_conversions::toPCL(time, out_pred2.gurobi_output->header.stamp);
-		output_pred2_publisher.publish(out_pred2.gurobi_output);
-        #endif
+        if (is_pred2) {
+        	pcl_conversions::toPCL(time, out_pred2.gurobi_output->header.stamp);
+			output_pred2_publisher.publish(out_pred2.gurobi_output);
+        }
 
         ++color_iter;
         ++depth_iter;
@@ -1637,10 +1918,12 @@ int main(int argc, char* argv[])
         ++ind_iter;
         ++truth_iter;
 		#else
+		#ifdef GRIPPER
         ++config_iter;
         ++velocity_iter;
 		++l_iter;
 		++r_iter;
+		#endif
         #endif
         ++frame;
     }
