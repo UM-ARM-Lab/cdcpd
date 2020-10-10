@@ -97,26 +97,20 @@ typedef message_filters::sync_policies::ApproximateTime<sm::Image,
                                                         sm::CameraInfo> SyncPolicy;
 #endif
 
-
 std::vector<sm::Image::ConstPtr> color_images;
 std::vector<sm::Image::ConstPtr> depth_images;
 std::vector<sm::CameraInfo::ConstPtr> camera_infos;
-#ifdef SIMULATION
-std::vector<stdm::Float32MultiArray::ConstPtr> grippers_config;
-std::vector<stdm::Float32MultiArray::ConstPtr> grippers_dot;
+std::vector<stdm::Float32MultiArray::ConstPtr> grippers_config_sim;
+std::vector<stdm::Float32MultiArray::ConstPtr> grippers_dot_sim;
 std::vector<stdm::Float32MultiArray::ConstPtr> grippers_ind;
 std::vector<stdm::Float32MultiArray::ConstPtr> ground_truth;
-#else
-#ifdef GRIPPER
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_config;
 std::vector<cdcpd_ros::Float32MultiArrayStamped::ConstPtr> grippers_dot;
 std::vector<victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr> l_status;
 std::vector<victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr> r_status;
-// stdm::Float32MultiArray::ConstPtr verts_ptr;
-// stdm::Float32MultiArray::ConstPtr normals_ptr;
-// stdm::Float32MultiArray::ConstPtr faces_ptr;
-#endif
-#endif
+	// stdm::Float32MultiArray::ConstPtr verts_ptr;
+	// stdm::Float32MultiArray::ConstPtr normals_ptr;
+	// stdm::Float32MultiArray::ConstPtr faces_ptr;
 
 #ifdef SHAPE_COMP
 stdm::Float32MultiArray::ConstPtr verts_ptr;
@@ -908,13 +902,13 @@ int main(int argc, char* argv[])
     const double beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
 	const bool is_pred1 = ROSHelpers::GetParam<bool>(ph, "is_pred1", true);
 	const bool is_pred2 = ROSHelpers::GetParam<bool>(ph, "is_pred2", true);
-	const bool is_no_pred = ROSHelpers::GetParam<bool>(ph, "is_no_pred", true)
+	const bool is_no_pred = ROSHelpers::GetParam<bool>(ph, "is_no_pred", true);
 	const bool is_sim = ROSHelpers::GetParam<bool>(ph, "is_sim", true);
 	#ifdef DEV
 	const bool is_rope = ROSHelpers::GetParam<bool>(ph, "is_rope", true);
 	#endif
 
-    std::vector<std::string> topics;
+	std::vector<std::string> topics;
     #ifdef SIMULATION
     topics.push_back(std::string("image_color_rect"));
     topics.push_back(std::string("image_depth_rect"));
@@ -1215,19 +1209,18 @@ int main(int argc, char* argv[])
 	auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
     auto info_iter = camera_infos.cbegin();
-    #ifdef SIMULATION
+	auto config_sim_iter = grippers_config_sim.cbegin();
+    auto velocity_sim_iter = grippers_dot_sim.cbegin();
     auto config_iter = grippers_config.cbegin();
     auto velocity_iter = grippers_dot.cbegin();
     auto ind_iter = grippers_ind.cbegin();
     auto truth_iter = ground_truth.cbegin();
-	#else
 	#ifdef GRIPPER
 	auto config_iter = grippers_config.cbegin();
     auto velocity_iter = grippers_dot.cbegin();
     auto l_iter = l_status.cbegin();
 	auto r_iter = r_status.cbegin();
 	#endif
-    #endif
 
     // Used to republish the images at the current timestamp for other usage
     // Exits at the end of the if statement
@@ -1285,13 +1278,20 @@ int main(int argc, char* argv[])
 	obstacle_param.normals = Float32MultiArrayPtr2MatrixXf(normals_ptr);
     #endif
 	
-	#ifdef SIMULATION
-    auto [g_config, g_dot, g_ind] = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
     std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
     double translation_dir_deformability = 10.0;
     double translation_dis_deformability = 10.0;
     double rotation_deformability = 10.0;
-    CDCPD cdcpd(template_cloud,
+	
+	AllGrippersSinglePose g_config;
+    AllGrippersSinglePoseDelta g_dot;
+    MatrixXi g_ind;
+	
+	CDCPD cdcpd;
+	
+	if (is_sim) {
+    	tie(g_config, g_dot, g_ind) = toGripperConfig(*config_sim_iter, *velocity_sim_iter, *ind_iter);
+    	cdcpd = CDCPD(template_cloud,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1306,14 +1306,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring);
-	#else
-	#ifdef GRIPPER
-    std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
-    double translation_dir_deformability = 10.0;
-    double translation_dis_deformability = 10.0;
-    double rotation_deformability = 10.0;
-	#endif
-    CDCPD cdcpd(template_cloud,
+	} else {
+    	cdcpd = CDCPD(template_cloud,
                 template_edges,
                 #ifdef SHAPE_COMP
 				obstacle_param,
@@ -1323,7 +1317,7 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring);
-	#endif
+	}
 
     #ifdef COMP
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_constrain = Matrix3Xf2pcptr(template_vertices);
@@ -1332,11 +1326,11 @@ int main(int argc, char* argv[])
     #endif
 
     if (is_no_pred) {
-    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction = Matrix3Xf2pcptr(template_vertices);
-    auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
-	auto output_without_prediction_order_pub = nh.advertise<vm::Marker> ("cdcpd/output_without_prediction_order", 10);
+    static pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction = Matrix3Xf2pcptr(template_vertices);
+    static auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
+	static auto output_without_prediction_order_pub = nh.advertise<vm::Marker> ("cdcpd/output_without_prediction_order", 10);
 		if (is_sim) {
-			CDCPD cdcpd_without_prediction(template_cloud,
+			static CDCPD cdcpd_without_prediction(template_cloud,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1352,7 +1346,7 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring);
 		} else {
-			CDCPD cdcpd_without_prediction(template_cloud,
+			static CDCPD cdcpd_without_prediction(template_cloud,
                 template_edges,
                 #ifdef SHAPE_COMP
                 obstacle_param,
