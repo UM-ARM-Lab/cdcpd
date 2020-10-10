@@ -303,6 +303,9 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
 //     }
 // }
 
+CDCPD::CDCPD():
+	template_matcher(1500){}
+
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi& _template_edges,
              std::shared_ptr<ros::NodeHandle> nh,
@@ -471,7 +474,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
     sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(sdf);
 
-	#endif
 	#ifdef SHAPE_COMP
 	fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
     vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;

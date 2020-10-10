@@ -108,6 +108,8 @@ public:
         Eigen::Vector3f position;
        int template_index;
     };
+	
+	CDCPD();
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
@@ -228,24 +230,24 @@ private:
 
     PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
-    const Eigen::Matrix2Xi template_edges;
+    Eigen::Matrix2Xi template_edges;
 
     Eigen::Vector3f last_lower_bounding_box;
     Eigen::Vector3f last_upper_bounding_box;
-    const int lle_neighbors;
+    int lle_neighbors;
     Eigen::MatrixXf m_lle;
     Eigen::MatrixXf L_lle;
-    const double tolerance;
-    const double alpha;
-    const double beta;
-    const double w;
-    const double initial_sigma_scale;
-    const double start_lambda;
-    const double annealing_factor;
-    const double k;
-    const int max_iterations;
-    const float kvis;
-	const float zeta;
+    double tolerance;
+    double alpha;
+    double beta;
+    double w;
+    double initial_sigma_scale;
+    double start_lambda;
+    double annealing_factor;
+    double k;
+    int max_iterations;
+    float kvis;
+	float zeta;
     bool use_recovery;
     // std::vector<Eigen::MatrixXf> Q;
     double last_sigma2;
@@ -255,7 +257,7 @@ private:
     std::vector<bool> last_grasp_status;
 	#endif
     #ifdef SHAPE_COMP
-	const obsParam obs_param;
+	obsParam obs_param;
 	Mesh mesh;
 	Mesh::Property_map<face_descriptor, Vector> fnormals;
     Mesh::Property_map<vertex_descriptor, Vector> vnormals;
