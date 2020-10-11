@@ -38,10 +38,6 @@
 #define ENTIRE
 #endif
 
-#ifndef ROPE
-#define ROPE
-#endif
-
 // #ifndef COMP
 // #define COMP
 // #endif
