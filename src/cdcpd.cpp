@@ -323,12 +323,13 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _beta,
              const double _lambda,
              const double _k,
-			 const float _zeta) :
+			 const float _zeta,
+			 const std::vector<float> cylinder_data) :
     // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
-    last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?
-    last_upper_bounding_box(6.0, 6.0, 6.0), // TODO make configurable?
+    last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
+    last_upper_bounding_box(original_template.rowwise().maxCoeff()), // TODO make configurable?
     lle_neighbors(8), // TODO make configurable?
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
@@ -350,7 +351,11 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	mesh(initObstacle(_obs_param))
     #endif
 {
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
+    last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
+	
+	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(template_cloud);
     // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
     L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
@@ -417,6 +422,16 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
         										   CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
         										   geom_traits(K()));
 	#endif
+
+	// radius must be positive
+	if (!cylinder_data.empty() && cylinder_data[6] > 0) {
+		for (int i = 0; i < 3; i++) {
+			cylinder_orien[i] = cylinder_data[i];
+			cylinder_center[i] = cylinder_data[i+3];
+		}
+		cylinder_radius = cylinder_data[6];
+		cylinder_height = cylinder_data[7];
+	}
 }
 
 // This is for the case where the gripper indices are unknown (in real experiment)
@@ -430,12 +445,13 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _beta,
              const double _lambda,
              const double _k,
-			 const float _zeta) :
+			 const float _zeta,
+			 const std::vector<float> cylinder_data) :
     // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
-    last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?
-    last_upper_bounding_box(6.0, 6.0, 6.0), // TODO make configurable?
+    last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
+    last_upper_bounding_box(original_template.rowwise().maxCoeff()), // TODO make configurable?
     lle_neighbors(8), // TODO make configurable?
     // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
@@ -457,6 +473,10 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	mesh(initObstacle(_obs_param))
     #endif
 {
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
+    last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
+	
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(template_cloud);
     // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
@@ -485,6 +505,16 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
         										   CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
         										   geom_traits(K()));
 	#endif
+
+	// radius must be positive
+	if (!cylinder_data.empty() && cylinder_data[6] > 0) {
+		for (int i = 0; i < 3; i++) {
+			cylinder_orien[i] = cylinder_data[i];
+			cylinder_center[i] = cylinder_data[i+3];
+		}
+		cylinder_radius = cylinder_data[6];
+		cylinder_height = cylinder_data[7];
+	}
 }
 
 /*
@@ -1680,6 +1710,7 @@ CDCPD::Output CDCPD::operator()(
 			std::vector<long> grip_node_idx;
 			for (int node_idx = 0; node_idx < grippers.rows(); node_idx++) {
 				grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
+				cout << "grasp point: " << grippers(node_idx, g_idx) << endl;
 			}
 			std::string gripper_name;
 			gripper_name = "gripper" + std::to_string(g_idx);

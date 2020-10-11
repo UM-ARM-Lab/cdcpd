@@ -122,7 +122,8 @@ public:
           const double beta = 1.0,
           const double lambda = 1.0,
           const double k = 100.0,
-		  const float zeta = 10.0);
+		  const float zeta = 10.0,
+		  const std::vector<float> cylinder_data = {});
 	
 	CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
@@ -134,7 +135,8 @@ public:
           const double beta = 1.0,
           const double lambda = 1.0,
           const double k = 100.0,
-		  const float zeta = 10.0);
+		  const float zeta = 10.0,
+		  const std::vector<float> cylinder_data = {});
 
     Output operator()(const cv::Mat& rgb, // RGB image
                       const cv::Mat& depth, // Depth image
@@ -258,6 +260,10 @@ private:
 	Mesh::Property_map<face_descriptor, Vector> fnormals;
     Mesh::Property_map<vertex_descriptor, Vector> vnormals;
     #endif
+	Eigen::Vector3f cylinder_orien;
+	Eigen::Vector3f cylinder_center;
+	float cylinder_radius;
+	float cylinder_height;
 };
 
 #endif
