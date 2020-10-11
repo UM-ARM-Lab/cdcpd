@@ -565,40 +565,42 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
 
 		// This is for simulation
     	// int num_width = 20; int num_height = 20; float right_up_y = 0.19f; float right_up_x = 0.19f; float left_bottom_y = -0.19f; float left_bottom_x = -0.19f; float z = 2.0f;
-    // int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
-	// cloth_cover_by_hand
-    int num_width = 15; int num_height = 15; float right_up_y = 0.0f; float right_up_x = -0.1f; float left_bottom_y = -0.28f; float left_bottom_x = -0.38f; float z = 1.5f;
+    	// int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
+		// cloth_cover_by_hand
+    	// int num_width = 15; int num_height = 15; float right_up_y = 0.0f; float right_up_x = -0.1f; float left_bottom_y = -0.28f; float left_bottom_x = -0.38f; float z = 1.5f;
+		// some data on 10/10
+		int num_width = 15; int num_height = 15; float rb_y = 0.13f; float rb_x = -0.3f; float rb_z = 1.2f; float lb_y = 0.13f; float lb_x = -0.58f; float lb_z = 1.2f; float lt_y = 0.27f; float lt_x = -0.58f; float lt_z = 0.96f;
 
-    vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
-    edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
+    	vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
+    	edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
 
-    int edge_count = 0;
-    for (int i = 0; i < num_height; ++i)
-    {
-        for (int j = 0; j < num_width; ++j)
-        {
-            int index = j * num_height + i;
-            float ratio_x = static_cast<float>(j) / static_cast<float>(num_width - 1);
-            float ratio_y = static_cast<float>(i) / static_cast<float>(num_height - 1);
-            vertices(0, index) = (1-ratio_x) * right_up_x + (ratio_x) * left_bottom_x;
-            vertices(1, index) = (1-ratio_y) * right_up_y + (ratio_y) * left_bottom_y;
-            vertices(2, index) = z;
-            if (i + 1 < num_height)
-            {
-                int next_index = j * num_height + i + 1;
-                edges(0, edge_count) = index;
-                edges(1, edge_count) = next_index;
-                edge_count++;
-            }
-            if (j + 1 < num_width)
-            {
-                int next_index = (j + 1) * num_height + i;
-                edges(0, edge_count) = index;
-                edges(1, edge_count) = next_index;
-                edge_count++;
-            }
-        }
-    }
+    	int edge_count = 0;
+    	for (int i = 0; i < num_height; ++i)
+    	{
+        	for (int j = 0; j < num_width; ++j)
+        	{
+            	int index = j * num_height + i;
+            	float ratio_x = static_cast<float>(j) / static_cast<float>(num_width - 1);
+            	float ratio_y = static_cast<float>(i) / static_cast<float>(num_height - 1);
+            	vertices(0, index) = ratio_x * (rb_x-lb_x) + ratio_y * (lt_x-lb_x) + lb_x;
+            	vertices(1, index) = ratio_x * (rb_y-lb_y) + ratio_y * (lt_y-lb_y) + lb_y;
+            	vertices(2, index) = ratio_x * (rb_z-lb_z) + ratio_y * (lt_z-lb_z) + lb_z;
+            	if (i + 1 < num_height)
+            	{
+                	int next_index = j * num_height + i + 1;
+                	edges(0, edge_count) = index;
+                	edges(1, edge_count) = next_index;
+                	edge_count++;
+            	}
+            	if (j + 1 < num_width)
+            	{
+                	int next_index = (j + 1) * num_height + i;
+                	edges(0, edge_count) = index;
+                	edges(1, edge_count) = next_index;
+                	edge_count++;
+            	}
+        	}
+    	}
 	}
     assert(edge_count == (num_width - 1) * num_height + (num_height - 1) * num_width);
     
@@ -866,6 +868,8 @@ int main(int argc, char* argv[])
 	auto mesh_pub = nh.advertise<vm::Marker>("cdcpd/mesh", 10);
 	auto cpd_physics_pub = nh.advertise<PointCloud> ("cdcpd/cpd_physics", 1);
     auto order_cpdphysics_pub = nh.advertise<vm::Marker>("cdcpd/cpdphysics_order", 10);
+	BagSubscriber<sm::Image> rgb_sub_use_gripper, depth_sub_use_gripper;
+    BagSubscriber<sm::CameraInfo> info_sub_use_gripper;
 	BagSubscriber<sm::Image> rgb_sub, depth_sub;
     BagSubscriber<sm::CameraInfo> info_sub;
     // message_filters::Subscriber<sm::Image> rgb_sub(nh, "/kinect2_victor_head/qhd/image_color_rect", 10);
@@ -884,7 +888,8 @@ int main(int argc, char* argv[])
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
 	
-	
+	std::vector<float> cylinder_data(8);
+	Matrix3Xf init_points(3, 3);
     const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     const float zeta = ROSHelpers::GetParam<float>(ph, "zeta", 10.0);
@@ -895,10 +900,24 @@ int main(int argc, char* argv[])
 	const bool is_no_pred = ROSHelpers::GetParam<bool>(ph, "is_no_pred", true);
 	const bool is_sim = ROSHelpers::GetParam<bool>(ph, "is_sim", true);
 	const bool is_rope = ROSHelpers::GetParam<bool>(ph, "is_rope", true);
-	const bool is_gripper_info = ROSHelpers::GetParam<bool>(ph, "is_gripper_info", true);
+	const bool is_gripper_info = ROSHelpers::GetParam<bool>(ph, "is_gripper_info", true);	
+
+	for (int i = 0; i < 8; i++) {
+		cylinder_data[i] = ROSHelpers::GetParam<float>(ph, "cylinder_data_"+std::to_string(i), -1.0);
+	}
+	
+	for (int pt = 0; pt < 3; pt++) {
+		for (int dim = 0; dim < 3; dim++) {
+			init_points(dim, pt) = ROSHelpers::GetParam<float>(ph, "init_pt_"+std::to_string(pt*3+dim), 0.0f);
+		}
+	}
+
+	// to compile
+	cout << init_points << endl;
 
     auto [template_vertices, template_edges] = init_template(is_rope);
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_init = Matrix3Xf2pcptr(template_vertices);
 	
 	std::vector<std::string> topics;
     if (is_sim) {
@@ -917,8 +936,8 @@ int main(int argc, char* argv[])
     		topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_config"));
     		topics.push_back(std::string("/kinect2_victor_head/qhd/dot_config"));
     		// topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_info"));
-			topics.push_back(std::string("/left_arm/gripper_status"));
-			topics.push_back(std::string("/right_arm/gripper_status"));
+			topics.push_back(std::string("/left_arm/gripper_status_repub"));
+			topics.push_back(std::string("/right_arm/gripper_status_repub"));
 		} else {
 			topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
     		topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
@@ -948,13 +967,10 @@ int main(int argc, char* argv[])
     // image_sync.registerCallback(boost::bind(&im_callback, _1, _2, _3));
     // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped, victor_hardware_interface::Robotiq3FingerStatus_sync, victor_hardware_interface::Robotiq3FingerStatus_sync>(
 	// 	rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub, 25);
-	if (is_gripper_info) {
-		auto sync = message_filters::Synchronizer<SyncPolicy_use_gripper>(SyncPolicy_use_gripper(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub);
-    	sync.registerCallback(boost::bind(&callback_use_gripper, _1, _2, _3, _4, _5, _6, _7));
-	} else {
-		auto sync = message_filters::Synchronizer<SyncPolicy_img>(SyncPolicy_img(10), rgb_sub, depth_sub, info_sub);
-    	sync.registerCallback(boost::bind(&callback_im, _1, _2, _3));
-    }
+	auto sync_use_gripper = message_filters::Synchronizer<SyncPolicy_use_gripper>(SyncPolicy_use_gripper(10), rgb_sub_use_gripper, depth_sub_use_gripper, info_sub_use_gripper, config_sub, dot_sub, l_sub, r_sub);
+    sync_use_gripper.registerCallback(boost::bind(&callback_use_gripper, _1, _2, _3, _4, _5, _6, _7));
+	auto sync_img = message_filters::Synchronizer<SyncPolicy_img>(SyncPolicy_img(10), rgb_sub, depth_sub, info_sub);
+   	sync_img.registerCallback(boost::bind(&callback_im, _1, _2, _3));
 	// ros::spin();
     for(rosbag::MessageInstance const& m: view)
     {
@@ -963,7 +979,11 @@ int main(int argc, char* argv[])
             auto i = m.instantiate<sm::Image>();
             if (i != nullptr)
             {
-                rgb_sub.newMessage(i);
+				if (is_gripper_info) {
+					rgb_sub_use_gripper.newMessage(i);
+				} else {
+               	 	rgb_sub.newMessage(i);
+				}
             }
             else
             {
@@ -975,7 +995,11 @@ int main(int argc, char* argv[])
             auto i = m.instantiate<sm::Image>();
             if (i != nullptr)
             {
-                depth_sub.newMessage(i);
+				if (is_gripper_info) {
+					depth_sub_use_gripper.newMessage(i);
+				} else {
+               	 	depth_sub.newMessage(i);
+				}
             }
             else
             {
@@ -987,7 +1011,11 @@ int main(int argc, char* argv[])
             auto info = m.instantiate<sm::CameraInfo>();
             if (info != nullptr)
             {
-                info_sub.newMessage(info);
+				if (is_gripper_info) {
+					info_sub_use_gripper.newMessage(info);
+				} else {
+               	 	info_sub.newMessage(info);
+				}
             }
             else
             {
@@ -1082,7 +1110,7 @@ int main(int argc, char* argv[])
 				else if (m.getTopic() == topics[5]) {
 					auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
             		if (info != nullptr) {
-                		l_sub.newMessage(gripper_status_origin_to_sync(info, -14567));
+                		l_sub.newMessage(gripper_status_origin_to_sync(info, 0));
             		} else {
                 		cout << "NULL initiation!" << endl;
             		}
@@ -1090,7 +1118,7 @@ int main(int argc, char* argv[])
 				else if (m.getTopic() == topics[6]) {
 					auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
             		if (info != nullptr) {
-                		r_sub.newMessage(gripper_status_origin_to_sync(info, -15107));
+                		r_sub.newMessage(gripper_status_origin_to_sync(info, 0));
             		} else {
                 		cout << "NULL initiation!" << endl;
             		}
@@ -1419,7 +1447,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-            rate.sleep();
+            // rate.sleep();
         }
         if (!ros::ok())
         {
@@ -1467,25 +1495,24 @@ int main(int argc, char* argv[])
         // cv::Scalar low_hsv = cv::Scalar(0.0 * 360.0, 0.0, 0.98);
         // cv::Scalar high_hsv = cv::Scalar(1.0 * 360.0, 0.02, 1.0);
 
-        #ifdef ROPE
-        // Red
-        cv::Mat mask1;
-        cv::Mat mask2;
         cv::Mat hsv_mask;
-        cv::inRange(color_hsv, cv::Scalar(0, 0.5, 0.5), cv::Scalar(20, 1.0, 1.0), mask1);
-        cv::inRange(color_hsv, cv::Scalar(340, 0.5, 0.5), cv::Scalar(360, 1.0, 1.0), mask2);
-        bitwise_or(mask1, mask2, hsv_mask);
-        #else
-        // Purple
-        cv::Mat hsv_mask;
-        // cv::inRange(color_hsv, cv::Scalar(210, 0.0, 0.4), cv::Scalar(250, 0.5, 0.8), hsv_mask);
-        // cv::inRange(color_hsv, cv::Scalar(50, 0.1, 0.2), cv::Scalar(70, 0.3, 0.6), hsv_mask);
-        cv::Mat mask1;
-        cv::Mat mask2;
-        cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-        cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
-        bitwise_or(mask1, mask2, hsv_mask);
-        #endif
+        if (is_rope) {
+        	// Red
+        	cv::Mat mask1;
+        	cv::Mat mask2;
+        	cv::inRange(color_hsv, cv::Scalar(0, 0.5, 0.5), cv::Scalar(20, 1.0, 1.0), mask1);
+        	cv::inRange(color_hsv, cv::Scalar(340, 0.5, 0.5), cv::Scalar(360, 1.0, 1.0), mask2);
+        	bitwise_or(mask1, mask2, hsv_mask);
+        } else {
+        	// Purple
+        	// cv::inRange(color_hsv, cv::Scalar(210, 0.0, 0.4), cv::Scalar(250, 0.5, 0.8), hsv_mask);
+        	// cv::inRange(color_hsv, cv::Scalar(50, 0.1, 0.2), cv::Scalar(70, 0.3, 0.6), hsv_mask);
+        	cv::Mat mask1;
+        	cv::Mat mask2;
+        	cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
+        	cv::inRange(color_hsv, cv::Scalar(340, 0.5, 0.5), cv::Scalar(360, 1.0, 1.0), mask2);
+        	bitwise_or(mask1, mask2, hsv_mask);
+        }
 
         #ifdef DEBUG
         to_file(workingDir + "/cpp_mask.txt", hsv_mask);
@@ -1615,6 +1642,7 @@ int main(int argc, char* argv[])
         out.downsampled_cloud->header.frame_id = frame_id;
         out.cpd_output->header.frame_id = frame_id;
         out.gurobi_output->header.frame_id = frame_id;
+		template_cloud_init->header.frame_id = frame_id;
         out.cpd_predict->header.frame_id = frame_id;
 
         // draw cylinder
@@ -1801,6 +1829,7 @@ int main(int argc, char* argv[])
         pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
         pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
         pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
+        pcl_conversions::toPCL(time, template_cloud_init->header.stamp);
         pcl_conversions::toPCL(time, out.cpd_predict->header.stamp);
 	
         #ifdef ENTIRE
