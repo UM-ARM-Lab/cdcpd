@@ -25,7 +25,7 @@
 #include "cdcpd/obs_util.h"
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/optimizer.h"
-#include "cdcpd/past_template_matcher.h"
+// #include "cdcpd/past_template_matcher.h"
 #include "depth_traits.h"
 
 // TODO rm
@@ -303,8 +303,10 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
 //     }
 // }
 
-CDCPD::CDCPD():
-	template_matcher(1500){}
+// CDCPD::CDCPD():
+// 	template_matcher(1500){}
+
+CDCPD::CDCPD(){}
 
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi& _template_edges,
@@ -322,7 +324,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _lambda,
              const double _k,
 			 const float _zeta) :
-    template_matcher(1500), // TODO make configurable?
+    // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
     last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?
@@ -429,7 +431,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _lambda,
              const double _k,
 			 const float _zeta) :
-    template_matcher(1500), // TODO make configurable?
+    // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
     last_lower_bounding_box(-6.0, -6.0, -6.0), // TODO make configurable?

@@ -228,7 +228,7 @@ private:
     std::shared_ptr<smmap::ConstraintJacobianModel> model;
 	std::shared_ptr<smmap::DiminishingRigidityModel> deformModel;
 
-    PastTemplateMatcher template_matcher;
+    // PastTemplateMatcher template_matcher;
     Eigen::Matrix3Xf original_template;
     Eigen::Matrix2Xi template_edges;
 
