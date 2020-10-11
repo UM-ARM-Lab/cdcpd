@@ -83,19 +83,17 @@ typedef message_filters::sync_policies::ApproximateTime<cdcpd_ros::Float32MultiA
 														victor_hardware_interface::Robotiq3FingerStatus_sync> SyncPolicy;
  */
 
-#ifdef GRIPPER
 typedef message_filters::sync_policies::ApproximateTime<sm::Image, 
                                                         sm::Image,
                                                         sm::CameraInfo,
 														cdcpd_ros::Float32MultiArrayStamped,
 														cdcpd_ros::Float32MultiArrayStamped,
 														victor_hardware_interface::Robotiq3FingerStatus_sync,
-														victor_hardware_interface::Robotiq3FingerStatus_sync> SyncPolicy;
-#else
+														victor_hardware_interface::Robotiq3FingerStatus_sync> SyncPolicy_use_gripper;
+
 typedef message_filters::sync_policies::ApproximateTime<sm::Image, 
                                                         sm::Image,
-                                                        sm::CameraInfo> SyncPolicy;
-#endif
+                                                        sm::CameraInfo> SyncPolicy_img;
 
 std::vector<sm::Image::ConstPtr> color_images;
 std::vector<sm::Image::ConstPtr> depth_images;
@@ -205,7 +203,6 @@ public:
 // 	return std::make_shared<victor_hardware_interface::Robotiq3FingerStatus> (origin);
 // }
 
-#ifdef GRIPPER
 static victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr gripper_status_origin_to_sync(
 	const victor_hardware_interface::Robotiq3FingerStatus::ConstPtr origin, int diff)
 {
@@ -218,7 +215,6 @@ static victor_hardware_interface::Robotiq3FingerStatus_sync::ConstPtr gripper_st
 	return syncptr;
 	// return std::make_shared<victor_hardware_interface::Robotiq3FingerStatus_sync> (sync const);
 }
-#endif
 
 /*
 void im_callback(
@@ -244,8 +240,7 @@ void callback(
 }
  */
 
-#ifdef GRIPPER
-void callback(
+void callback_use_gripper(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
     const sm::CameraInfo::ConstPtr &cam_info,
@@ -262,8 +257,8 @@ void callback(
 	l_status.push_back(l_s);
 	r_status.push_back(r_s);
 }
-#else
-void callback(
+
+void callback_im(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
     const sm::CameraInfo::ConstPtr &cam_info)
@@ -272,8 +267,6 @@ void callback(
     depth_images.push_back(depth_img);
     camera_infos.push_back(cam_info);
 }
-#endif
-
 
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
     const sm::Image::ConstPtr &rgb_img,
@@ -531,9 +524,10 @@ void test_lle() {
 }
 #endif
 
-#ifdef DEV
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
 {
+    Eigen::Matrix3Xf vertices;
+    Eigen::Matrix2Xi edges;
     if (is_rope) {
 		// This is for simulation
     	// float left_x = -0.5f; float left_y = -0.5f; float left_z = 3.0f; float right_x = 0.5f; float right_y = -0.5f; float right_z = 3.0f;
@@ -552,13 +546,13 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
     
 		int points_on_rope = 40;
 
-    	MatrixXf vertices(3, points_on_rope); // Y^0 in the paper
+    	vertices.resize(3, points_on_rope); // Y^0 in the paper
     	vertices.setZero();
     	vertices.row(0).setLinSpaced(points_on_rope, left_x, right_x);
     	vertices.row(1).setLinSpaced(points_on_rope, left_y, right_y);
     	vertices.row(2).setLinSpaced(points_on_rope, left_z, right_z);
 
-    	MatrixXi edges(2, points_on_rope - 1);
+    	edges.resize(2, points_on_rope - 1);
     	edges(0, 0) = 0;
     	edges(1, edges.cols() - 1) = points_on_rope - 1;
     	for (int i = 1; i <= edges.cols() - 1; ++i)
@@ -575,8 +569,8 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
 	// cloth_cover_by_hand
     int num_width = 15; int num_height = 15; float right_up_y = 0.0f; float right_up_x = -0.1f; float left_bottom_y = -0.28f; float left_bottom_x = -0.38f; float z = 1.5f;
 
-    Eigen::Matrix3Xf vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
-    Eigen::Matrix2Xi edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
+    vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
+    edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
 
     int edge_count = 0;
     for (int i = 0; i < num_height; ++i)
@@ -611,7 +605,6 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
 
     return std::make_tuple(vertices, edges);
 }
-#endif
 
 std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template()
 {
@@ -829,7 +822,6 @@ int main(int argc, char* argv[])
     cout << "Starting up..." << endl;
 	
 
-    auto [template_vertices, template_edges] = init_template();
 
 	// cout << template_vertices << endl;
     // cout << template_edges << endl;
@@ -858,8 +850,6 @@ int main(int argc, char* argv[])
     ros::NodeHandle ph("~");
 
     // Publsihers for the data, some visualizations, others consumed by other nodes
-    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
-
 	auto original_publisher = nh.advertise<PointCloud> ("cdcpd/original", 1);
     auto masked_publisher = nh.advertise<PointCloud> ("cdcpd/masked", 1);
     auto downsampled_publisher = nh.advertise<PointCloud> ("cdcpd/downsampled", 1);
@@ -904,35 +894,37 @@ int main(int argc, char* argv[])
 	const bool is_pred2 = ROSHelpers::GetParam<bool>(ph, "is_pred2", true);
 	const bool is_no_pred = ROSHelpers::GetParam<bool>(ph, "is_no_pred", true);
 	const bool is_sim = ROSHelpers::GetParam<bool>(ph, "is_sim", true);
-	#ifdef DEV
 	const bool is_rope = ROSHelpers::GetParam<bool>(ph, "is_rope", true);
-	#endif
+	const bool is_gripper_info = ROSHelpers::GetParam<bool>(ph, "is_gripper_info", true);
 
+    auto [template_vertices, template_edges] = init_template(is_rope);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
+	
 	std::vector<std::string> topics;
-    #ifdef SIMULATION
-    topics.push_back(std::string("image_color_rect"));
-    topics.push_back(std::string("image_depth_rect"));
-    topics.push_back(std::string("camera_info"));
-    topics.push_back(std::string("groud_truth"));
-    topics.push_back(std::string("gripper_velocity"));
-    topics.push_back(std::string("gripper_info"));
-    topics.push_back(std::string("gripper_config"));
-    #else
-	#ifdef GRIPPER
-    topics.push_back(std::string("/kinect2_victor_head/qhd/image_color_rect"));
-    topics.push_back(std::string("/kinect2_victor_head/qhd/image_depth_rect"));
-    topics.push_back(std::string("/kinect2_victor_head/qhd/camera_info"));
-    topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_config"));
-    topics.push_back(std::string("/kinect2_victor_head/qhd/dot_config"));
-    // topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_info"));
-	topics.push_back(std::string("/left_arm/gripper_status"));
-	topics.push_back(std::string("/right_arm/gripper_status"));
-	#else
-	topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
-    topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
-    topics.push_back(std::string("/kinect2/qhd/camera_info"));
-	#endif
-	#endif
+    if (is_sim) {
+    	topics.push_back(std::string("image_color_rect"));
+    	topics.push_back(std::string("image_depth_rect"));
+    	topics.push_back(std::string("camera_info"));
+    	topics.push_back(std::string("groud_truth"));
+    	topics.push_back(std::string("gripper_velocity"));
+    	topics.push_back(std::string("gripper_info"));
+    	topics.push_back(std::string("gripper_config"));
+    } else {
+		if (is_gripper_info) {
+    		topics.push_back(std::string("/kinect2_victor_head/qhd/image_color_rect"));
+    		topics.push_back(std::string("/kinect2_victor_head/qhd/image_depth_rect"));
+    		topics.push_back(std::string("/kinect2_victor_head/qhd/camera_info"));
+    		topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_config"));
+    		topics.push_back(std::string("/kinect2_victor_head/qhd/dot_config"));
+    		// topics.push_back(std::string("/kinect2_victor_head/qhd/gripper_info"));
+			topics.push_back(std::string("/left_arm/gripper_status"));
+			topics.push_back(std::string("/right_arm/gripper_status"));
+		} else {
+			topics.push_back(std::string("/kinect2/qhd/image_color_rect"));
+    		topics.push_back(std::string("/kinect2/qhd/image_depth_rect"));
+    		topics.push_back(std::string("/kinect2/qhd/camera_info"));
+		}
+	}
     #ifdef SHAPE_COMP
 	topics.push_back(std::string("comp_vertices"));
 	topics.push_back(std::string("comp_faces"));
@@ -956,13 +948,13 @@ int main(int argc, char* argv[])
     // image_sync.registerCallback(boost::bind(&im_callback, _1, _2, _3));
     // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped, victor_hardware_interface::Robotiq3FingerStatus_sync, victor_hardware_interface::Robotiq3FingerStatus_sync>(
 	// 	rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub, 25);
-	#ifdef GRIPPER
-	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub);
-    sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5, _6, _7));
-	#else
-	auto sync = message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), rgb_sub, depth_sub, info_sub);
-    sync.registerCallback(boost::bind(&callback, _1, _2, _3));
-    #endif
+	if (is_gripper_info) {
+		auto sync = message_filters::Synchronizer<SyncPolicy_use_gripper>(SyncPolicy_use_gripper(10), rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub);
+    	sync.registerCallback(boost::bind(&callback_use_gripper, _1, _2, _3, _4, _5, _6, _7));
+	} else {
+		auto sync = message_filters::Synchronizer<SyncPolicy_img>(SyncPolicy_img(10), rgb_sub, depth_sub, info_sub);
+    	sync.registerCallback(boost::bind(&callback_im, _1, _2, _3));
+    }
 	// ros::spin();
     for(rosbag::MessageInstance const& m: view)
     {
@@ -1002,225 +994,157 @@ int main(int argc, char* argv[])
                 cout << "NULL initiation!" << endl;
             }
         }
-        #ifdef SIMULATION
-        else if (m.getTopic() == topics[3])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                ground_truth.push_back(info);
-                // truth_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-        }
-        else if (m.getTopic() == topics[4])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                grippers_dot.push_back(info);
-                // dot_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }   
-        }
-        else if (m.getTopic() == topics[5])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                grippers_ind.push_back(info);
-                // ind_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-        }
-        else if (m.getTopic() == topics[6])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                grippers_config.push_back(info);
-                // config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-        }
-        #ifdef SHAPE_COMP
-		else if (m.getTopic() == topics[7])
-		{
-			auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                verts_ptr = info;
-                // config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-		}
-		else if (m.getTopic() == topics[8])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                faces_ptr = info;
-                // config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-        }
-		else if (m.getTopic() == topics[9])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                normals_ptr = info;
-                // config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-        }
-        #endif
-		#else
+        if (is_sim) {
+        	if (m.getTopic() == topics[3]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+               		ground_truth.push_back(info);
+                	// truth_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+            	}
+        	}
+        	else if (m.getTopic() == topics[4]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	grippers_dot_sim.push_back(info);
+                	// dot_sub.newMessage(info);
+        		} else {
+                	cout << "NULL initiation!" << endl;
+            	}   
+        	}
+        	else if (m.getTopic() == topics[5]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	grippers_ind.push_back(info);
+                	// ind_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+   				}
+        	}
+        	else if (m.getTopic() == topics[6]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	grippers_config_sim.push_back(info);
+                	// config_sub.newMessage(info);
+           		} else {
+                	cout << "NULL initiation!" << endl;
+            	}
+        	}
+       		#ifdef SHAPE_COMP
+			else if (m.getTopic() == topics[7] {
+				auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	verts_ptr = info;
+                	// config_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+            	}
+			}
+			else if (m.getTopic() == topics[8]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	faces_ptr = info;
+                	// config_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+        		}
+        	}
+			else if (m.getTopic() == topics[9]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr){
+                	normals_ptr = info;
+                	// config_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+            	}
+        	}
+        	#endif	
+		} else {
 		// topics in exp bagfile
-		#ifdef GRIPPER
-		else if (m.getTopic() == topics[3])
-		{
-			auto info = m.instantiate<cdcpd_ros::Float32MultiArrayStamped>();
-            if (info != nullptr)
-            {
-				config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
+			if (is_gripper_info) {
+				if (m.getTopic() == topics[3]) {
+					auto info = m.instantiate<cdcpd_ros::Float32MultiArrayStamped>();
+            		if (info != nullptr) {
+						config_sub.newMessage(info);
+         			} else {
+                		cout << "NULL initiation!" << endl;
+            		}
+				}
+				else if (m.getTopic() == topics[4]) {
+					auto info = m.instantiate<cdcpd_ros::Float32MultiArrayStamped>();
+            		if (info != nullptr) {
+                		dot_sub.newMessage(info);
+            		} else {
+                		cout << "NULL initiation!" << endl;
+            		}
+				}
+				else if (m.getTopic() == topics[5]) {
+					auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
+            		if (info != nullptr) {
+                		l_sub.newMessage(gripper_status_origin_to_sync(info, -14567));
+            		} else {
+                		cout << "NULL initiation!" << endl;
+            		}
+				}
+				else if (m.getTopic() == topics[6]) {
+					auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
+            		if (info != nullptr) {
+                		r_sub.newMessage(gripper_status_origin_to_sync(info, -15107));
+            		} else {
+                		cout << "NULL initiation!" << endl;
+            		}
+				}
+			}
+			#ifdef SHAPE_COMP
+			if (m.getTopic() == topics[7]) {
+				auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	verts_ptr = info;
+                	// config_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+            	}
+			}
+			else if (m.getTopic() == topics[8]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	faces_ptr = info;
+                	// config_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+            	}
+        	}
+			else if (m.getTopic() == topics[9]) {
+            	auto info = m.instantiate<stdm::Float32MultiArray>();
+            	if (info != nullptr) {
+                	normals_ptr = info;
+                	// config_sub.newMessage(info);
+            	} else {
+                	cout << "NULL initiation!" << endl;
+           		}
+        	}
+			#endif
 		}
-		else if (m.getTopic() == topics[4])
-		{
-			auto info = m.instantiate<cdcpd_ros::Float32MultiArrayStamped>();
-            if (info != nullptr)
-            {
-                dot_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-		}
-		else if (m.getTopic() == topics[5])
-		{
-			auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
-            if (info != nullptr)
-            {
-                l_sub.newMessage(gripper_status_origin_to_sync(info, -14567));
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-		}
-		else if (m.getTopic() == topics[6])
-		{
-			auto info = m.instantiate<victor_hardware_interface::Robotiq3FingerStatus>();
-            if (info != nullptr)
-            {
-                r_sub.newMessage(gripper_status_origin_to_sync(info, -15107));
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-		}
-		#endif
-		#ifdef SHAPE_COMP
-		else if (m.getTopic() == topics[7])
-		{
-			auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                verts_ptr = info;
-                // config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-		}
-		else if (m.getTopic() == topics[8])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                faces_ptr = info;
-                // config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-        }
-		else if (m.getTopic() == topics[9])
-        {
-            auto info = m.instantiate<stdm::Float32MultiArray>();
-            if (info != nullptr)
-            {
-                normals_ptr = info;
-                // config_sub.newMessage(info);
-            }
-            else
-            {
-                cout << "NULL initiation!" << endl;
-            }
-        }
-        #endif
-        #endif
-        else
-        {
-            cerr << "Invalid topic: " << m.getTopic() << endl;
-            exit(1);
-        }
     }
     bag.close();
 
     cout << "rgb images size: " << color_images.size() << endl;
     cout << "depth images size: " << depth_images.size() << endl;
     cout << "camera infos size: " << camera_infos.size() << endl;
-	#ifdef GRIPPER
-	cout << "config size: " << grippers_config.size() << endl;
-    cout << "velocity size: " << grippers_dot.size() << endl;
-	#endif
 	
 	auto color_iter = color_images.cbegin();
     auto depth_iter = depth_images.cbegin();
     auto info_iter = camera_infos.cbegin();
 	auto config_sim_iter = grippers_config_sim.cbegin();
     auto velocity_sim_iter = grippers_dot_sim.cbegin();
-    auto config_iter = grippers_config.cbegin();
-    auto velocity_iter = grippers_dot.cbegin();
     auto ind_iter = grippers_ind.cbegin();
     auto truth_iter = ground_truth.cbegin();
-	#ifdef GRIPPER
+
 	auto config_iter = grippers_config.cbegin();
     auto velocity_iter = grippers_dot.cbegin();
     auto l_iter = l_status.cbegin();
 	auto r_iter = r_status.cbegin();
-	#endif
 
     // Used to republish the images at the current timestamp for other usage
     // Exits at the end of the if statement
@@ -1305,7 +1229,8 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
 	} else {
     	cdcpd = CDCPD(template_cloud,
                 template_edges,
@@ -1316,7 +1241,8 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
 	}
 
     #ifdef COMP
@@ -1325,12 +1251,13 @@ int main(int argc, char* argv[])
 	CDCPD cdcpd_without_constrain(template_cloud_without_constrain, template_edges, intrinsics, false, alpha, beta, lambda, k_spring);
     #endif
 
+	CDCPD cdcpd_without_prediction;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction = Matrix3Xf2pcptr(template_vertices);
+    auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
+	auto output_without_prediction_order_pub = nh.advertise<vm::Marker> ("cdcpd/output_without_prediction_order", 10);
     if (is_no_pred) {
-    static pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_without_prediction = Matrix3Xf2pcptr(template_vertices);
-    static auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
-	static auto output_without_prediction_order_pub = nh.advertise<vm::Marker> ("cdcpd/output_without_prediction_order", 10);
 		if (is_sim) {
-			static CDCPD cdcpd_without_prediction(template_cloud,
+			cdcpd_without_prediction = CDCPD(template_cloud_without_prediction,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1344,9 +1271,10 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
 		} else {
-			static CDCPD cdcpd_without_prediction(template_cloud,
+			cdcpd_without_prediction = CDCPD(template_cloud_without_prediction,
                 template_edges,
                 #ifdef SHAPE_COMP
                 obstacle_param,
@@ -1355,15 +1283,17 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
 		}
 	}
 
+	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred1 = Matrix3Xf2pcptr(template_vertices);
+    auto output_pred1_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_deform_model", 1);
+	CDCPD cdcpd_pred1;
 	if (is_pred1) {
-		pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred1 = Matrix3Xf2pcptr(template_vertices);
-    	auto output_pred1_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_deform_model", 1);
 		if (is_sim) {
-			CDCPD cdcpd_pred1(template_cloud_pred1,
+			cdcpd_pred1 = CDCPD(template_cloud_pred1,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1377,9 +1307,10 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
 		} else {
-			CDCPD cdcpd_without_prediction(template_cloud,
+			cdcpd_pred1 = CDCPD(template_cloud_pred1,
                 template_edges,
                 #ifdef SHAPE_COMP
                 obstacle_param,
@@ -1388,15 +1319,17 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
 		}
 	}
 
+	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred2 = Matrix3Xf2pcptr(template_vertices);
+    auto output_pred2_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_J_model", 1);
+	CDCPD cdcpd_pred2;
 	if (is_pred2) {
-		pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred2 = Matrix3Xf2pcptr(template_vertices);
-    	auto output_pred2_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_J_model", 1);
 		if (is_sim) {
-			CDCPD cdcpd_pred2(template_cloud_pred2,
+			cdcpd_pred2 = CDCPD(template_cloud_pred2,
                 template_edges,
                 nh_ptr,
                 translation_dir_deformability,
@@ -1410,9 +1343,10 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
     	} else {
-			CDCPD cdcpd_without_prediction(template_cloud,
+			cdcpd_pred2 = CDCPD(template_cloud_pred2,
                 template_edges,
                 #ifdef SHAPE_COMP
                 obstacle_param,
@@ -1421,7 +1355,8 @@ int main(int argc, char* argv[])
                 alpha,
                 beta,
                 lambda,
-                k_spring);
+                k_spring,
+				zeta);
 		}
 	}
 	
@@ -1497,14 +1432,15 @@ int main(int argc, char* argv[])
         }
 
         auto [color_image_bgr, depth_image, intrinsics] = toOpenCv(*color_iter, *depth_iter, *info_iter);
-        #ifdef SIMULATION
-        Matrix3Xf one_frame_truth = toGroundTruth(*truth_iter);
-        tie(g_config, g_dot, g_ind) = toGripperConfig(*config_iter, *velocity_iter, *ind_iter);
-		#else
-		#ifdef GRIPPER
-    	auto [g_config, g_dot] = toGripperConfig(*config_iter, *velocity_iter);
-		#endif
-        #endif
+        
+        Matrix3Xf one_frame_truth;
+		if (is_sim) {
+			one_frame_truth = toGroundTruth(*truth_iter);
+        	tie(g_config, g_dot, g_ind) = toGripperConfig(*config_sim_iter, *velocity_sim_iter, *ind_iter);
+		} 
+		else if (is_gripper_info) {
+    		tie(g_config, g_dot) = toGripperConfig(*config_iter, *velocity_iter);
+		}
 
         /// Color filter
         // For the red rope, (h > 0.85) & (s > 0.5). For the flag, (h < 1.0) & (h > 0.9)
@@ -1558,25 +1494,27 @@ int main(int argc, char* argv[])
         #endif
 
         auto frame_id = "kinect2_rgb_optical_frame";
+		
+		std::vector<bool> is_grasped;
         
-		#ifdef SIMULATION
+		CDCPD::Output out;
 		cout << "prediction choice: 0" << endl;
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points);
-        std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
-        template_cloud = out.gurobi_output;
-        #else
-		#ifdef GRIPPER
-		auto is_grasped = toGripperStatus(*l_iter, *r_iter);
-		for (auto& dot: g_dot)
-		{
-			dot = dot/10;
-		}
-        auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
-        #else
-		auto out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, true, true, 0, fixed_points);
-		template_cloud = out.gurobi_output;
-        #endif
-		#endif
+        if (is_sim) {
+			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points);
+        	std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+        	template_cloud = out.gurobi_output;
+        }
+		else if (is_gripper_info) {
+			is_grasped = toGripperStatus(*l_iter, *r_iter);
+			for (auto& dot: g_dot)
+			{
+				dot = dot/10;
+			}
+        	out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
+        } else {
+			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, true, true, 0, fixed_points);
+			template_cloud = out.gurobi_output;
+        }
 
         #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
@@ -1584,41 +1522,43 @@ int main(int argc, char* argv[])
 		out_without_constrain.gurobi_output->header.frame_id = frame_id;
         #endif
 
+		CDCPD::Output out_without_prediction;
         if (is_no_pred) {
-		cout << "no prediction used" << endl;
+			cout << "no prediction used" << endl;
 			if (is_sim) {
-        		static auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
+        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
+				std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         	} else {
-				cout << "You forgot to add w or w/o gripper info case, IDIOT!" << endl;
-        		static auto out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points);
+        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points); 
 			}
-		template_cloud_without_prediction = out_without_prediction.gurobi_output;
-		out_without_prediction.gurobi_output->header.frame_id = frame_id;
-		std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+			template_cloud_without_prediction = out_without_prediction.gurobi_output;
+			out_without_prediction.gurobi_output->header.frame_id = frame_id;
 		}
 
+		CDCPD::Output out_pred1;
         if (is_pred1) {
 			cout << "prediction choice: 1" << endl;
 			if (is_sim) {
-        		static auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, true, true, 1, fixed_points);
+        		out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, true, true, 1, fixed_points);
+				std::ofstream(workingDir + "/error_pred1.txt", std::ofstream::app) << calc_mean_error(out_pred1.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         	} else {
-        		static auto out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, is_grasped, nh, translational_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 1, fixed_points);
+        		out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 1, fixed_points);
 			}
 			template_cloud_pred1 = out_pred1.gurobi_output;
 			out_pred1.gurobi_output->header.frame_id = frame_id;
-			std::ofstream(workingDir + "/error_pred1.txt", std::ofstream::app) << calc_mean_error(out_pred1.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         }
-
+		
+		CDCPD::Output out_pred2;
         if (is_pred2) {
 			cout << "prediction choice: 2" << endl;
 			if (is_sim) {
-        		static auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, true, true, 2, fixed_points);
+        		out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, true, true, 2, fixed_points);
+				std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         	} else {
-        		static auto out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, is_grasped, nh, translational_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 2, fixed_points);
+        		out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 2, fixed_points);
 			}
 			template_cloud_pred2 = out_pred2.gurobi_output;
 			out_pred2.gurobi_output->header.frame_id = frame_id;
-			std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         }
 
 		ifstream cpd_phy_result;
@@ -1906,19 +1846,18 @@ int main(int argc, char* argv[])
         ++color_iter;
         ++depth_iter;
         ++info_iter;
-		#ifdef SIMULATION
-        ++config_iter;
-        ++velocity_iter;
-        ++ind_iter;
-        ++truth_iter;
-		#else
-		#ifdef GRIPPER
-        ++config_iter;
-        ++velocity_iter;
-		++l_iter;
-		++r_iter;
-		#endif
-        #endif
+		if (is_sim) {
+        	++config_iter;
+        	++velocity_iter;
+        	++ind_iter;
+        	++truth_iter;
+		}
+		else if (is_gripper_info) {
+        	++config_iter;
+        	++velocity_iter;
+			++l_iter;
+			++r_iter;
+		}
         ++frame;
     }
 
