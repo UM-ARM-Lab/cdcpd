@@ -4,6 +4,7 @@
 #include <chrono>
 #include <map>
 #include <sstream>
+#include <ctime>
 
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -38,6 +39,8 @@
 #include <cdcpd/cdcpd.h>
 #include <cdcpd/optimizer.h>
 
+#include <opencv2/core/eigen.hpp>
+
 #include <cdcpd_ros/Float32MultiArrayStamped.h>
 #include <victor_hardware_interface/Robotiq3FingerStatus_sync.h>
 #include <victor_hardware_interface/Robotiq3FingerStatus.h>
@@ -47,11 +50,17 @@ using std::endl;
 using std::string;
 using std::stringstream;
 using Eigen::MatrixXd;
+using Eigen::Matrix3d;
+using Eigen::Matrix3f;
+using cv::Matx33d;
 using Eigen::MatrixXf;
 using Eigen::MatrixXi;
+using Eigen::Matrix2Xi;
+using Eigen::Matrix2Xf;
 using Eigen::Matrix3Xf;
 using Eigen::Matrix3Xd;
 using Eigen::Isometry3d;
+using Eigen::VectorXf;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 using pcl::PointXYZ;
@@ -137,6 +146,48 @@ void to_file(const std::string fname, const cv::Mat m) {
     ofs << "Matrix ends\n";
     ofs.close();
 }
+
+cv::Mat draw_vis(const cv::Mat& rgb_image,
+				 const Matrix3Xf& template_vertices,
+				 const Matrix2Xi& template_edges,
+				 const Matx33d& intrinsics) {
+	// project 3D point to 2D plane
+	Matrix3d intri_eigen_temp;
+	cv::cv2eigen(intrinsics, intri_eigen_temp);
+	Matrix3f intri_eigen = intri_eigen_temp.cast<float>();
+	Matrix3Xf proj_mat = intri_eigen * template_vertices;
+	proj_mat.array().rowwise() /= proj_mat.row(2).array();	
+	Matrix2Xf pixels_temp = proj_mat.topRows(2);
+	Matrix2Xi pixels = pixels_temp.cast<int>();
+	cv::Scalar red( 255, 0, 0 );
+	cv::Scalar blue( 0, 0, 255 );
+	cv::Scalar yellow(255, 255, 0);
+
+	// padding the image (some points are out of image)
+	cv::Mat out;
+	int top, bottom, left, right;
+	top = (int) (0.1*rgb_image.rows); bottom = top;
+    left = (int) (0.1*rgb_image.cols); right = left;
+	int borderType = cv::BORDER_CONSTANT;
+	cv::Scalar white(255, 255, 255);
+	cv::copyMakeBorder( rgb_image, out, top, bottom, left, right, borderType, white );
+	
+	for(int i = 0; i < template_vertices.cols(); i++) {
+		cv::Point vertex(pixels(0, i)+left, pixels(1, i)+top);
+		cv::circle(out, vertex,	2, yellow, cv::FILLED, cv::LINE_8 );
+	}
+	
+	for(int e = 0; e < template_edges.cols(); e++) {
+		int pt1 = template_edges(0, e);
+		int pt2 = template_edges(1, e);
+		cv::Point start(pixels(0, pt1)+left, pixels(1, pt1)+top);
+		cv::Point end(pixels(0, pt2)+left, pixels(1, pt2)+top);
+		cv::line(out, start, end, yellow);
+	}
+	cv::cvtColor(out, out, CV_BGR2RGB);
+	return out;
+}
+
 
 vm::Marker draw_cylinder_marker(const std::vector<float>& cylinder_data,
 								const std::vector<float>& quat,
@@ -948,9 +999,10 @@ int main(int argc, char* argv[])
 	const bool is_sim = ROSHelpers::GetParam<bool>(ph, "is_sim", true);
 	const bool is_rope = ROSHelpers::GetParam<bool>(ph, "is_rope", true);
 	const bool is_gripper_info = ROSHelpers::GetParam<bool>(ph, "is_gripper_info", true);	
-    double translation_dir_deformability = ROSHelpers::GetParam<double>(ph, "translation_dir_deformablity", 1.0);
-    double translation_dis_deformability = ROSHelpers::GetParam<double>(ph, "translation_dis_deformablity", 1.0);
-    double rotation_deformability = ROSHelpers::GetParam<double>(ph, "rotation_deformablity", 10.0);
+    const double translation_dir_deformability = ROSHelpers::GetParam<double>(ph, "translation_dir_deformablity", 1.0);
+    const double translation_dis_deformability = ROSHelpers::GetParam<double>(ph, "translation_dis_deformablity", 1.0);
+    const double rotation_deformability = ROSHelpers::GetParam<double>(ph, "rotation_deformablity", 10.0);
+	const bool is_record = ROSHelpers::GetParam<bool>(ph, "is_record", false);
 
 	for (int i = 0; i < 8; i++) {
 		cylinder_data[i] = ROSHelpers::GetParam<float>(ph, "cylinder_data_"+std::to_string(i), -1.0);
@@ -965,10 +1017,7 @@ int main(int argc, char* argv[])
 			init_points(dim, pt) = ROSHelpers::GetParam<float>(ph, "init_pt_"+std::to_string(pt*3+dim), 0.0f);
 		}
 	}
-
-	// to compile
-	cout << init_points << endl;
-
+	
     auto [template_vertices, template_edges] = init_template(is_rope, init_points);
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_init = Matrix3Xf2pcptr(template_vertices);
@@ -1012,6 +1061,11 @@ int main(int argc, char* argv[])
     #endif
     rosbag::Bag bag(folder + bagfile + ".bag", rosbag::bagmode::Read);
     rosbag::View view(bag, rosbag::TopicQuery(topics));
+
+	ifstream cpd_phy_test;
+  	cpd_phy_test.open(ros::package::getPath("cdcpd_ros") + "/src/cpd_physics/" + bagfile + "/result0.txt", ios::in);
+	bool is_cpd_physics = cpd_phy_test.is_open();
+	cpd_phy_test.close();
 
     // Go through the bagfile, storing matched image pairs
     // TODO this might be too much memory at some point
@@ -1483,6 +1537,42 @@ int main(int argc, char* argv[])
     std::string stepper;
     ros::Rate rate(30); // 30 hz, maybe allow changes, or mimicking bag?
     int frame = 0;
+	
+	time_t now = time(0);
+
+   	tm *ltm = localtime(&now);
+	string time_str = std::to_string(1+ltm->tm_mon) + "_" +
+					  std::to_string(ltm->tm_mday) + "_" + 
+					  std::to_string(1+ltm->tm_hour) + "_" +
+					  std::to_string(1+ltm->tm_min) + "_" +
+					  std::to_string(1+ltm->tm_sec);
+
+	cv::VideoWriter video_pred0;
+	cv::VideoWriter video_pred1;
+	cv::VideoWriter video_pred2;
+	cv::VideoWriter video_cdcpd;
+	cv::VideoWriter video_cpd_phy;
+
+    auto [color_image_init, depth_image_init, intrinsics_init] = toOpenCv(*color_iter, *depth_iter, *info_iter);
+    to_file(workingDir + "/trash.txt", depth_image_init);
+	cout << intrinsics_init << endl;
+	int pad_row = (int) (0.1*color_image_init.rows);
+	int pad_col = (int) (0.1*color_image_init.cols);
+	if (is_record) {
+		video_pred0.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_pred_0.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+		if (is_pred1) {
+			video_pred1.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_pred_1.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+		}
+		if (is_pred2) {
+			video_pred2.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_pred_2.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+		}
+		if (is_no_pred) {
+			video_cdcpd.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_cdcpd.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+		}
+		if (is_cpd_physics) {	
+			video_cpd_phy.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_cpd_physics.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+		}
+	}
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend() && info_iter != camera_infos.cend())
     {
         cout << "\n-------------------- frame " << frame << " --------------------" << endl << endl;
@@ -1614,7 +1704,11 @@ int main(int argc, char* argv[])
         		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
 				std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         	} else {
-        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points); 
+				if (is_gripper_info) {
+        			out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, false, false, false, 0, fixed_points); 
+				} else {
+        			out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points); 
+				}
 			}
 			template_cloud_without_prediction = out_without_prediction.gurobi_output;
 			out_without_prediction.gurobi_output->header.frame_id = frame_id;
@@ -1688,6 +1782,20 @@ int main(int argc, char* argv[])
 			#ifdef SIMULATION
 				std::ofstream(workingDir + "/error_cpd_physics.txt", std::ofstream::app) << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << " ";
 			#endif
+
+    		Matrix2Xi cpd_phy_edges(2, xs.size() - 1);
+    		cpd_phy_edges(0, 0) = 0;
+    		cpd_phy_edges(1, cpd_phy_edges.cols() - 1) = int(xs.size() - 1);
+    		for (int i = 1; i <= cpd_phy_edges.cols() - 1; ++i)
+    		{
+        		cpd_phy_edges(0, i) = i;
+        		cpd_phy_edges(1, i - 1) = i;
+    		}
+			cv::Mat demo_cpd_phy = draw_vis(rgb_image,
+									  	  	cpd_phy_pc->getMatrixXfMap().topRows(3),
+									  	  	cpd_phy_edges,
+									  	  	intrinsics);
+			video_cpd_phy.write(demo_cpd_phy);
 		}
 
 		cpd_phy_pc->header.frame_id = frame_id;
@@ -1927,7 +2035,36 @@ int main(int argc, char* argv[])
         	pcl_conversions::toPCL(time, out_pred2.gurobi_output->header.stamp);
 			output_pred2_publisher.publish(out_pred2.gurobi_output);
         }
-
+		
+		if (is_record) {
+			cv::Mat demo_im = draw_vis(rgb_image,
+									  out.gurobi_output->getMatrixXfMap().topRows(3),
+									  template_edges,
+									  intrinsics);
+			video_pred0.write(demo_im);
+			if (is_pred1) {
+				cv::Mat demo_pred1 = draw_vis(rgb_image,
+									  	  	  out_pred1.gurobi_output->getMatrixXfMap().topRows(3),
+									  	  	  template_edges,
+									  	  	  intrinsics);
+				video_pred1.write(demo_pred1);
+			}
+			if (is_pred2) {
+				cv::Mat demo_pred2 = draw_vis(rgb_image,
+									  	  	  out_pred2.gurobi_output->getMatrixXfMap().topRows(3),
+									  	  	  template_edges,
+									  	  	  intrinsics);
+				video_pred2.write(demo_pred2);
+			}
+			if (is_no_pred) {
+				cv::Mat demo_no_pred = draw_vis(rgb_image,
+									  	  	  	out_without_prediction.gurobi_output->getMatrixXfMap().topRows(3),
+									  	  	  	template_edges,
+									  	  	  	intrinsics);
+				video_cdcpd.write(demo_no_pred);
+				cv::imwrite(workingDir+"/../temp/result"+std::to_string(frame)+".png", demo_no_pred);
+			}
+		}
         ++color_iter;
         ++depth_iter;
         ++info_iter;
@@ -1945,6 +2082,19 @@ int main(int argc, char* argv[])
 		}
         ++frame;
     }
+	video_pred0.release();
+	if (is_pred1) {
+		video_pred1.release();
+	}
+	if (is_pred2) {
+		video_pred2.release();
+	}
+	if (is_no_pred) {
+		video_cdcpd.release();
+	}
+	if (is_cpd_physics) {
+		video_cpd_phy.release();
+	}
 
     cout << "Test ended" << endl;
 
