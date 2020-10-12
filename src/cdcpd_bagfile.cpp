@@ -138,6 +138,37 @@ void to_file(const std::string fname, const cv::Mat m) {
     ofs.close();
 }
 
+vm::Marker draw_cylinder_marker(const std::vector<float>& cylinder_data,
+								const std::vector<float>& quat,
+								const string frame_id) {
+	vm::Marker marker;
+
+	marker.header.frame_id = frame_id;
+	marker.header.stamp = ros::Time();
+	marker.ns = "cylinder";
+	marker.id = 0;
+	marker.type = vm::Marker::CYLINDER;
+	marker.action = vm::Marker::ADD;
+
+	marker.pose.position.x = cylinder_data[3];
+	marker.pose.position.y = cylinder_data[4];
+	marker.pose.position.z = cylinder_data[5];
+	marker.pose.orientation.x = quat[0];
+	marker.pose.orientation.y = quat[1];
+	marker.pose.orientation.z = quat[2];
+	marker.pose.orientation.w = quat[3];
+	marker.scale.x = 2*cylinder_data[6];
+	marker.scale.y = 2*cylinder_data[6];
+	marker.scale.z = cylinder_data[7];
+
+	marker.color.a = 0.5; // Don't forget to set the alpha!
+	marker.color.r = 0.0;
+	marker.color.g = 1.0;
+	marker.color.b = 0.0;
+	
+	return marker;
+}
+
 vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
 	vm::Marker order;
     order.header.frame_id = frame_id;
@@ -524,11 +555,17 @@ void test_lle() {
 }
 #endif
 
-std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
+std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope, const Matrix3Xf& init_points)
 {
     Eigen::Matrix3Xf vertices;
     Eigen::Matrix2Xi edges;
     if (is_rope) {
+		float left_x = init_points(0, 0);
+		float left_y = init_points(1, 0);
+		float left_z = init_points(2, 0);
+		float right_x = init_points(0, 1);
+		float right_y = init_points(1, 1);
+		float right_z = init_points(2, 1);
 		// This is for simulation
     	// float left_x = -0.5f; float left_y = -0.5f; float left_z = 3.0f; float right_x = 0.5f; float right_y = -0.5f; float right_z = 3.0f;
     
@@ -542,7 +579,7 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
 		// float left_x = -0.5f; float left_y = 0.2f; float left_z = 1.0f; float right_x = 0.3f; float right_y = 0.2f; float right_z = 1.0f;
     
 		// rope_by_hand_3
-		float left_x = -0.5f; float left_y = 0.2f; float left_z = 2.0f; float right_x = 0.3f; float right_y = 0.2f; float right_z = 2.0f;
+		// float left_x = -0.5f; float left_y = 0.2f; float left_z = 2.0f; float right_x = 0.3f; float right_y = 0.2f; float right_z = 2.0f;
     
 		int points_on_rope = 40;
 
@@ -562,14 +599,25 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope)
     	}
 
     } else {
-
+		float lb_x = init_points(0, 0);
+		float lb_y = init_points(1, 0);
+		float lb_z = init_points(2, 0);
+		float lt_x = init_points(0, 1);
+		float lt_y = init_points(1, 1);
+		float lt_z = init_points(2, 1);
+		float rb_x = init_points(0, 2);
+		float rb_y = init_points(1, 2);
+		float rb_z = init_points(2, 2);
+		
+		int num_width = 15;
+		int num_height = 15;
 		// This is for simulation
     	// int num_width = 20; int num_height = 20; float right_up_y = 0.19f; float right_up_x = 0.19f; float left_bottom_y = -0.19f; float left_bottom_x = -0.19f; float z = 2.0f;
     	// int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
 		// cloth_cover_by_hand
     	// int num_width = 15; int num_height = 15; float right_up_y = 0.0f; float right_up_x = -0.1f; float left_bottom_y = -0.28f; float left_bottom_x = -0.38f; float z = 1.5f;
 		// some data on 10/10
-		int num_width = 15; int num_height = 15; float rb_y = 0.13f; float rb_x = -0.3f; float rb_z = 1.2f; float lb_y = 0.13f; float lb_x = -0.58f; float lb_z = 1.2f; float lt_y = 0.27f; float lt_x = -0.58f; float lt_z = 0.96f;
+		// int num_width = 15; int num_height = 15; float rb_y = 0.13f; float rb_x = -0.3f; float rb_z = 1.2f; float lb_y = 0.13f; float lb_x = -0.58f; float lb_z = 1.2f; float lt_y = 0.27f; float lt_x = -0.58f; float lt_z = 0.96f;
 
     	vertices = Eigen::Matrix3Xf::Zero(3, num_width * num_height);
     	edges = Eigen::Matrix2Xi::Zero(2, (num_width - 1) * num_height + (num_height - 1) * num_width);
@@ -861,9 +909,7 @@ int main(int argc, char* argv[])
     auto output_publisher = nh.advertise<PointCloud> ("cdcpd/output", 1);
     auto left_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/left_gripper_prior", 1);
     auto right_gripper_pub = nh.advertise<gm::TransformStamped>("cdcpd/right_gripper_prior", 1);
-    #ifdef CYLINDER
     auto cylinder_pub = nh.advertise<vm::Marker>("cdcpd/cylinder", 0);
-    #endif
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 	auto mesh_pub = nh.advertise<vm::Marker>("cdcpd/mesh", 10);
 	auto cpd_physics_pub = nh.advertise<PointCloud> ("cdcpd/cpd_physics", 1);
@@ -889,6 +935,7 @@ int main(int argc, char* argv[])
     tf2_ros::TransformListener tfListener(tfBuffer);
 	
 	std::vector<float> cylinder_data(8);
+	std::vector<float> quat(4);
 	Matrix3Xf init_points(3, 3);
     const double alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     const double lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
@@ -901,9 +948,16 @@ int main(int argc, char* argv[])
 	const bool is_sim = ROSHelpers::GetParam<bool>(ph, "is_sim", true);
 	const bool is_rope = ROSHelpers::GetParam<bool>(ph, "is_rope", true);
 	const bool is_gripper_info = ROSHelpers::GetParam<bool>(ph, "is_gripper_info", true);	
+    double translation_dir_deformability = ROSHelpers::GetParam<double>(ph, "translation_dir_deformablity", 1.0);
+    double translation_dis_deformability = ROSHelpers::GetParam<double>(ph, "translation_dis_deformablity", 1.0);
+    double rotation_deformability = ROSHelpers::GetParam<double>(ph, "rotation_deformablity", 10.0);
 
 	for (int i = 0; i < 8; i++) {
 		cylinder_data[i] = ROSHelpers::GetParam<float>(ph, "cylinder_data_"+std::to_string(i), -1.0);
+	}
+
+	for (int i = 0; i < 4; i++) {
+		quat[i] = ROSHelpers::GetParam<float>(ph, "cylinder_quaternion_"+std::to_string(i), -1.0);
 	}
 	
 	for (int pt = 0; pt < 3; pt++) {
@@ -915,7 +969,7 @@ int main(int argc, char* argv[])
 	// to compile
 	cout << init_points << endl;
 
-    auto [template_vertices, template_edges] = init_template(is_rope);
+    auto [template_vertices, template_edges] = init_template(is_rope, init_points);
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_init = Matrix3Xf2pcptr(template_vertices);
 	
@@ -1231,9 +1285,6 @@ int main(int argc, char* argv[])
     #endif
 	
     std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>(nh);
-    double translation_dir_deformability = 10.0;
-    double translation_dis_deformability = 10.0;
-    double rotation_deformability = 10.0;
 	
 	AllGrippersSinglePose g_config;
     AllGrippersSinglePoseDelta g_dot;
@@ -1258,7 +1309,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
 	} else {
     	cdcpd = CDCPD(template_cloud,
                 template_edges,
@@ -1270,7 +1322,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
 	}
 
     #ifdef COMP
@@ -1300,7 +1353,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
 		} else {
 			cdcpd_without_prediction = CDCPD(template_cloud_without_prediction,
                 template_edges,
@@ -1312,7 +1366,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
 		}
 	}
 
@@ -1336,7 +1391,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
 		} else {
 			cdcpd_pred1 = CDCPD(template_cloud_pred1,
                 template_edges,
@@ -1348,7 +1404,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
 		}
 	}
 
@@ -1372,7 +1429,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
     	} else {
 			cdcpd_pred2 = CDCPD(template_cloud_pred2,
                 template_edges,
@@ -1384,7 +1442,8 @@ int main(int argc, char* argv[])
                 beta,
                 lambda,
                 k_spring,
-				zeta);
+				zeta,
+				cylinder_data);
 		}
 	}
 	
@@ -1510,7 +1569,7 @@ int main(int argc, char* argv[])
         	cv::Mat mask1;
         	cv::Mat mask2;
         	cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-        	cv::inRange(color_hsv, cv::Scalar(340, 0.5, 0.5), cv::Scalar(360, 1.0, 1.0), mask2);
+        	cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
         	bitwise_or(mask1, mask2, hsv_mask);
         }
 
@@ -1529,7 +1588,6 @@ int main(int argc, char* argv[])
         if (is_sim) {
 			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points);
         	std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
-        	template_cloud = out.gurobi_output;
         }
 		else if (is_gripper_info) {
 			is_grasped = toGripperStatus(*l_iter, *r_iter);
@@ -1540,8 +1598,8 @@ int main(int argc, char* argv[])
         	out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
         } else {
 			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, true, true, 0, fixed_points);
-			template_cloud = out.gurobi_output;
         }
+        template_cloud = out.gurobi_output;
 
         #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
@@ -1800,9 +1858,7 @@ int main(int argc, char* argv[])
             marker.color.g = 1.0;
             marker.color.b = 0.0;
 
-            #ifdef CYLINDER_INTER
-            cylinder_pub.publish( marker );
-            #endif
+            cylinder_pub.publish( draw_cylinder_marker(cylinder_data, quat, frame_id) );
         }
 
         // draw line order
