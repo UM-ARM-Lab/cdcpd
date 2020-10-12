@@ -163,10 +163,8 @@ static Matrix3Xf force_pts(const Matrix3Xf& nearest,
 	return Y_force;
 }
 
-#ifdef CYLINDER_INTER
 std::tuple<Matrix3Xf, Matrix3Xf>
-        nearest_points_and_normal(const Matrix3Xf& last_template) {
-	/*
+        Optimizer::nearest_points_and_normal_cyl(const Matrix3Xf& last_template) {
     // find of the nearest points and corresponding normal vector on the cylinder
     Matrix3Xf nearestPts(3, last_template.cols());
     Matrix3Xf normalVecs(3, last_template.cols());
@@ -219,12 +217,8 @@ std::tuple<Matrix3Xf, Matrix3Xf>
             normalVecs(j, i) = normalVec(j);
         }
     }
-	 */
-    return nearest_points_and_normal_help(last_template, mesh, vormals);
+    return {nearestPts, normalVecs};
 }
-#endif
-
-#ifdef SHAPE_COMP
 
 static Vector3f Pt3toVec(const Point_3 pt)
 {
@@ -303,7 +297,6 @@ std::tuple<Matrix3Xf, Matrix3Xf>
 	}
     return {nearestPts, normalVecs};
 }
-#endif
 
 std::tuple<MatrixXf, MatrixXf>
     nearest_points_line_segments(const Matrix3Xf& last_template, const Matrix2Xi& E) {
@@ -503,14 +496,14 @@ void Wsolver(const MatrixXf& P, const Matrix3Xf& X, const Matrix3Xf& Y, const Ma
     }
 }
 
-#ifdef SHAPE_COMP
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const obsParam& obstacle_param)
     : initial_template(_init_temp),
       last_template(_last_temp),
       stretch_lambda(_stretch_lambda),
       // obs_mesh(obstacle_param.verts),
       // obs_normal(obstacle_param.normals),
-      mesh(initObstacle(obstacle_param))
+      mesh(initObstacle(obstacle_param)),
+	  is_shape_comp(true)
 {
     // typedef boost::property_map<Mesh, CGAL::edge_is_feature_t>::type EIFMap;
     // EIFMap eif = get(CGAL::edge_is_feature, mesh);
@@ -531,15 +524,34 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
 
     // PMP::build_AABB_tree(mesh, tree);
 }
-#else
+
+Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const std::vector<float> cylinder_data)
+    : initial_template(_init_temp),
+      last_template(_last_temp),
+      stretch_lambda(_stretch_lambda),
+	  is_shape_comp(false)
+{
+    // radius must be positive
+    if (!cylinder_data.empty() && cylinder_data[6] > 0) { 
+        for (int i = 0; i < 3; i++) {
+            cylinder_orien[i] = cylinder_data[i];
+            cylinder_center[i] = cylinder_data[i+3];
+        }
+        cylinder_radius = cylinder_data[6];
+        cylinder_height = cylinder_data[7];
+    }
+}
+
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
     : initial_template(_init_temp),
       last_template(_last_temp),
-      stretch_lambda(_stretch_lambda)
+      stretch_lambda(_stretch_lambda),
+	  is_shape_comp(false)
 {
     
 }
-#endif
+
+
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const std::vector<CDCPD::FixedPoint>& fixed_points, const bool self_intersection, const bool interaction_constrain)
 {
@@ -591,9 +603,13 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 
         if (interaction_constrain)
         {
-#ifdef SHAPE_COMP
-            auto [nearestPts, normalVecs] = nearest_points_and_normal(last_template);
-            cout << "added interaction constrain" << endl;
+			Matrix3Xf nearestPts, normalVecs;
+			if (is_shape_comp) {
+            	std::tie(nearestPts, normalVecs) = nearest_points_and_normal(last_template);
+            } else {
+				std::tie(nearestPts, normalVecs) = nearest_points_and_normal_cyl(last_template);
+			}
+			cout << "added interaction constrain" << endl;
             // cout << "last template:" << endl;
             // cout << last_template << endl << endl;
             // cout << "nearestPts:" << endl;
@@ -623,7 +639,6 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
             //             (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
             //             (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) <= 1.0, "interaction constrain for point " +std::to_string(i));
             // }
-#endif
         }
 
         if (self_intersection)

@@ -260,10 +260,7 @@ private:
 	Mesh::Property_map<face_descriptor, Vector> fnormals;
     Mesh::Property_map<vertex_descriptor, Vector> vnormals;
     #endif
-	Eigen::Vector3f cylinder_orien;
-	Eigen::Vector3f cylinder_center;
-	float cylinder_radius;
-	float cylinder_height;
+	std::vector<float> cylinder_data;
 };
 
 #endif

@@ -55,11 +55,9 @@ void Wsolver(const Eigen::MatrixXf& P, const Eigen::Matrix3Xf& X, const Eigen::M
 class Optimizer
 {
 public:
-    #ifdef SHAPE_COMP
     Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const obsParam& obstacle_param);
-    #else
+    Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda, const std::vector<float> cylinder_data);
     Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda);
-    #endif
 
     Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf& Y,
                                 const Eigen::Matrix2Xi& E,
@@ -69,18 +67,22 @@ public:
 private:
     bool all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint>& fixed_points) const;
 	std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf> nearest_points_and_normal(const Eigen::Matrix3Xf& last_template);
+	std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf> nearest_points_and_normal_cyl(const Eigen::Matrix3Xf& last_template);
 	
     Eigen::Matrix3Xf initial_template;
     Eigen::Matrix3Xf last_template;
     float stretch_lambda;
-    #ifdef SHAPE_COMP
 	// const Eigen::Matrix3Xf obs_mesh;
 	// const Eigen::Matrix3Xf obs_normal;
     Mesh::Property_map<face_descriptor, Vector> fnormals;
     Mesh::Property_map<vertex_descriptor, Vector> vnormals;
 	Mesh mesh;
     CGAL::AABB_tree<AABB_face_graph_traits> tree;
-    #endif
+	Eigen::Vector3f cylinder_orien;
+	Eigen::Vector3f cylinder_center;
+	float cylinder_radius;
+	float cylinder_height;
+	bool is_shape_comp;
 };
 
 #endif

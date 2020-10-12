@@ -324,7 +324,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _lambda,
              const double _k,
 			 const float _zeta,
-			 const std::vector<float> cylinder_data) :
+			 const std::vector<float> _cylinder_data) :
     // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
@@ -350,6 +350,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	, obs_param(_obs_param),
 	mesh(initObstacle(_obs_param))
     #endif
+	, cylinder_data(_cylinder_data)
 {
     Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
     last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
@@ -422,16 +423,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
         										   CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
         										   geom_traits(K()));
 	#endif
-
-	// radius must be positive
-	if (!cylinder_data.empty() && cylinder_data[6] > 0) {
-		for (int i = 0; i < 3; i++) {
-			cylinder_orien[i] = cylinder_data[i];
-			cylinder_center[i] = cylinder_data[i+3];
-		}
-		cylinder_radius = cylinder_data[6];
-		cylinder_height = cylinder_data[7];
-	}
 }
 
 // This is for the case where the gripper indices are unknown (in real experiment)
@@ -446,7 +437,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _lambda,
              const double _k,
 			 const float _zeta,
-			 const std::vector<float> cylinder_data) :
+			 const std::vector<float> _cylinder_data) :
     // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
@@ -472,6 +463,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	, obs_param(_obs_param),
 	mesh(initObstacle(_obs_param))
     #endif
+	, cylinder_data(_cylinder_data)
 {
     Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
     last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
@@ -505,16 +497,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
         										   CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
         										   geom_traits(K()));
 	#endif
-
-	// radius must be positive
-	if (!cylinder_data.empty() && cylinder_data[6] > 0) {
-		for (int i = 0; i < 3; i++) {
-			cylinder_orien[i] = cylinder_data[i];
-			cylinder_center[i] = cylinder_data[i+3];
-		}
-		cylinder_radius = cylinder_data[6];
-		cylinder_height = cylinder_data[7];
-	}
 }
 
 /*
@@ -1536,11 +1518,10 @@ CDCPD::Output CDCPD::operator()(
     #endif
 
     // Next step: optimization.
-    // ???: most likely not 1.0
     #ifdef SHAPE_COMP
-    Optimizer opt(original_template, Y, 1.0, obs_param);
+    Optimizer opt(original_template, Y, 1.1, obs_param);
     #else
-    Optimizer opt(original_template, Y, 1.0);
+    Optimizer opt(original_template, Y, 1.1, cylinder_data);
     #endif
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
@@ -1821,7 +1802,7 @@ CDCPD::Output CDCPD::operator()(
     #ifdef SHAPE_COMP
     Optimizer opt(original_template, Y, 1.1, obs_param);
     #else
-    Optimizer opt(original_template, Y, 1.1);
+    Optimizer opt(original_template, Y, 1.1, cylinder_data);
     #endif
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
@@ -1977,7 +1958,7 @@ CDCPD::Output CDCPD::operator()(
     #ifdef SHAPE_COMP
     Optimizer opt(original_template, Y, 1.1, obs_param);
     #else
-    Optimizer opt(original_template, Y, 1.1);
+    Optimizer opt(original_template, Y, 1.1, cylinder_data);
     #endif
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain);
