@@ -35,6 +35,8 @@ Note that Gurobi licence activation requires a university network. If you are no
 
 It is recommended to follow the instruction [here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md).
 
+I was intalling from source on 20.04, which required install `swig` and updating cmake to 3.17 (using the kitware ubuntu repostitory)
+
 Demo
 ------------
 To run the demo, you will need to download some [dataset](https://drive.google.com/drive/folders/17_xRbsX6Pnk9KkTxouIu1FLqE1yNmIdW?usp=sharing).
