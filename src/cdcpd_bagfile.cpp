@@ -168,7 +168,7 @@ cv::Mat draw_vis(const cv::Mat& rgb_image,
 	
 	for(int i = 0; i < template_vertices.cols(); i++) {
 		cv::Point vertex(pixels(0, i)+left, pixels(1, i)+top);
-		cv::circle(out, vertex,	2, yellow, cv::FILLED, cv::LINE_8 );
+		cv::circle(out, vertex,	2, red, cv::FILLED, cv::LINE_8 );
 	}
 	
 	for(int e = 0; e < template_edges.cols(); e++) {
@@ -176,7 +176,7 @@ cv::Mat draw_vis(const cv::Mat& rgb_image,
 		int pt2 = template_edges(1, e);
 		cv::Point start(pixels(0, pt1)+left, pixels(1, pt1)+top);
 		cv::Point end(pixels(0, pt2)+left, pixels(1, pt2)+top);
-		cv::line(out, start, end, yellow);
+		cv::line(out, start, end, red);
 	}
 	cv::cvtColor(out, out, CV_BGR2RGB);
 	return out;
@@ -215,6 +215,12 @@ vm::Marker draw_cylinder_marker(const std::vector<float>& cylinder_data,
 }
 
 vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
+	cv::Mat color_hsv(1, int(pc->size()), CV_32FC3, Scalar(0.0,1.0,1.0));
+	for (int col = 0; col < color_hsv.cols; col++) {
+		color_hsv.at<float>(0, col, 0) = 360.0f * float(col)/float(color_hsv.cols);
+	}
+	cv::Mat color_rgb;
+    cv::cvtColor(color_hsv, color_rgb, cv::COLOR_HSV2RGB);
 	vm::Marker order;
     order.header.frame_id = frame_id;
     order.header.stamp = ros::Time();
@@ -222,14 +228,23 @@ vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
 	order.action = vm::Marker::ADD;
 	order.pose.orientation.w = 1.0;
 	order.id = 1;
-	order.scale.x = 0.002;
+	order.scale.x = 0.005;
+	// cout << "type after conversion" << endl;
+	// cout << color_rgb << endl;
+	// order.color.r = color_rgb.at<float>(0, 0, 0);
+	// order.color.g = color_rgb.at<float>(0, 0, 1);
+	// order.color.b = color_rgb.at<float>(0, 0, 2);
 	order.color.r = 1.0;
 	order.color.a = 1.0;
 
     order.type = vm::Marker::LINE_LIST;
 	for (int e = 0; e < edges.cols(); e++) {
+		color_hsv.at<float>(0,0,0) = float(e)/float(edges.cols());
 		geometry_msgs::Point pt1;
 		geometry_msgs::Point pt2;
+
+		// std_msgs::ColorRGBA color1;
+		// std_msgs::ColorRGBA color2;
 
 		pt1.x = pc->points[edges(0, e)].x;
 		pt1.y = pc->points[edges(0, e)].y;
@@ -238,6 +253,16 @@ vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
 		pt2.x = pc->points[edges(1, e)].x;
 		pt2.y = pc->points[edges(1, e)].y;
 		pt2.z = pc->points[edges(1, e)].z;
+
+		// color1.r = color_rgb.at<float>(0, edges(0, e), 0);
+		// color1.g = color_rgb.at<float>(0, edges(0, e), 1);
+		// color1.b = color_rgb.at<float>(0, edges(0, e), 2);
+		// color1.a = 1.0;
+		
+		// color2.r = color_rgb.at<float>(0, edges(1, e), 0);
+		// color2.g = color_rgb.at<float>(0, edges(1, e), 1);
+		// color2.b = color_rgb.at<float>(0, edges(1, e), 2);
+		// color2.a = 1.0;
 		
 		if ((pt1.x <  0.000001 && 
 			pt1.x > -0.000001 &&
@@ -255,6 +280,8 @@ vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
 		} else {
 			order.points.push_back(pt1);
 			order.points.push_back(pt2);
+			// order.colors.push_back(color1);
+			// order.colors.push_back(color2);
 		}
 	}
 	return order;
@@ -991,6 +1018,7 @@ int main(int argc, char* argv[])
 	const int points_on_rope = ROSHelpers::GetParam<int>(ph, "rope_points", 40);
 	const int num_width = ROSHelpers::GetParam<int>(ph, "cloth_width", 15);
 	const int num_height = ROSHelpers::GetParam<int>(ph, "cloth_height", 15);
+	const bool is_interaction = ROSHelpers::GetParam<bool>(ph, "is_interaction", true);
 
 	for (int i = 0; i < 8; i++) {
 		cylinder_data[i] = ROSHelpers::GetParam<float>(ph, "cylinder_data_"+std::to_string(i), -1.0);
@@ -1561,8 +1589,8 @@ int main(int argc, char* argv[])
 	cout << intrinsics_init << endl;
 	int pad_row = (int) (0.1*color_image_init.rows);
 	int pad_col = (int) (0.1*color_image_init.cols);
-	mkdir((workingDir+"/../video/ICRA/" + bagfile + "_" + time_str).c_str(), 0777);
 	if (is_record) {
+		mkdir((workingDir+"/../video/ICRA/" + bagfile + "_" + time_str).c_str(), 0777);
 		video_pred0.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_0.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
 		if (is_pred1) {
 			video_pred1.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_1.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
@@ -1653,8 +1681,8 @@ int main(int argc, char* argv[])
         	// Red
         	cv::Mat mask1;
         	cv::Mat mask2;
-        	cv::inRange(color_hsv, cv::Scalar(0, 0.5, 0.5), cv::Scalar(20, 1.0, 1.0), mask1);
-        	cv::inRange(color_hsv, cv::Scalar(340, 0.5, 0.5), cv::Scalar(360, 1.0, 1.0), mask2);
+        	cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
+        	cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
         	bitwise_or(mask1, mask2, hsv_mask);
         } else {
         	// Purple
@@ -1681,8 +1709,8 @@ int main(int argc, char* argv[])
 		cout << "prediction choice: 0" << endl;
         if (is_sim) {
 			cout << "size of g_dot: " << g_dot.size() << endl;
-			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points); cout << "1683" << endl;
-        	std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " "; cout << "1684" << endl;
+			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, is_interaction, true, 0, fixed_points);
+        	std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         }
 		else if (is_gripper_info) {
 			is_grasped = toGripperStatus(*l_iter, *r_iter);
@@ -1695,9 +1723,9 @@ int main(int argc, char* argv[])
 				cout << "hard code the bag file" << endl;
 				is_grasped = {false, true};
 			}
-        	out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
+        	out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, is_interaction, true, 0, fixed_points);
         } else {
-			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, true, true, 0, fixed_points);
+			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, is_interaction, true, 0, fixed_points);
         }
         template_cloud = out.gurobi_output;
 
@@ -1710,7 +1738,11 @@ int main(int argc, char* argv[])
 		CDCPD::Output out_without_prediction;
         if (is_no_pred) {
 			cout << "no prediction used" << endl;
-        	out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points);
+			if (is_gripper_info) {
+        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, false, false, false, 0, fixed_points);
+			} else {
+        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points);
+			}
 			if (is_sim) {
 				std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         	}
@@ -1722,10 +1754,10 @@ int main(int argc, char* argv[])
         if (is_pred1) {
 			cout << "prediction choice: 1" << endl;
 			if (is_sim) {
-        		out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, true, true, 1, fixed_points);
+        		out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, true, is_interaction, true, 1, fixed_points);
 				std::ofstream(workingDir + "/error_pred1.txt", std::ofstream::app) << calc_mean_error(out_pred1.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         	} else {
-        		out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 1, fixed_points);
+        		out_pred1 = cdcpd_pred1(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred1, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, is_interaction, true, 1, fixed_points);
 			}
 			template_cloud_pred1 = out_pred1.gurobi_output;
 			out_pred1.gurobi_output->header.frame_id = frame_id;
@@ -1735,10 +1767,10 @@ int main(int argc, char* argv[])
         if (is_pred2) {
 			cout << "prediction choice: 2" << endl;
 			if (is_sim) {
-        		out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, true, true, 2, fixed_points);
+        		out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, true, is_interaction, true, 2, fixed_points);
 				std::ofstream(workingDir + "/error_pred2.txt", std::ofstream::app) << calc_mean_error(out_pred2.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         	} else {
-        		out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 2, fixed_points);
+        		out_pred2 = cdcpd_pred2(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_pred2, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, is_interaction, true, 2, fixed_points);
 			}
 			template_cloud_pred2 = out_pred2.gurobi_output;
 			out_pred2.gurobi_output->header.frame_id = frame_id;
@@ -1815,161 +1847,8 @@ int main(int argc, char* argv[])
 		template_cloud_init->header.frame_id = frame_id;
         out.cpd_predict->header.frame_id = frame_id;
 
-        // draw cylinder
+        if (is_interaction)
         {
-            vm::Marker marker;
-            marker.header.frame_id = frame_id;
-            marker.header.stamp = ros::Time();
-            marker.ns = "cylinder";
-            marker.id = 0;
-            marker.type = vm::Marker::CYLINDER;
-            marker.action = vm::Marker::ADD;
-
-            #ifdef CYL2
-            // interaction_cylinder_2.bag
-            marker.pose.position.x = 0.145124522395497;
-            marker.pose.position.y = -0.152708792314512;
-            marker.pose.position.z = 1.095150852162702;
-            marker.pose.orientation.x = -0.3540;
-            marker.pose.orientation.y = -0.0155;
-            marker.pose.orientation.z = 0.0408;
-            marker.pose.orientation.w = 0.9342;
-            marker.scale.x = 0.033137245873063*2;
-            marker.scale.y = 0.033137245873063*2;
-            marker.scale.z = 0.153739168519654;
-            #endif
-
-            #ifdef CYL4
-            // interaction_cylinder_4.bag
-            marker.pose.position.x = -0.001783838376740;
-            marker.pose.position.y = -0.202407765852103;
-            marker.pose.position.z = 1.255950979292225;
-            marker.pose.orientation.x = -0.2134;
-            marker.pose.orientation.y = -0.0024;
-            marker.pose.orientation.z = 0.0110;
-            marker.pose.orientation.w = 0.9769;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL5
-            // interaction_cylinder_5.bag
-            marker.pose.position.x = -0.007203971514259;
-            marker.pose.position.y = -0.282011643023486;
-            marker.pose.position.z = 1.351697407251410;
-            marker.pose.orientation.x = -0.7884;
-            marker.pose.orientation.y = -0.0193;
-            marker.pose.orientation.z = 0.0150;
-            marker.pose.orientation.w = 0.6147;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL6
-            // interation_cylinder_6.bag
-            marker.pose.position.x = -0.025889295027034;
-            marker.pose.position.y = -0.020591825574503;
-            marker.pose.position.z = 1.200787565152055;
-            marker.pose.orientation.x = -0.7852;
-            marker.pose.orientation.y = -0.0016;
-            marker.pose.orientation.z = 0.0013;
-            marker.pose.orientation.w = 0.6193;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL7
-            // interation_cylinder_7.bag
-            marker.pose.position.x = -0.025889295027034;
-            marker.pose.position.y = -0.020591825574503;
-            marker.pose.position.z = 1.200787565152055;
-            marker.pose.orientation.x = -0.7952;
-            marker.pose.orientation.y = -0.0010;
-            marker.pose.orientation.z = 0.0008;
-            marker.pose.orientation.w = 0.6064;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL8
-            // interation_cylinder_7.bag
-            marker.pose.position.x = -0.239953252695972;
-            marker.pose.position.y = -0.326861315788172;
-            marker.pose.position.z = 1.459887097878595;
-            marker.pose.orientation.x = -0.1877;
-            marker.pose.orientation.y = -0.0009;
-            marker.pose.orientation.z = 0.0046;
-            marker.pose.orientation.w = 0.9822;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL9
-            // interation_cylinder_9.bag
-            marker.pose.position.x = -0.239953252695972;
-            marker.pose.position.y = -0.28;
-            marker.pose.position.z = 1.459887097878595;
-            marker.pose.orientation.x = -0.1877;
-            marker.pose.orientation.y = -0.0009;
-            marker.pose.orientation.z = 0.0046;
-            marker.pose.orientation.w = 0.9822;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL_CLOTH1
-            // interation_cloth1.bag
-            marker.pose.position.x = -0.114121248950204;
-            marker.pose.position.y = -0.180876677250917;
-            marker.pose.position.z = 1.384255148567173;
-            marker.pose.orientation.x = -0.1267;
-            marker.pose.orientation.y = 0.0142;
-            marker.pose.orientation.z = -0.1107;
-            marker.pose.orientation.w = 0.9857;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL_CLOTH3
-            // interation_cloth1.bag
-            marker.pose.position.x = -0.134121248950204;
-            marker.pose.position.y = -0.110876677250917;
-            marker.pose.position.z = 1.384255148567173;
-            marker.pose.orientation.x = -0.1267;
-            marker.pose.orientation.y = 0.0142;
-            marker.pose.orientation.z = -0.1107;
-            marker.pose.orientation.w = 0.9857;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            #ifdef CYL_CLOTH4
-            // interation_cloth1.bag
-            marker.pose.position.x = -0.134121248950204;
-            marker.pose.position.y = -0.110876677250917;
-            marker.pose.position.z = 1.384255148567173;
-            marker.pose.orientation.x = -0.1267;
-            marker.pose.orientation.y = 0.0142;
-            marker.pose.orientation.z = -0.1107;
-            marker.pose.orientation.w = 0.9857;
-            marker.scale.x = 0.05*2;
-            marker.scale.y = 0.05*2;
-            marker.scale.z = 0.21;
-            #endif
-
-            marker.color.a = 0.5; // Don't forget to set the alpha!
-            marker.color.r = 0.0;
-            marker.color.g = 1.0;
-            marker.color.b = 0.0;
-
             cylinder_pub.publish( draw_cylinder_marker(cylinder_data, quat, frame_id) );
         }
 
