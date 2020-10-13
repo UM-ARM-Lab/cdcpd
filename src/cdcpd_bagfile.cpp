@@ -125,12 +125,6 @@ stdm::Float32MultiArray::ConstPtr normals_ptr;
 stdm::Float32MultiArray::ConstPtr faces_ptr;
 #endif
 
-#ifdef SIMULATION
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/log";
-#else
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/log";
-#endif
-
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
 void clean_file(const std::string& fname) {
@@ -353,20 +347,20 @@ void callback_im(
 std::tuple<cv::Mat, cv::Mat, cv::Matx33d> toOpenCv(
     const sm::Image::ConstPtr &rgb_img,
     const sm::Image::ConstPtr &depth_img,
-    const sm::CameraInfo::ConstPtr &cam_info)
+    const sm::CameraInfo::ConstPtr &cam_info,
+	bool is_sim)
 {
-    #ifdef SIMULATION
-    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sm::image_encodings::TYPE_8UC3);
-    #else
-    cv_bridge::CvImagePtr rgb_ptr = cv_bridge::toCvCopy(rgb_img, sm::image_encodings::BGR8);
-    #endif
-    cv::Mat color_image = rgb_ptr->image.clone();
+	cv_bridge::CvImagePtr rgb_ptr;
+	cv_bridge::CvImagePtr depth_ptr;
+    if (is_sim) {
+    	rgb_ptr = cv_bridge::toCvCopy(rgb_img, sm::image_encodings::TYPE_8UC3);
+    	depth_ptr = cv_bridge::toCvCopy(depth_img, sm::image_encodings::TYPE_32FC1);
+    } else {
+    	rgb_ptr = cv_bridge::toCvCopy(rgb_img, sm::image_encodings::BGR8);
+    	depth_ptr = cv_bridge::toCvCopy(depth_img, sm::image_encodings::TYPE_16UC1);
+    }
 
-    #ifdef SIMULATION
-    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sm::image_encodings::TYPE_32FC1);
-    #else
-    cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth_img, sm::image_encodings::TYPE_16UC1);
-    #endif
+    cv::Mat color_image = rgb_ptr->image.clone();
     cv::Mat depth_image = depth_ptr->image.clone();
 
     image_geometry::PinholeCameraModel cameraModel;
@@ -606,7 +600,7 @@ void test_lle() {
 }
 #endif
 
-std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope, const Matrix3Xf& init_points)
+std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope, const Matrix3Xf& init_points, int points_on_rope, int num_width, int num_height)
 {
     Eigen::Matrix3Xf vertices;
     Eigen::Matrix2Xi edges;
@@ -632,7 +626,7 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope,
 		// rope_by_hand_3
 		// float left_x = -0.5f; float left_y = 0.2f; float left_z = 2.0f; float right_x = 0.3f; float right_y = 0.2f; float right_z = 2.0f;
     
-		int points_on_rope = 40;
+		// int points_on_rope = 40;
 
     	vertices.resize(3, points_on_rope); // Y^0 in the paper
     	vertices.setZero();
@@ -660,8 +654,8 @@ std::tuple<Eigen::Matrix3Xf, Eigen::Matrix2Xi> init_template(const bool is_rope,
 		float rb_y = init_points(1, 2);
 		float rb_z = init_points(2, 2);
 		
-		int num_width = 15;
-		int num_height = 15;
+		// int num_width = 15;
+		// int num_height = 15;
 		// This is for simulation
     	// int num_width = 20; int num_height = 20; float right_up_y = 0.19f; float right_up_x = 0.19f; float left_bottom_y = -0.19f; float left_bottom_x = -0.19f; float z = 2.0f;
     	// int num_width = 15; int num_height = 15; float right_up_y = 0.14f; float right_up_x = 0.14f; float left_bottom_y = -0.14f; float left_bottom_x = -0.14f; float z = 1.0f;
@@ -927,11 +921,6 @@ int main(int argc, char* argv[])
 	// cout << template_vertices << endl;
     // cout << template_edges << endl;
 	
-	std::string cleancmd = "exec rm -rf " + workingDir + "/*";
-	if (system(cleancmd.c_str()) != 0) {
-		std::cerr << "wrong clean files" << std::endl;
-		exit(1);
-	}	
 
     // #ifdef DEBUG
     // clean_file(workingDir + "/cpp_entire_cloud.txt");
@@ -972,14 +961,10 @@ int main(int argc, char* argv[])
     // message_filters::Subscriber<sm::Image> rgb_sub(nh, "/kinect2_victor_head/qhd/image_color_rect", 10);
 	// message_filters::Subscriber<sm::Image> depth_sub(nh, "/kinect2_victor_head/qhd/image_depth_rect", 10);
 	// message_filters::Subscriber<sm::CameraInfo> info_sub(nh, "/kinect2_victor_head/qhd/camera_info", 10);
-	#ifdef SIMULATION
-    BagSubscriber<stdm::Float32MultiArray> config_sub, dot_sub, ind_sub, truth_sub;
-	#else
 	BagSubscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub, dot_sub;
 	BagSubscriber<victor_hardware_interface::Robotiq3FingerStatus_sync> l_sub, r_sub;
     // message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> config_sub(nh, "/kinect2_victor_head/qhd/gripper_config", 10);
 	// message_filters::Subscriber<cdcpd_ros::Float32MultiArrayStamped> dot_sub(nh, "/kinect2_victor_head/qhd/dot_config", 10);
-	#endif
 
     cout << "Making buffer" << endl;
     tf2_ros::Buffer tfBuffer;
@@ -1003,6 +988,9 @@ int main(int argc, char* argv[])
     const double translation_dis_deformability = ROSHelpers::GetParam<double>(ph, "translation_dis_deformablity", 1.0);
     const double rotation_deformability = ROSHelpers::GetParam<double>(ph, "rotation_deformablity", 10.0);
 	const bool is_record = ROSHelpers::GetParam<bool>(ph, "is_record", false);
+	const int points_on_rope = ROSHelpers::GetParam<int>(ph, "rope_points", 40);
+	const int num_width = ROSHelpers::GetParam<int>(ph, "cloth_width", 15);
+	const int num_height = ROSHelpers::GetParam<int>(ph, "cloth_height", 15);
 
 	for (int i = 0; i < 8; i++) {
 		cylinder_data[i] = ROSHelpers::GetParam<float>(ph, "cylinder_data_"+std::to_string(i), -1.0);
@@ -1017,8 +1005,21 @@ int main(int argc, char* argv[])
 			init_points(dim, pt) = ROSHelpers::GetParam<float>(ph, "init_pt_"+std::to_string(pt*3+dim), 0.0f);
 		}
 	}
+
+	std::string workingDir;
+	if(is_sim) {
+		workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/log";
+	} else {
+		workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/log";
+	}
+
+	std::string cleancmd = "exec rm -rf " + workingDir + "/*";
+	if (system(cleancmd.c_str()) != 0) {
+		std::cerr << "wrong clean files" << std::endl;
+		exit(1);
+	}	
 	
-    auto [template_vertices, template_edges] = init_template(is_rope, init_points);
+    auto [template_vertices, template_edges] = init_template(is_rope, init_points, points_on_rope, num_width, num_height);
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_init = Matrix3Xf2pcptr(template_vertices);
 	
@@ -1054,11 +1055,12 @@ int main(int argc, char* argv[])
     #endif
 
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
-    #ifdef SIMULATION
-    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
-    #else
-    auto const folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/09_19_2020/";
-    #endif
+	std::string folder;
+    if (is_sim) {
+    	folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
+    } else {
+    	folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/09_19_2020/";
+    }
     rosbag::Bag bag(folder + bagfile + ".bag", rosbag::bagmode::Read);
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
@@ -1068,13 +1070,6 @@ int main(int argc, char* argv[])
 	cpd_phy_test.close();
 
     // Go through the bagfile, storing matched image pairs
-    // TODO this might be too much memory at some point
-    // #ifndef SIMULATION
-    // auto image_sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo>(
-	//	rgb_sub, depth_sub, info_sub, 25);
-    // image_sync.registerCallback(boost::bind(&im_callback, _1, _2, _3));
-    // auto sync = message_filters::TimeSynchronizer<sm::Image, sm::Image, sm::CameraInfo, cdcpd_ros::Float32MultiArrayStamped, cdcpd_ros::Float32MultiArrayStamped, victor_hardware_interface::Robotiq3FingerStatus_sync, victor_hardware_interface::Robotiq3FingerStatus_sync>(
-	// 	rgb_sub, depth_sub, info_sub, config_sub, dot_sub, l_sub, r_sub, 25);
 	auto sync_use_gripper = message_filters::Synchronizer<SyncPolicy_use_gripper>(SyncPolicy_use_gripper(10), rgb_sub_use_gripper, depth_sub_use_gripper, info_sub_use_gripper, config_sub, dot_sub, l_sub, r_sub);
     sync_use_gripper.registerCallback(boost::bind(&callback_use_gripper, _1, _2, _3, _4, _5, _6, _7));
 	auto sync_img = message_filters::Synchronizer<SyncPolicy_img>(SyncPolicy_img(10), rgb_sub, depth_sub, info_sub);
@@ -1364,7 +1359,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
 	} else {
     	cdcpd = CDCPD(template_cloud,
                 template_edges,
@@ -1377,7 +1373,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
 	}
 
     #ifdef COMP
@@ -1408,7 +1405,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
 		} else {
 			cdcpd_without_prediction = CDCPD(template_cloud_without_prediction,
                 template_edges,
@@ -1421,7 +1419,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
 		}
 	}
 
@@ -1446,7 +1445,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
 		} else {
 			cdcpd_pred1 = CDCPD(template_cloud_pred1,
                 template_edges,
@@ -1459,7 +1459,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
 		}
 	}
 
@@ -1484,7 +1485,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
     	} else {
 			cdcpd_pred2 = CDCPD(template_cloud_pred2,
                 template_edges,
@@ -1497,7 +1499,8 @@ int main(int argc, char* argv[])
                 lambda,
                 k_spring,
 				zeta,
-				cylinder_data);
+				cylinder_data,
+				is_sim);
 		}
 	}
 	
@@ -1543,8 +1546,8 @@ int main(int argc, char* argv[])
    	tm *ltm = localtime(&now);
 	string time_str = std::to_string(1+ltm->tm_mon) + "_" +
 					  std::to_string(ltm->tm_mday) + "_" + 
-					  std::to_string(1+ltm->tm_hour) + "_" +
-					  std::to_string(1+ltm->tm_min) + "_" +
+					  std::to_string(ltm->tm_hour) + "_" +
+					  std::to_string(ltm->tm_min) + "_" +
 					  std::to_string(1+ltm->tm_sec);
 
 	cv::VideoWriter video_pred0;
@@ -1553,24 +1556,25 @@ int main(int argc, char* argv[])
 	cv::VideoWriter video_cdcpd;
 	cv::VideoWriter video_cpd_phy;
 
-    auto [color_image_init, depth_image_init, intrinsics_init] = toOpenCv(*color_iter, *depth_iter, *info_iter);
+    auto [color_image_init, depth_image_init, intrinsics_init] = toOpenCv(*color_iter, *depth_iter, *info_iter, is_sim);
     to_file(workingDir + "/trash.txt", depth_image_init);
 	cout << intrinsics_init << endl;
 	int pad_row = (int) (0.1*color_image_init.rows);
 	int pad_col = (int) (0.1*color_image_init.cols);
+	mkdir((workingDir+"/../video/ICRA/" + bagfile + "_" + time_str).c_str(), 0777);
 	if (is_record) {
-		video_pred0.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_pred_0.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+		video_pred0.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_0.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
 		if (is_pred1) {
-			video_pred1.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_pred_1.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_pred1.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_1.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
 		}
 		if (is_pred2) {
-			video_pred2.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_pred_2.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_pred2.open(workingDir+"/../video/ICRA/" + bagfile + "_" +time_str + "/pred_2.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
 		}
 		if (is_no_pred) {
-			video_cdcpd.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_cdcpd.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_cdcpd.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/cdcpd.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
 		}
 		if (is_cpd_physics) {	
-			video_cpd_phy.open(workingDir+"/../video/ICRA/" + bagfile + time_str + "_cpd_physics.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_cpd_phy.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/cpd_physics.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
 		}
 	}
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend() && info_iter != camera_infos.cend())
@@ -1608,7 +1612,7 @@ int main(int argc, char* argv[])
             right_gripper_pub.publish(rightTS);
         }
 
-        auto [color_image_bgr, depth_image, intrinsics] = toOpenCv(*color_iter, *depth_iter, *info_iter);
+        auto [color_image_bgr, depth_image, intrinsics] = toOpenCv(*color_iter, *depth_iter, *info_iter, is_sim);
         
         Matrix3Xf one_frame_truth;
 		if (is_sim) {
@@ -1676,14 +1680,20 @@ int main(int argc, char* argv[])
 		CDCPD::Output out;
 		cout << "prediction choice: 0" << endl;
         if (is_sim) {
-			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points);
-        	std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
+			cout << "size of g_dot: " << g_dot.size() << endl;
+			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, true, true, 0, fixed_points); cout << "1683" << endl;
+        	std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " "; cout << "1684" << endl;
         }
 		else if (is_gripper_info) {
 			is_grasped = toGripperStatus(*l_iter, *r_iter);
 			for (auto& dot: g_dot)
 			{
 				dot = dot/10;
+			}
+			if (bagfile.compare("rope_winding_cylinder_exp_3") == 0)
+			{	
+				cout << "hard code the bag file" << endl;
+				is_grasped = {false, true};
 			}
         	out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, true, true, true, 0, fixed_points);
         } else {
@@ -1700,16 +1710,10 @@ int main(int argc, char* argv[])
 		CDCPD::Output out_without_prediction;
         if (is_no_pred) {
 			cout << "no prediction used" << endl;
+        	out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points);
 			if (is_sim) {
-        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
 				std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
-        	} else {
-				if (is_gripper_info) {
-        			out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, false, false, false, 0, fixed_points); 
-				} else {
-        			out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points); 
-				}
-			}
+        	}
 			template_cloud_without_prediction = out_without_prediction.gurobi_output;
 			out_without_prediction.gurobi_output->header.frame_id = frame_id;
 		}
@@ -1779,9 +1783,9 @@ int main(int argc, char* argv[])
 			// cout << one_frame_truth << endl;
 			// cout << "cpd phy error" << endl;
 			// cout << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << endl;
-			#ifdef SIMULATION
+			if (is_sim) {
 				std::ofstream(workingDir + "/error_cpd_physics.txt", std::ofstream::app) << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << " ";
-			#endif
+			}
 
     		Matrix2Xi cpd_phy_edges(2, xs.size() - 1);
     		cpd_phy_edges(0, 0) = 0;
@@ -2069,8 +2073,8 @@ int main(int argc, char* argv[])
         ++depth_iter;
         ++info_iter;
 		if (is_sim) {
-        	++config_iter;
-        	++velocity_iter;
+        	++config_sim_iter;
+        	++velocity_sim_iter;
         	++ind_iter;
         	++truth_iter;
 		}
