@@ -788,11 +788,11 @@ point_clouds_from_images(const cv::Mat& depth_image,
 	cv::Mat local_depth_image;
     if (is_sim) {
     	// using T = float;
-		depth_image.convertTo(local_depth_image, CV_32F);
+		local_depth_image = depth_image.clone();
     	pixel_len = 0.0000222222;
     } else {
     	// using T = uint16_t;
-		local_depth_image = depth_image.clone();
+		depth_image.convertTo(local_depth_image, CV_32F);
     	pixel_len = 0.0002645833;
     }
     // using DepthTraits = cdcpd::DepthTraits<T>;
@@ -1106,6 +1106,7 @@ Matrix3Xf CDCPD::cheng_cpd(const Matrix3Xf& X,
                      	   const cv::Mat& depth,
                      	   const cv::Mat& mask)
 {
+	cout << "real cheng is running..." << endl;
     // downsampled_cloud: PointXYZ pointer to downsampled point clouds
     // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
@@ -1661,7 +1662,7 @@ CDCPD::Output CDCPD::operator()(
         //         pred_fixed_points.push_back(pt);
         //     }
         // }
-        TY = cpd(X, Y, depth, mask);
+        TY = cheng_cpd(X, Y, depth, mask);
     } 
 
 
@@ -1924,7 +1925,7 @@ CDCPD::Output CDCPD::operator()(
         //         pred_fixed_points.push_back(pt);
         //     }
         // }
-        TY = cpd(X, Y, depth, mask);
+        TY = cheng_cpd(X, Y, depth, mask);
     } 
 
 
