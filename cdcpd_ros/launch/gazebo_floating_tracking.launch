@@ -1,0 +1,10 @@
+<launch>
+    <node pkg="cdcpd_ros" type="node" name="cdcpd">
+        <param name="kinect_channel" value="qhd"/>
+        <param name="left_tf_name" value="kinematic_rope/left_gripper"/>
+        <param name="right_tf_name" value="kinematic_rope/right_gripper"/>
+        <param name="left_node_idx" value="0"/>
+        <param name="right_node_idx" value="23"/>
+        <param name="rope_num_points" value="25"/>
+    </node>
+</launch>

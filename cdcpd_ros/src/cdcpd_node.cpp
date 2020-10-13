@@ -88,8 +88,8 @@ int main(int argc, char* argv[])
     auto tf_listener = tf2_ros::TransformListener(tf_buffer);
 
     // Initial connectivity model of rope
-    auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 15);
-    auto const length = ROSHelpers::GetParam<float>(nh, "rope_length", 0.80);
+    auto const num_points = ROSHelpers::GetParam<int>(ph, "rope_num_points", 15);
+    auto const length = ROSHelpers::GetParam<float>(ph, "rope_length", 0.80);
     auto const [template_vertices, template_edges] = makeRopeTemplate(num_points, length);
     // Construct the initial template as a PCL cloud
     auto template_cloud = makeCloud(template_vertices);
@@ -102,10 +102,10 @@ int main(int argc, char* argv[])
     auto const beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
     auto const kinect_name = ROSHelpers::GetParam<std::string>(ph, "kinect_name", "kinect2");
-    auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "sd");
+    auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
 
     // For use with TF and "fixed points" for the constrain step
-    auto const kinect_tf_name = kinect_name + "_ir_optical_frame";
+    auto const kinect_tf_name = kinect_name + "_rgb_optical_frame";
     auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "cdcpd_ros/left_gripper_prior");
     auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "cdcpd_ros/right_gripper_prior");
     auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
