@@ -5,18 +5,6 @@ project(cdcpd_ros)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# https://blog.kitware.com/cmake-and-the-default-build-type/
-set(default_build_type "Release")
-#set(default_build_type "RelWithDebInfo")
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(WARNING "Setting build type to '${default_build_type}' as none was specified.")
-    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-        STRING "Choose the type of build." FORCE)
-    # Set the possible values of build type for cmake-gui
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-        "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
-endif()
-
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 ## Find catkin macros and libraries
@@ -30,8 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   pcl_ros
   arc_utilities
+  cdcpd
 )
-find_package(cdcpd REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -51,7 +39,7 @@ find_package(cdcpd REQUIRED)
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES cdcpd_ros
-#  CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs
+   CATKIN_DEPENDS cdcpd roscpp sensor_msgs
 #  DEPENDS system_lib
 )
 
@@ -69,7 +57,7 @@ include_directories(
 
 # Node for live data
 add_executable(${PROJECT_NAME}
-  src/${PROJECT_NAME}/kinect_sub.cpp
+  src/cdcpd_ros/kinect_sub.cpp
   src/cdcpd_node.cpp
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -77,10 +65,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES)
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME} PRIVATE
-  ${catkin_LIBRARIES}
-  cdcpd::cdcpd
-)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${catkin_LIBRARIES})
 target_compile_options(${PROJECT_NAME} PRIVATE -O3 -Wall -Wextra -Wconversion -Wshadow)
 
 # Node for bagged data
@@ -92,8 +77,5 @@ set_target_properties(${PROJECT_NAME}_bagfile PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES)
 add_dependencies(${PROJECT_NAME}_bagfile ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_bagfile PRIVATE
-  ${catkin_LIBRARIES}
-  cdcpd::cdcpd
-)
+target_link_libraries(${PROJECT_NAME}_bagfile PRIVATE ${catkin_LIBRARIES})
 target_compile_options(${PROJECT_NAME}_bagfile PRIVATE -O3 -Wall -Wextra -Wconversion -Werror -Wshadow)
