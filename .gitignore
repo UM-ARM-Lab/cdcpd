@@ -1,26 +1,32 @@
-.idea
-.vscode
-*.pyc
-*.log
-*/build
-*.so
-*.pstat
-*.egg-info
-*.swp
-*DS_Store
-tags
 
 # CLion artifacts
-build
-install
+# Compiled python files
+# Vim Ctags file
+# editor temporary files
+*.autosave
+*.egg-info
+*.log
+*.pstat
+*.pyc
+*.so
+*.swp
+*/build
+*DS_Store
+*~
+.idea
+.vscode
 CMakeCache.txt
 CMakeFiles/
 CTestTestfile.cmake
 DartConfiguration.tcl
 Makefile
+build
 cdcpd-config.cmake
 cdcpd.cbp
+cmake-build-debug
 cmake_install.cmake
+install
+tags
 tests/CMakeFiles/
 tests/CTestTestfile.cmake
 tests/Makefile
