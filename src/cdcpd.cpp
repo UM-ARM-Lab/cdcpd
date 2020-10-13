@@ -60,12 +60,6 @@ using std::endl;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
 
-#ifdef SIMULATION
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test_blender/log";
-#else
-std::string workingDir = "/home/deformtrack/catkin_ws/src/cdcpd_test/log";
-#endif
-
 static double abs_derivative(double x)
 {
     return x;
@@ -324,7 +318,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _lambda,
              const double _k,
 			 const float _zeta,
-			 const std::vector<float> _cylinder_data) :
+			 const std::vector<float> _cylinder_data,
+			 const bool _is_sim) :
     // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
@@ -350,7 +345,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	, obs_param(_obs_param),
 	mesh(initObstacle(_obs_param))
     #endif
-	, cylinder_data(_cylinder_data)
+	, cylinder_data(_cylinder_data),
+	is_sim(_is_sim)
 {
     Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
     last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
@@ -437,7 +433,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _lambda,
              const double _k,
 			 const float _zeta,
-			 const std::vector<float> _cylinder_data) :
+			 const std::vector<float> _cylinder_data,
+			 const bool _is_sim) :
     // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
@@ -463,7 +460,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	, obs_param(_obs_param),
 	mesh(initObstacle(_obs_param))
     #endif
-	, cylinder_data(_cylinder_data)
+	, cylinder_data(_cylinder_data),
+	is_sim(_is_sim)
 {
     Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
     last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
@@ -514,16 +512,6 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf& vertices,
     // mask: CV_8U mask for segmentation
     // kvis: k_vis in the paper
 
-#ifdef DEBUG
-    Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-    auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
-        std::ofstream(fname) << mat.format(np_fmt);
-    };
-
-    // save matrices
-    to_file(workingDir + "/cpp_verts.txt", vertices);
-#endif
-
     // Project the vertices to get their corresponding pixel coordinate
     // ENHANCE: replace P_eigen.leftCols(3) with intrinsics
     Matrix3Xf image_space_vertices = intrinsics * vertices;
@@ -539,9 +527,6 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf& vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-#ifdef DEBUG
-    to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
-#endif
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -551,9 +536,6 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf& vertices,
         coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
         coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
     }
-#ifdef DEBUG
-    to_file(workingDir + "/cpp_coords.txt", coords.cast<float>());
-#endif
 
     // Find difference between point depth and image depth
     // depth_diffs: (1, M) vector
@@ -573,9 +555,6 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf& vertices,
     }
     // ENHANCE: repeating max
     depth_diffs = depth_diffs.array().max(0);
-#ifdef DEBUG
-    to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
-#endif
 
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO haven't really tested this but seems right
@@ -583,9 +562,6 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf& vertices,
     cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
     // ???: why cv::normalize is needed
     cv::normalize(dist_img, dist_img, 0.0, 1.0, cv::NORM_MINMAX);
-    // ENHANCE: rm unused dist_copr
-    cv::Mat dist_copy = dist_img.clone();
-    imwrite(workingDir + "/dist_img.png", dist_copy * 255.0);
 
     Eigen::VectorXf dist_to_mask(vertices.cols());
     for (int i = 0; i < vertices.cols(); ++i)
@@ -595,16 +571,15 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf& vertices,
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     VectorXf prob = (-kvis * score).array().exp().matrix();
     // ???: unnormalized prob
-#ifdef DEBUG
-    to_file(workingDir + "/cpp_prob.txt", prob);
-#endif
     return prob;
 }
 
+#ifdef NOUSE
 VectorXi CDCPD::is_occluded(const Matrix3Xf& vertices,
                             const Mat& depth,
                             const Mat& mask,
-                            const Matrix3f& intrinsics)
+                            const Matrix3f& intrinsics,
+							const bool is_sim)
 {
     // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
@@ -641,13 +616,13 @@ VectorXi CDCPD::is_occluded(const Matrix3Xf& vertices,
     for (int i = 0; i < vertices.cols(); ++i)
     {
         // std::cout << "depth at " << coords(1, i) << " " << coords(0, i) << std::endl;
-        #ifdef SIMULATION
-        assert(depth.depth() == CV_32F);
-        float raw_depth = depth.at<float>(coords(1, i), coords(0, i));
-        #else
-        assert(depth.depth() == CV_16U);
-        uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
-        #endif
+        if(is_sim) {
+        	assert(depth.depth() == CV_32F);
+        	float raw_depth = depth.at<float>(coords(1, i), coords(0, i));
+        } else {
+        	assert(depth.depth() == CV_16U);
+        	uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
+        }
         if (raw_depth != 0)
         {
             depth_diffs(i) = vertices(2, i) - static_cast<float>(raw_depth) / 1000.0;
@@ -673,6 +648,7 @@ VectorXi CDCPD::is_occluded(const Matrix3Xf& vertices,
 
     return occl_idx;
 }
+#endif
 
 Matrix3Xf CDCPD::blend_result(const Matrix3Xf& Y_pred,
                        const Matrix3Xf& Y_cpd,
@@ -731,9 +707,6 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
         image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
         image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
     }
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_projected.txt", image_space_vertices);
-    #endif
 
     // Get image coordinates
     Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
@@ -764,9 +737,6 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
         }
     }
     Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_depth_diffs.txt", depth_diffs);
-    #endif
 
 
     cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
@@ -781,9 +751,6 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
     VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
     // NOTE: Eq. (22) lost 1 in it
     VectorXf prob = (1 - (-k * score).array().exp()).matrix();
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_prob.txt", prob);
-    #endif
     float cost = prob.array().isNaN().select(0, prob.array()).sum();
     cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
     return cost;
@@ -803,7 +770,8 @@ point_clouds_from_images(const cv::Mat& depth_image,
                          const cv::Mat& mask,
                          const Eigen::Matrix3f& intrinsics,
                          const Eigen::Vector3f& lower_bounding_box,
-                         const Eigen::Vector3f& upper_bounding_box)
+                         const Eigen::Vector3f& upper_bounding_box,
+						 const bool is_sim)
 {
     // depth_image: CV_16U depth image
     // rgb_image: CV_8U3C rgb image
@@ -814,21 +782,26 @@ point_clouds_from_images(const cv::Mat& depth_image,
     //   [0  0  1 ]]
     // lower_bounding_box_vec: bounding for mask
     // upper_bounding_box_vec: bounding for mask
-
-    #ifdef SIMULATION
-    using T = float;
-    float pixel_len = 0.0000222222;
-    #else
-    using T = uint16_t;
-    float pixel_len = 0.0002645833;
-    #endif
-    using DepthTraits = cdcpd::DepthTraits<T>;
-
+	
+	// class T;
+	float pixel_len;
+	cv::Mat local_depth_image;
+    if (is_sim) {
+    	// using T = float;
+		depth_image.convertTo(local_depth_image, CV_32F);
+    	pixel_len = 0.0000222222;
+    } else {
+    	// using T = uint16_t;
+		local_depth_image = depth_image.clone();
+    	pixel_len = 0.0002645833;
+    }
+    // using DepthTraits = cdcpd::DepthTraits<T>;
+	
     // Use correct principal point from calibration
     auto const center_x = intrinsics(0, 2);
     auto const center_y = intrinsics(1, 2);
 
-    auto const unit_scaling = DepthTraits::toMeters(T(1));
+    auto const unit_scaling = 0.001;
     auto const constant_x = 1.0f / (intrinsics(0, 0) * pixel_len);
     auto const constant_y = 1.0f / (intrinsics(1, 1) * pixel_len);
     auto constexpr bad_point = std::numeric_limits<float>::quiet_NaN();
@@ -853,10 +826,10 @@ point_clouds_from_images(const cv::Mat& depth_image,
     {
         for (int u = 0; u < depth_image.cols; ++u)
         {
-            T depth = depth_image.at<T>(v, u);
+            float depth = local_depth_image.at<float>(v, u);
 
             // Assume depth = 0 is the standard was to note invalid
-            if (DepthTraits::valid(depth))
+            if (std::isfinite(depth))
             {
                 float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x;
                 float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y;
@@ -1128,6 +1101,186 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
     return TY;
 }
 
+Matrix3Xf CDCPD::cheng_cpd(const Matrix3Xf& X,
+                     	   const Matrix3Xf& Y,
+                     	   const cv::Mat& depth,
+                     	   const cv::Mat& mask)
+{
+    // downsampled_cloud: PointXYZ pointer to downsampled point clouds
+    // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // depth: CV_16U depth image
+    // mask: CV_8U mask for segmentation label
+
+    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
+    Eigen::VectorXf Y_emit_prior(Y.cols());
+    for (int i = 0; i < Y.cols(); ++i)
+    {
+        Y_emit_prior(i) = 1.0f;
+    }
+
+    /// CPD step
+
+    // G: (M, M) Guassian kernel matrix
+    MatrixXf G = gaussian_kernel(Y, beta);//Y, beta);
+
+    // TY: Y^(t) in Algorithm 1
+    Matrix3Xf TY = Y;
+    double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
+
+    int iterations = 0;
+    double error = tolerance + 1; // loop runs the first time
+
+    std::chrono::time_point<std::chrono::system_clock> start, end;
+    start = std::chrono::system_clock::now();
+
+    #ifdef CPDLOG
+    std::cout << "\nCPD loop\n";
+    std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << std::endl;
+    #endif
+
+    while (iterations <= max_iterations && error > tolerance)
+    {
+        double qprev = sigma2;
+        // Expectation step
+        int N = X.cols();
+        int M = Y.cols();
+        int D = Y.rows();
+
+        // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
+        // Calculate Eq. (9) (Line 5 in Algorithm 1)
+        // NOTE: Eq. (9) misses M in the denominator
+
+        MatrixXf P(M, N); // end = std::chrono::system_clock::now(); std::cout << "526: " << (end-start).count() << std::endl;
+        {
+            for (int i = 0; i < M; ++i) {
+                for (int j = 0; j < N; ++j) {
+                    P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+                }
+            }
+
+            float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+            c *= w / (1 - w);
+            c *= static_cast<double>(M) / N;
+
+            P = (-P / (2 * sigma2)).array().exp().matrix();
+            P.array().colwise() *= Y_emit_prior.array();
+
+            RowVectorXf den = P.colwise().sum();
+            den.array() += c;
+
+            P = P.array().rowwise() / den.array();
+        }  //end = std::chrono::system_clock::now(); std::cout << "545: " << (end-start).count() << std::endl;
+
+        // Fast Gaussian Transformation to calculate Pt1, P1, PX
+
+        // double bandwidth = std::sqrt(2.0 * sigma2);
+        // double epsilon = 1e-4;
+        // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //std::cout << "575\n";
+        // fgt::Matrix X_fgt = X.transpose().cast<double>(); //std::cout << "576\n";
+        // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //std::cout << "577\n";
+        // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //std::cout << "578\n";// N*1 vector
+
+        // float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+        // c *= w / (1 - w);
+        // c *= static_cast<double>(M) / N;
+        // ArrayXd a = 1 / (kt1.array() + c); // N*1 array
+
+        // VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
+
+        // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //std::cout << "587\n";
+        // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //std::cout << "588\n";
+        // P1 = P1.array()*Y_emit_prior.array();
+
+        // MatrixXd PX_fgt(TY.rows(), TY.cols());
+        // for (size_t i = 0; i < TY.rows(); ++i) {
+        //     // ArrayXd Xi = X_fgt.col(i).array();
+        //     ArrayXd aXarray = X_fgt.col(i).array() * a;
+        //     fgt::Vector aX = fgt::Vector(aXarray);  //std::cout << "594\n";
+        //     PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX)).array() * Y_emit_prior.array().cast<double>();
+        // }
+        // MatrixXf PX = PX_fgt.cast<float>();
+        MatrixXf PX = (P * X.transpose()).transpose();
+
+        // // Maximization step
+        VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); std::cout << "548: " << (end-start).count() << std::endl;
+        VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); std::cout << "549: " << (end-start).count() << std::endl;
+        float Np = P1.sum(); //end = std::chrono::system_clock::now(); std::cout << "550: " << (end-start).count() << std::endl;
+
+        // NOTE: lambda means gamma here
+        // Corresponding to Eq. (18) in the paper
+        float lambda = start_lambda;
+        MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
+        
+        MatrixXf A = (P1.asDiagonal() * G)
+            + alpha * sigma2 * MatrixXf::Identity(M, M)
+            + sigma2 * lambda * (m_lle * G);// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
+
+        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose(); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
+
+        MatrixXf W = A.householderQr().solve(B);
+        // MatrixXf lastW = W;
+
+        // int W_int = 0;
+        // std::cout << std::setw(20) << "W solver loop";
+        // std::cout << std::setw(20) << "W difference" << std::endl;
+        // while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
+        //     lastW = W;
+        //     MatrixXf A_new = A;
+        //     MatrixXf B_new = B;
+        //     for (int i = 0; i < template_edges.cols(); ++i)
+        //     {
+        //         MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
+        //         MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
+        //         double delta = abs_derivative(eit.trace()-ei0.trace());
+        //         // double delta = -1.0;
+        //         A_new = A_new + k*sigma2*delta*Q[i]*G;
+        //         B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
+        //     }
+        //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); std::cout << "562: " << (end-start).count() << std::endl;
+        //     std::cout << std::setw(20) << W_int;
+        //     std::cout << std::setw(20) << (W-lastW).squaredNorm() << std::endl;
+        //     W_int++;
+        // }
+
+        // MatrixXf W(M, D);
+        // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
+
+        TY = Y + (G * W).transpose();// end = std::chrono::system_clock::now(); std::cout << "564: " << (end-start).count() << std::endl;
+
+        // Corresponding to Eq. (19) in the paper
+        VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
+        // float xPx = (Pt1 * xPxtemp.transpose())(0,0);
+        double xPx = Pt1.dot(xPxtemp);// end = std::chrono::system_clock::now();std::cout << "569: " << (end-start).count() << std::endl;
+        // assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
+        // double xPx = xPxMat.sum();
+        VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+        // MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
+        // assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
+        double yPy = P1.dot(yPytemp); //end = std::chrono::system_clock::now();std::cout << "575: " << (end-start).count() << std::endl;
+        double trPXY = (TY.array() * PX.array()).sum(); //end = std::chrono::system_clock::now();std::cout << "576: " << (end-start).count() << std::endl;
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * D); //end = std::chrono::system_clock::now();std::cout << "577: " << (end-start).count() << std::endl;
+
+        if (sigma2 <= 0)
+        {
+            sigma2 = tolerance / 10;
+        }
+
+        #ifdef CPDLOG
+        double prob_reg = calculate_prob_reg(X, TY, G, W, sigma2, Y_emit_prior, P);
+        double lle_reg = start_lambda / 2 * ((TY*m_lle*TY.transpose()).trace() + 2*(W.transpose()*G*m_lle*TY).trace() + (W.transpose()*G*m_lle*G*W).trace());
+        double cpd_reg = alpha * (W.transpose()*G*W).trace()/2;
+        std::cout << std::setw(20) << iterations;
+        std::cout << std::setw(20) << prob_reg;
+        std::cout << std::setw(20) << cpd_reg;
+        std::cout << std::setw(20) << lle_reg << std::endl;
+        #endif
+
+
+        error = std::abs(sigma2 - qprev);
+        iterations++;
+    }
+    return TY;
+}
 Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
                      const Matrix3Xf& Y,
                      const cv::Mat& depth,
@@ -1398,11 +1551,11 @@ CDCPD::Output CDCPD::operator()(
     // fixed_points: fixed points during the tracking
 
     assert(rgb.type() == CV_8UC3);
-    #ifdef SIMULATION
-    assert(depth.type() == CV_32F);
-    #else
-    assert(depth.type() == CV_16U);
-    #endif
+    if (is_sim) {
+    	assert(depth.type() == CV_32F);
+    } else {
+    	assert(depth.type() == CV_16U);
+    }
     assert(mask.type() == CV_8U);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
@@ -1435,7 +1588,8 @@ CDCPD::Output CDCPD::operator()(
                 mask,
                 intrinsics_eigen,
                 last_lower_bounding_box - bounding_box_extend,
-                last_upper_bounding_box + bounding_box_extend);
+                last_upper_bounding_box + bounding_box_extend,
+				is_sim);
     std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
 
     /// VoxelGrid filter downsampling
@@ -1510,12 +1664,6 @@ CDCPD::Output CDCPD::operator()(
         TY = cpd(X, Y, depth, mask);
     } 
 
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
-    to_file(workingDir + "/cpp_downsample.txt", X);
-    to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
-    to_file(workingDir + "/cpp_TY.txt", TY);
-    #endif
 
     // Next step: optimization.
     #ifdef SHAPE_COMP
@@ -1526,9 +1674,6 @@ CDCPD::Output CDCPD::operator()(
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
     // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
-    #endif
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
@@ -1577,11 +1722,11 @@ CDCPD::Output CDCPD::operator()(
     // fixed_points: fixed points during the tracking
 
     assert(rgb.type() == CV_8UC3);
-    #ifdef SIMULATION
-    assert(depth.type() == CV_32F);
-    #else
-    assert(depth.type() == CV_16U);
-    #endif
+    if (is_sim) {
+    	assert(depth.type() == CV_32F);
+    } else {
+    	assert(depth.type() == CV_16U);
+    }
     assert(mask.type() == CV_8U);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
@@ -1615,7 +1760,8 @@ CDCPD::Output CDCPD::operator()(
                 mask,
                 intrinsics_eigen,
                 last_lower_bounding_box - bounding_box_extend,
-                last_upper_bounding_box + bounding_box_extend);
+                last_upper_bounding_box + bounding_box_extend,
+				is_sim);
     std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
 
     /// VoxelGrid filter downsampling
@@ -1734,15 +1880,7 @@ CDCPD::Output CDCPD::operator()(
    		for (int col = 0; col < gripper_idx.cols(); ++col)
     	{
         	FixedPoint pt;
-			#ifdef SIMULATION
-			#ifdef ROPE
-       		pt.template_index = gripper_idx(2, col);
-			#else
 			pt.template_index = gripper_idx(0, col);
-			#endif
-			#else
-			pt.template_index = gripper_idx(0, col);
-			#endif
         	pt.position(0) = q_config_valid[col](0, 3);
         	pt.position(1) = q_config_valid[col](1, 3);
         	pt.position(2) = q_config_valid[col](2, 3);
@@ -1790,12 +1928,6 @@ CDCPD::Output CDCPD::operator()(
     } 
 
 
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
-    to_file(workingDir + "/cpp_downsample.txt", X);
-    to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
-    to_file(workingDir + "/cpp_TY.txt", TY);
-    #endif
 
     // Next step: optimization.
     // ???: most likely not 1.0
@@ -1807,9 +1939,6 @@ CDCPD::Output CDCPD::operator()(
 
     Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
     // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
-    #endif
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
@@ -1851,11 +1980,11 @@ CDCPD::Output CDCPD::operator()(
     // fixed_points: fixed points during the tracking
 
     assert(rgb.type() == CV_8UC3);
-    #ifdef SIMULATION
-    assert(depth.type() == CV_32F);
-    #else
-    assert(depth.type() == CV_16U);
-    #endif
+    if (is_sim) {
+    	assert(depth.type() == CV_32F);
+    } else {
+    	assert(depth.type() == CV_16U);
+    }
     assert(mask.type() == CV_8U);
     assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
@@ -1885,7 +2014,8 @@ CDCPD::Output CDCPD::operator()(
                 mask,
                 intrinsics_eigen,
                 last_lower_bounding_box - bounding_box_extend,
-                last_upper_bounding_box + bounding_box_extend);
+                last_upper_bounding_box + bounding_box_extend,
+				is_sim);
     std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
 
     /// VoxelGrid filter downsampling
@@ -1942,16 +2072,10 @@ CDCPD::Output CDCPD::operator()(
         //         pred_fixed_points.push_back(pt);
         //     }
         // }
-        TY = cpd(X, Y, depth, mask);
+        TY = cheng_cpd(X, Y, depth, mask);
     } 
 
 
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_entire_cloud.txt", entire);
-    to_file(workingDir + "/cpp_downsample.txt", X);
-    to_file(workingDir + "/cpp_TY-1.txt", template_cloud->getMatrixXfMap().topRows(3));
-    to_file(workingDir + "/cpp_TY.txt", TY);
-    #endif
 
     // Next step: optimization.
     // ???: most likely not 1.0
@@ -1963,9 +2087,6 @@ CDCPD::Output CDCPD::operator()(
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain);
     // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-    #ifdef DEBUG
-    to_file(workingDir + "/cpp_Y_opt.txt", Y_opt);
-    #endif
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();

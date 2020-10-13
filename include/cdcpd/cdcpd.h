@@ -54,10 +54,6 @@
 // #define CYL_CLOTH4
 // #endif
 
-// #ifndef SIMULATION
-// #define SIMULATION
-// #endif
-
 // #ifndef SHAPE_COMP
 // #define SHAPE_COMP
 // #endif
@@ -123,7 +119,8 @@ public:
           const double lambda = 1.0,
           const double k = 100.0,
 		  const float zeta = 10.0,
-		  const std::vector<float> cylinder_data = {});
+		  const std::vector<float> cylinder_data = {},
+		  const bool is_sim = false);
 	
 	CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
@@ -136,7 +133,8 @@ public:
           const double lambda = 1.0,
           const double k = 100.0,
 		  const float zeta = 10.0,
-		  const std::vector<float> cylinder_data = {});
+		  const std::vector<float> cylinder_data = {},
+		  const bool is_sim = false);
 
     Output operator()(const cv::Mat& rgb, // RGB image
                       const cv::Mat& depth, // Depth image
@@ -189,10 +187,13 @@ private:
                                      const Eigen::Matrix3f& intrinsics,
                                      const float kvis);
 
+	#ifdef NOUSE
     Eigen::VectorXi is_occluded(const Eigen::Matrix3Xf& vertices,
                                 const cv::Mat& depth,
                                 const cv::Mat& mask,
-                                const Eigen::Matrix3f& intrinsics);
+                                const Eigen::Matrix3f& intrinsics,
+								const bool is_sim);
+	#endif
 
     Eigen::Matrix3Xf blend_result(const Eigen::Matrix3Xf& Y_pred,
                                   const Eigen::Matrix3Xf& Y_cpd,
@@ -217,6 +218,11 @@ private:
                          const Eigen::Matrix3Xf& Y,
                          const cv::Mat& depth,
                          const cv::Mat& mask);
+ 
+    Eigen::Matrix3Xf cheng_cpd(const Eigen::Matrix3Xf& X,
+                         	   const Eigen::Matrix3Xf& Y,
+                         	   const cv::Mat& depth,
+                         	   const cv::Mat& mask);
  
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
                              const smmap::AllGrippersSinglePoseDelta& q_dot,
@@ -251,9 +257,7 @@ private:
     double last_sigma2;
     Eigen::MatrixXi gripper_idx;
 	std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
-	#ifndef SIMULATION
     std::vector<bool> last_grasp_status;
-	#endif
     #ifdef SHAPE_COMP
 	obsParam obs_param;
 	Mesh mesh;
@@ -261,6 +265,7 @@ private:
     Mesh::Property_map<vertex_descriptor, Vector> vnormals;
     #endif
 	std::vector<float> cylinder_data;
+	bool is_sim;
 };
 
 #endif

@@ -539,7 +539,10 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
         }
         cylinder_radius = cylinder_data[6];
         cylinder_height = cylinder_data[7];
-    }
+    } else {
+		cylinder_radius = -1.0f;
+		cylinder_height = -1.0f;
+	}
 }
 
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
@@ -601,7 +604,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Add interaction constraints
 
 
-        if (interaction_constrain)
+        if (interaction_constrain && cylinder_radius > 0)
         {
 			Matrix3Xf nearestPts, normalVecs;
 			if (is_shape_comp) {
