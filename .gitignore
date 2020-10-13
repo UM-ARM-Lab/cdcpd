@@ -31,3 +31,4 @@ tests/CMakeFiles/
 tests/CTestTestfile.cmake
 tests/Makefile
 tests/cmake_install.cmake
+cdcpd_test
