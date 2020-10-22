@@ -1110,10 +1110,14 @@ int main(int argc, char* argv[])
             auto i = m.instantiate<sm::Image>();
             if (i != nullptr)
             {
-				if (is_gripper_info) {
-					rgb_sub_use_gripper.newMessage(i);
-				} else {
+				if (is_sim) {
                	 	rgb_sub.newMessage(i);
+				} else {
+					if (is_gripper_info) {
+						rgb_sub_use_gripper.newMessage(i);
+					} else {
+               	 		rgb_sub.newMessage(i);
+					}
 				}
             }
             else
@@ -1126,10 +1130,14 @@ int main(int argc, char* argv[])
             auto i = m.instantiate<sm::Image>();
             if (i != nullptr)
             {
-				if (is_gripper_info) {
-					depth_sub_use_gripper.newMessage(i);
-				} else {
+				if (is_sim) {
                	 	depth_sub.newMessage(i);
+				} else {
+					if (is_gripper_info) {
+						depth_sub_use_gripper.newMessage(i);
+					} else {
+               	 		depth_sub.newMessage(i);
+					}
 				}
             }
             else
@@ -1142,10 +1150,14 @@ int main(int argc, char* argv[])
             auto info = m.instantiate<sm::CameraInfo>();
             if (info != nullptr)
             {
-				if (is_gripper_info) {
-					info_sub_use_gripper.newMessage(info);
-				} else {
+				if (is_sim) {
                	 	info_sub.newMessage(info);
+				} else {
+					if (is_gripper_info) {
+						info_sub_use_gripper.newMessage(info);
+					} else {
+               	 		info_sub.newMessage(info);
+					}
 				}
             }
             else
