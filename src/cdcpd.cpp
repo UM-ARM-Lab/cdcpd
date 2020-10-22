@@ -348,7 +348,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	, cylinder_data(_cylinder_data),
 	is_sim(_is_sim)
 {
-    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
     last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
     last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 	
@@ -463,7 +463,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 	, cylinder_data(_cylinder_data),
 	is_sim(_is_sim)
 {
-    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
     last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
     last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 	
@@ -900,19 +900,20 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
                      const Matrix3Xf& Y,
                      const Matrix3Xf& Y_pred,
                      const cv::Mat& depth,
-                     const cv::Mat& mask)
+                     const cv::Mat& mask,
+					 const Eigen::Matrix3f& intr)
 {
     // downsampled_cloud: PointXYZ pointer to downsampled point clouds
     // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
     // mask: CV_8U mask for segmentation label
 
-    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
-    Eigen::VectorXf Y_emit_prior(Y.cols());
-    for (int i = 0; i < Y.cols(); ++i)
-    {
-        Y_emit_prior(i) = 1.0f;
-    }
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intr, kvis);
+    // Eigen::VectorXf Y_emit_prior(Y.cols());
+    // for (int i = 0; i < Y.cols(); ++i)
+    // {
+    //     Y_emit_prior(i) = 1.0f;
+    // }
 
     /// CPD step
 
@@ -1104,7 +1105,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
 Matrix3Xf CDCPD::cheng_cpd(const Matrix3Xf& X,
                      	   const Matrix3Xf& Y,
                      	   const cv::Mat& depth,
-                     	   const cv::Mat& mask)
+                     	   const cv::Mat& mask,
+					 	   const Eigen::Matrix3f& intr)
 {
 	cout << "real cheng is running..." << endl;
     // downsampled_cloud: PointXYZ pointer to downsampled point clouds
@@ -1112,12 +1114,12 @@ Matrix3Xf CDCPD::cheng_cpd(const Matrix3Xf& X,
     // depth: CV_16U depth image
     // mask: CV_8U mask for segmentation label
 
-    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
-    Eigen::VectorXf Y_emit_prior(Y.cols());
-    for (int i = 0; i < Y.cols(); ++i)
-    {
-        Y_emit_prior(i) = 1.0f;
-    }
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intr, kvis);
+    //Eigen::VectorXf Y_emit_prior(Y.cols());
+    //for (int i = 0; i < Y.cols(); ++i)
+    //{
+    //    Y_emit_prior(i) = 1.0f;
+    //}
 
     /// CPD step
 
@@ -1285,19 +1287,20 @@ Matrix3Xf CDCPD::cheng_cpd(const Matrix3Xf& X,
 Matrix3Xf CDCPD::cpd(const Matrix3Xf& X,
                      const Matrix3Xf& Y,
                      const cv::Mat& depth,
-                     const cv::Mat& mask)
+                     const cv::Mat& mask,
+					 const Eigen::Matrix3f& intr)
 {
     // downsampled_cloud: PointXYZ pointer to downsampled point clouds
     // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
     // depth: CV_16U depth image
     // mask: CV_8U mask for segmentation label
 
-    // Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, kvis);
-    Eigen::VectorXf Y_emit_prior(Y.cols());
-    for (int i = 0; i < Y.cols(); ++i)
-    {
-        Y_emit_prior(i) = 1.0f;
-    }
+    Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intr, kvis);
+    // Eigen::VectorXf Y_emit_prior(Y.cols());
+    // for (int i = 0; i < Y.cols(); ++i)
+    // {
+    //   Y_emit_prior(i) = 1.0f;
+    // }
 
     /// CPD step
 
@@ -1574,7 +1577,7 @@ CDCPD::Output CDCPD::operator()(
     cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
     Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
-    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
 
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
@@ -1647,7 +1650,7 @@ CDCPD::Output CDCPD::operator()(
         // }
         // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
         // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-		TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+		TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
         // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     }
     else
@@ -1662,7 +1665,7 @@ CDCPD::Output CDCPD::operator()(
         //         pred_fixed_points.push_back(pt);
         //     }
         // }
-        TY = cheng_cpd(X, Y, depth, mask);
+        TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
     } 
 
 
@@ -1672,9 +1675,9 @@ CDCPD::Output CDCPD::operator()(
     #else
     Optimizer opt(original_template, Y, 1.1, cylinder_data);
     #endif
-
-    Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
-    // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+    
+	Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
+	// end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
 
     // Set the min and max for the box filter for next time
     last_lower_bounding_box = Y_opt.rowwise().minCoeff();
@@ -1746,7 +1749,7 @@ CDCPD::Output CDCPD::operator()(
     cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
     Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
-    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
 
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
@@ -1910,7 +1913,7 @@ CDCPD::Output CDCPD::operator()(
         // }
         // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
         // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-		TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+		TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
         // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     }
     else
@@ -1925,7 +1928,7 @@ CDCPD::Output CDCPD::operator()(
         //         pred_fixed_points.push_back(pt);
         //     }
         // }
-        TY = cheng_cpd(X, Y, depth, mask);
+        TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
     } 
 
 
@@ -2000,7 +2003,7 @@ CDCPD::Output CDCPD::operator()(
     cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
     Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
-    Eigen::Vector3f const bounding_box_extend = Vector3f(0.2, 0.2, 0.2);
+    Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
 
     // entire_cloud: pointer to the entire point cloud
     // cloud: pointer to the point clouds selected
@@ -2058,7 +2061,7 @@ CDCPD::Output CDCPD::operator()(
         // }
         // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
         // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-		TY = cpd(X, Y, TY_pred, depth, mask); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
+		TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
         // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
     }
     else
@@ -2073,7 +2076,7 @@ CDCPD::Output CDCPD::operator()(
         //         pred_fixed_points.push_back(pt);
         //     }
         // }
-        TY = cheng_cpd(X, Y, depth, mask);
+        TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
     } 
 
 

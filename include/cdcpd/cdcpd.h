@@ -212,17 +212,20 @@ private:
                          const Eigen::Matrix3Xf& Y,
                          const Eigen::Matrix3Xf& Y_pred,
                          const cv::Mat& depth,
-                         const cv::Mat& mask);
+                         const cv::Mat& mask,
+						 const Eigen::Matrix3f& intr);
 
     Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf& X,
                          const Eigen::Matrix3Xf& Y,
                          const cv::Mat& depth,
-                         const cv::Mat& mask);
+                         const cv::Mat& mask,
+						 const Eigen::Matrix3f& intr);
  
     Eigen::Matrix3Xf cheng_cpd(const Eigen::Matrix3Xf& X,
                          	   const Eigen::Matrix3Xf& Y,
                          	   const cv::Mat& depth,
-                         	   const cv::Mat& mask);
+                         	   const cv::Mat& mask,
+						 	   const Eigen::Matrix3f& intr);
  
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
                              const smmap::AllGrippersSinglePoseDelta& q_dot,

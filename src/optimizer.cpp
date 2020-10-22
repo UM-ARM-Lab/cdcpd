@@ -646,7 +646,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
 
         if (self_intersection)
         {
-            cout << "added self intersection constrain" << endl;
+            cout << "adding self intersection constrain" << endl;
             auto [startPts, endPts] = nearest_points_line_segments(last_template, E);
             for (int row = 0; row < E.cols(); ++row)
             {
@@ -675,6 +675,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                     }
                 }
             }
+            cout << "added self intersection constrain" << endl;
         }
 
 
