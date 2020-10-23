@@ -1720,7 +1720,6 @@ int main(int argc, char* argv[])
 		CDCPD::Output out;
 		cout << "prediction choice: 0" << endl;
         if (is_sim) {
-			cout << "size of g_dot: " << g_dot.size() << endl;
 			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, g_dot, g_config, true, is_interaction, true, 0, fixed_points);
         	std::ofstream(workingDir + "/error.txt", std::ofstream::app) << calc_mean_error(out.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
         }
@@ -1750,14 +1749,16 @@ int main(int argc, char* argv[])
 		CDCPD::Output out_without_prediction;
         if (is_no_pred) {
 			cout << "no prediction used" << endl;
-			if (is_gripper_info) {
-        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, false, false, false, 0, fixed_points);
-			} else {
-        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points);
-			}
 			if (is_sim) {
+        		out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, false, false, false, 0, fixed_points);
 				std::ofstream(workingDir + "/error_no_pred.txt", std::ofstream::app) << calc_mean_error(out_without_prediction.gurobi_output->getMatrixXfMap(), one_frame_truth) << " ";
-        	}
+			} else {
+				if (is_gripper_info) {
+        			out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, g_dot, g_config, is_grasped, nh_ptr, translation_dir_deformability, translation_dis_deformability, rotation_deformability, false, false, false, 0, fixed_points);
+				} else {
+        			out_without_prediction = cdcpd_without_prediction(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud_without_prediction, false, false, false, 0, fixed_points);
+				}
+			}
 			template_cloud_without_prediction = out_without_prediction.gurobi_output;
 			out_without_prediction.gurobi_output->header.frame_id = frame_id;
 		}
