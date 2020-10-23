@@ -675,7 +675,6 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
                     }
                 }
             }
-            cout << "added self intersection constrain" << endl;
         }
 
 
