@@ -168,7 +168,7 @@ cv::Mat draw_vis(const cv::Mat& rgb_image,
 	
 	for(int i = 0; i < template_vertices.cols(); i++) {
 		cv::Point vertex(pixels(0, i)+left, pixels(1, i)+top);
-		cv::circle(out, vertex,	2, red, cv::FILLED, cv::LINE_8 );
+		cv::circle(out, vertex,	2, yellow, cv::FILLED, cv::LINE_8 );
 	}
 	
 	for(int e = 0; e < template_edges.cols(); e++) {
@@ -176,7 +176,7 @@ cv::Mat draw_vis(const cv::Mat& rgb_image,
 		int pt2 = template_edges(1, e);
 		cv::Point start(pixels(0, pt1)+left, pixels(1, pt1)+top);
 		cv::Point end(pixels(0, pt2)+left, pixels(1, pt2)+top);
-		cv::line(out, start, end, red);
+		cv::line(out, start, end, yellow);
 	}
 	cv::cvtColor(out, out, CV_BGR2RGB);
 	return out;
@@ -202,9 +202,10 @@ vm::Marker draw_cylinder_marker(const std::vector<float>& cylinder_data,
 	marker.pose.orientation.y = quat[1];
 	marker.pose.orientation.z = quat[2];
 	marker.pose.orientation.w = quat[3];
-	marker.scale.x = 2*cylinder_data[6];
-	marker.scale.y = 2*cylinder_data[6];
-	marker.scale.z = cylinder_data[7];
+	// for visualization
+	marker.scale.x = 2*cylinder_data[6]-0.01;
+	marker.scale.y = 2*cylinder_data[6]-0.01;
+	marker.scale.z = cylinder_data[7]-0.01;
 
 	marker.color.a = 0.5; // Don't forget to set the alpha!
 	marker.color.r = 0.0;
@@ -214,13 +215,14 @@ vm::Marker draw_cylinder_marker(const std::vector<float>& cylinder_data,
 	return marker;
 }
 
-vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
-	cv::Mat color_hsv(1, int(pc->size()), CV_32FC3, Scalar(0.0,1.0,1.0));
-	for (int col = 0; col < color_hsv.cols; col++) {
-		color_hsv.at<float>(0, col, 0) = 360.0f * float(col)/float(color_hsv.cols);
-	}
-	cv::Mat color_rgb;
-    cv::cvtColor(color_hsv, color_rgb, cv::COLOR_HSV2RGB);
+vm::Marker pc_to_marker(const PointCloud::Ptr& pc, const MatrixXi& edges, string frame_id, int height, int width) {
+	// cv::Mat color_hsv(1, int(pc->size()), CV_32FC3, Scalar(0.0,1.0,1.0));
+	// for (int col = 0; col < color_hsv.cols; col++) {
+	// 	color_hsv.at<float>(0, col, 0) = 100.0f * float(col)/float(color_hsv.cols) + 40.0f;
+	// }
+	// cv::Mat color_rgb;
+    // cv::cvtColor(color_hsv, color_rgb, cv::COLOR_HSV2RGB);
+	// cv::imwrite("rgb_color.png". color_rgb);
 	vm::Marker order;
     order.header.frame_id = frame_id;
     order.header.stamp = ros::Time();
@@ -234,56 +236,128 @@ vm::Marker pc_to_marker(PointCloud::Ptr pc, MatrixXi edges, string frame_id) {
 	// order.color.r = color_rgb.at<float>(0, 0, 0);
 	// order.color.g = color_rgb.at<float>(0, 0, 1);
 	// order.color.b = color_rgb.at<float>(0, 0, 2);
-	order.color.r = 1.0;
-	order.color.a = 1.0;
+	// order.color.r = 1.0;
+	// order.color.a = 1.0;
 
     order.type = vm::Marker::LINE_LIST;
-	for (int e = 0; e < edges.cols(); e++) {
-		color_hsv.at<float>(0,0,0) = float(e)/float(edges.cols());
-		geometry_msgs::Point pt1;
-		geometry_msgs::Point pt2;
+	if (height == 1) {
+        for (int e = 0; e < edges.cols(); e++) {
+            geometry_msgs::Point pt1;
+            geometry_msgs::Point pt2;
 
-		// std_msgs::ColorRGBA color1;
-		// std_msgs::ColorRGBA color2;
+            std_msgs::ColorRGBA color1;
+            std_msgs::ColorRGBA color2;
 
-		pt1.x = pc->points[edges(0, e)].x;
-		pt1.y = pc->points[edges(0, e)].y;
-		pt1.z = pc->points[edges(0, e)].z;
-		
-		pt2.x = pc->points[edges(1, e)].x;
-		pt2.y = pc->points[edges(1, e)].y;
-		pt2.z = pc->points[edges(1, e)].z;
+            pt1.x = pc->points[edges(0, e)].x;
+            pt1.y = pc->points[edges(0, e)].y;
+            pt1.z = pc->points[edges(0, e)].z;
+            
+            pt2.x = pc->points[edges(1, e)].x;
+            pt2.y = pc->points[edges(1, e)].y;
+            pt2.z = pc->points[edges(1, e)].z;
 
-		// color1.r = color_rgb.at<float>(0, edges(0, e), 0);
-		// color1.g = color_rgb.at<float>(0, edges(0, e), 1);
-		// color1.b = color_rgb.at<float>(0, edges(0, e), 2);
-		// color1.a = 1.0;
-		
-		// color2.r = color_rgb.at<float>(0, edges(1, e), 0);
-		// color2.g = color_rgb.at<float>(0, edges(1, e), 1);
-		// color2.b = color_rgb.at<float>(0, edges(1, e), 2);
-		// color2.a = 1.0;
-		
-		if ((pt1.x <  0.000001 && 
-			pt1.x > -0.000001 &&
-			pt1.y <  0.000001 && 
-			pt1.y > -0.000001 &&
-			pt1.z <  0.000001 && 
-			pt1.z > -0.000001) ||
-			(pt2.x <  0.000001 && 
-			pt2.x > -0.000001 &&
-			pt2.y <  0.000001 && 
-			pt2.y > -0.000001 &&
-			pt2.z <  0.000001 && 
-			pt2.z > -0.000001)) {
-			continue;
-		} else {
-			order.points.push_back(pt1);
-			order.points.push_back(pt2);
-			// order.colors.push_back(color1);
-			// order.colors.push_back(color2);
+            if (float(edges(0, e))/float(pc->size()) < 0.5) {
+                color1.r = 1.0f;
+                color1.g = 2*float(edges(0, e))/float(pc->size());
+                color1.b = 0.0f;
+                color1.a = 1.0f;
+            } else {
+                color1.r = 2*float(edges(0, e))/float(pc->size())-1.0f;
+                color1.g = 1.0f;
+                color1.b = 0.0f;
+                color1.a = 1.0f;
+            }
+
+            if (float(edges(1, e))/float(pc->size()) < 0.5) {
+                color2.r = 1.0f;
+                color2.g = 2*float(edges(1, e))/float(pc->size());
+                color2.b = 0.0f;
+                color2.a = 1.0f;
+            } else {
+                color2.r = 2*float(edges(1, e))/float(pc->size())-1.0f;
+                color2.g = 1.0f;
+                color2.b = 0.0f;
+                color2.a = 1.0f;
+            }
+				order.points.push_back(pt1);
+				order.points.push_back(pt2);
+				order.colors.push_back(color1);
+				order.colors.push_back(color2);
 		}
-	}
+	} else {
+        for (int h = 0; h < height; h++) {
+            for (int w = 0; w < width; w++) {
+                int idx = w*height+h;
+                geometry_msgs::Point pt1;
+                geometry_msgs::Point pt2;
+                geometry_msgs::Point pt3;
+
+                std_msgs::ColorRGBA color1;
+                std_msgs::ColorRGBA color2;
+                std_msgs::ColorRGBA color3;
+
+                pt1.x = pc->points[idx].x;
+                pt1.y = pc->points[idx].y;
+                pt1.z = pc->points[idx].z;
+                
+                if (float(h*width+w)/float(pc->size()) < 0.5) {
+                    color1.r = 1.0f;
+                    color1.g = 2*float(h*width+w)/float(pc->size());
+                    color1.b = 0.0f;
+                    color1.a = 1.0f;
+                } else {
+                    color1.r = 2*float(h*width+w)/float(pc->size())-1.0f;
+                    color1.g = 1.0f;
+                    color1.b = 0.0f;
+                    color1.a = 1.0f;
+                }
+
+                if (h + 1 < height) {
+                    int next_idx2 = idx+1;   
+                    pt2.x = pc->points[next_idx2].x;
+                    pt2.y = pc->points[next_idx2].y;
+                    pt2.z = pc->points[next_idx2].z;
+                    if (float((h+1)*width+w)/float(pc->size()) < 0.5) {
+                        color2.r = 1.0f;
+                        color2.g = 2*float((h+1)*width+w)/float(pc->size());
+                        color2.b = 0.0f;
+                        color2.a = 1.0f;
+                    } else {
+                        color2.r = 2*float((h+1)*width+w)/float(pc->size())-1.0f;
+                        color2.g = 1.0f;
+                        color2.b = 0.0f;
+                        color2.a = 1.0f;
+                    }
+                    order.points.push_back(pt1);
+                    order.points.push_back(pt2);
+                    order.colors.push_back(color1);
+                    order.colors.push_back(color2);
+                }
+                
+                if (w + 1 < width) {
+                    int next_idx3 = idx+height;   
+                    pt3.x = pc->points[next_idx3].x;
+                    pt3.y = pc->points[next_idx3].y;
+                    pt3.z = pc->points[next_idx3].z;
+                    if (float(h*width+w+1)/float(pc->size()) < 0.5) {
+                        color3.r = 1.0f;
+                        color3.g = 2*float(h*width+w+1)/float(pc->size());
+                        color3.b = 0.0f;
+                        color3.a = 1.0f;
+                    } else {
+                        color3.r = 2*float(h*width+w+1)/float(pc->size())-1.0f;
+                        color3.g = 1.0f;
+                        color3.b = 0.0f;
+                        color3.a = 1.0f;
+                    }
+                    order.points.push_back(pt1);
+                    order.points.push_back(pt3);
+                    order.colors.push_back(color1);
+                    order.colors.push_back(color3);
+                }
+            }
+		}
+    }
 	return order;
 }
 
@@ -1050,6 +1124,7 @@ int main(int argc, char* argv[])
     auto [template_vertices, template_edges] = init_template(is_rope, init_points, points_on_rope, num_width, num_height);
     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud = Matrix3Xf2pcptr(template_vertices);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_init = Matrix3Xf2pcptr(template_vertices);
+    Matrix2Xi cpd_phy_edges;
 	
 	std::vector<std::string> topics;
     if (is_sim) {
@@ -1832,7 +1907,7 @@ int main(int argc, char* argv[])
 				std::ofstream(workingDir + "/error_cpd_physics.txt", std::ofstream::app) << calc_mean_error(cpd_phy_pc->getMatrixXfMap().topRows(3).rowwise().reverse(), one_frame_truth) << " ";
 			}
 
-    		Matrix2Xi cpd_phy_edges(2, xs.size() - 1);
+    		cpd_phy_edges.resize(2, xs.size() - 1);
     		cpd_phy_edges(0, 0) = 0;
     		cpd_phy_edges(1, cpd_phy_edges.cols() - 1) = int(xs.size() - 1);
     		for (int i = 1; i <= cpd_phy_edges.cols() - 1; ++i)
@@ -1867,12 +1942,8 @@ int main(int argc, char* argv[])
 
         // draw line order
         {
-            vm::Marker order = pc_to_marker(out.gurobi_output, template_edges, frame_id);
+            vm::Marker order = pc_to_marker(out.gurobi_output, template_edges, frame_id, num_height, num_width);
             order_pub.publish(order);
-            #ifdef COMP
-            vm::Marker order_without_constrain = pc_to_marker(out.gurobi_output, template_edges);
-            order_without_constrain_pub.publish(order_without_constrain);
-            #endif
         }
 
 		auto time = ros::Time::now();
@@ -1905,7 +1976,7 @@ int main(int argc, char* argv[])
 		cpd_physics_pub.publish(cpd_phy_pc);
 		if(cpd_phy_result.is_open())
 		{
-			vm::Marker order_cpdphysics = pc_to_marker(cpd_phy_pc, template_edges, frame_id);
+			vm::Marker order_cpdphysics = pc_to_marker(cpd_phy_pc, cpd_phy_edges, frame_id, 1, points_on_rope);
 			order_cpdphysics_pub.publish(order_cpdphysics);
 			cpd_phy_result.close();
 		}        
@@ -1918,8 +1989,13 @@ int main(int argc, char* argv[])
         if (is_no_pred) {
         	pcl_conversions::toPCL(time, out_without_prediction.gurobi_output->header.stamp);
 			output_without_prediction_publisher.publish(out_without_prediction.gurobi_output);
-			vm::Marker order_without_pred = pc_to_marker(out_without_prediction.gurobi_output, template_edges, frame_id);
-			output_without_prediction_order_pub.publish(order_without_pred);
+            vm::Marker order_without_pred;
+            if (!is_rope) {
+			    order_without_pred = pc_to_marker(out_without_prediction.gurobi_output, template_edges, frame_id, num_height, num_width);
+			} else {
+                order_without_pred = pc_to_marker(out_without_prediction.gurobi_output, template_edges, frame_id, 1, points_on_rope);
+			}
+            output_without_prediction_order_pub.publish(order_without_pred);
        	}
 
         if (is_pred1) {
