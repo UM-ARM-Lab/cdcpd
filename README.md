@@ -10,6 +10,8 @@ Requirements
   * [Gurobi](https://www.gurobi.com/)
   * Eigen
   * [faiss](https://github.com/facebookresearch/faiss)
+    * swig (`sudo apt install swig`)
+    * CMake 3.17 (you may need to use kitware's more up to date pkgs https://apt.kitware.com/)
   * [fgt](https://github.com/gadomski/fgt)
   * ceres (`sudo apt install libceres-dev`)
   
