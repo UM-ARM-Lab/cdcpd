@@ -11,6 +11,7 @@ Requirements
   * Eigen
   * [faiss](https://github.com/facebookresearch/faiss)
   * [fgt](https://github.com/gadomski/fgt)
+  * ceres (`sudo apt install libceres-dev`)
   
 Installation
 ------------
