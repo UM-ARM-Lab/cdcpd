@@ -1,7 +1,7 @@
 Constrained Deformable Coherent Point Drift (CDCPD)
 =============
 
-CDCPD is a implementation of *Occlusion-robust Deformable Object Tracking without Physics Simulation*
+CDCPD is an implementation of *Occlusion-robust Deformable Object Tracking without Physics Simulation*
 by Cheng Chi and Dmitry Berenson.
 
 Requirements
