@@ -115,6 +115,7 @@ int main(int argc, char* argv[])
     // TODO: Make these const references? Does this matter for CV types?
     auto const callback = [&] (cv::Mat rgb, cv::Mat depth, cv::Matx33d cam)
     {
+        auto const t0 = std::chrono::steady_clock::now();
         std::vector<CDCPD::FixedPoint> fixed_points;
         // Left Gripper
         try
@@ -220,6 +221,8 @@ int main(int argc, char* argv[])
             auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
             order_pub.publish(rope_marker);
         }
+        auto const dt = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0);
+        ROS_DEBUG_STREAM("dt " << dt.count());
     };
 
     auto const options = KinectSub::SubscriptionOptions(kinect_name + "/" + kinect_channel);

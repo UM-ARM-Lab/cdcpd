@@ -61,7 +61,7 @@ target_link_libraries(cdcpd PRIVATE
 	)
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
-target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -g)
+target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -O3)
 
 # Set to private to not force downstream libraries to link against OpenMP
 # https://cliutils.gitlab.io/modern-cmake/chapters/packages/OpenMP.html
