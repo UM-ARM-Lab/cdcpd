@@ -47,7 +47,7 @@ PointCloud::Ptr makeCloud(Eigen::Matrix3Xf const& points)
     return cloud;
 }
 
-cv::Mat ropeHsvMask(cv::Mat rgb)
+cv::Mat ropeHsvMask(ros::NodeHandle ph, cv::Mat rgb)
 {
     cv::Mat rgb_f;
     rgb.convertTo(rgb_f, CV_32FC3);
@@ -58,8 +58,9 @@ cv::Mat ropeHsvMask(cv::Mat rgb)
     cv::Mat mask1;
     cv::Mat mask2;
     cv::Mat hsv_mask;
-    cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-    cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+    auto const s_min = ROSHelpers::GetParam<double>(ph, "saturation_min", 0.4);
+    cv::inRange(color_hsv, cv::Scalar(0, s_min, 0.4), cv::Scalar(20, 1.0, 1.0), mask1);
+    cv::inRange(color_hsv, cv::Scalar(340, s_min, 0.4), cv::Scalar(360, 1.0, 1.0), mask2);
     bitwise_or(mask1, mask2, hsv_mask);
 
     return hsv_mask;
@@ -145,7 +146,7 @@ int main(int argc, char* argv[])
         }
 
         // Perform and record the update
-        auto hsv_mask = ropeHsvMask(rgb);
+        auto hsv_mask = ropeHsvMask(ph, rgb);
         auto out = cdcpd(rgb, depth, hsv_mask, cam, template_cloud, true, false, fixed_points);
         template_cloud = out.gurobi_output;
 
