@@ -1665,6 +1665,7 @@ CDCPD::Output CDCPD::operator()(
         //         pred_fixed_points.push_back(pt);
         //     }
         // }
+        cout << "original cheng is used" << endl;
         TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
     } 
 

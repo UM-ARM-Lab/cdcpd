@@ -9,6 +9,7 @@ _is_pred1:=true \
 _is_pred2:=true \
 _is_no_pred:=true \
 _is_record:=true \
+_is_truth:=false \
 _is_interaction:=true \
 _translation_dir_deformablity:=5.0 \
 _translation_dis_deformablity:=5.0 \
