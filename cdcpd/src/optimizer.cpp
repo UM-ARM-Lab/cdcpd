@@ -503,7 +503,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         }
         else
         {
-            cout << "Gripper constraint cannot be satisfied." << endl;
+            std::cerr << "Gripper constraint cannot be satisfied." << endl;
             for (const auto& fixed_point : fixed_points)
             {
                 const auto expr0 = vars[fixed_point.template_index + 0] - Y_copy(0, fixed_point.template_index);
@@ -516,6 +516,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         // Build the objective function
         {
             GRBQuadExpr objective_fn(0);
+            objective_fn += gripper_objective_fn;
             for (ssize_t i = 0; i < num_vectors; ++i)
             {
                 const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);

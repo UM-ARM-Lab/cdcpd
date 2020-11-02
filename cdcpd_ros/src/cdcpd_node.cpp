@@ -58,7 +58,7 @@ cv::Mat ropeHsvMask(ros::NodeHandle ph, cv::Mat rgb)
     cv::Mat mask1;
     cv::Mat mask2;
     cv::Mat hsv_mask;
-    auto const s_min = ROSHelpers::GetParam<double>(ph, "saturation_min", 0.4);
+    auto const s_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.4);
     cv::inRange(color_hsv, cv::Scalar(0, s_min, 0.4), cv::Scalar(20, 1.0, 1.0), mask1);
     cv::inRange(color_hsv, cv::Scalar(340, s_min, 0.4), cv::Scalar(360, 1.0, 1.0), mask2);
     bitwise_or(mask1, mask2, hsv_mask);
@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
 
     // Initial connectivity model of rope
     auto const num_points = ROSHelpers::GetParam<int>(ph, "rope_num_points", 15);
-    auto const length = ROSHelpers::GetParam<float>(ph, "rope_length", 0.80);
+    auto const length = ROSHelpers::GetParam<float>(ph, "rope_length", 0.80f);
     auto const [template_vertices, template_edges] = makeRopeTemplate(num_points, length);
     // Construct the initial template as a PCL cloud
     auto template_cloud = makeCloud(template_vertices);
@@ -202,9 +202,10 @@ int main(int argc, char* argv[])
                 order.header.stamp = ros::Time();
                 order.ns = ns;
                 order.action = visualization_msgs::Marker::ADD;
+                order.type = visualization_msgs::Marker::LINE_STRIP;
                 order.pose.orientation.w = 1.0;
                 order.id = 1;
-                order.scale.x = 0.002;
+                order.scale.x = 0.01;
                 order.color.r = 1.0;
                 order.color.a = 1.0;
 

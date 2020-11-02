@@ -4,6 +4,7 @@
         <param name="left_tf_name" value="left_tool"/>
         <param name="right_tf_name" value="right_tool"/>
         <param name="left_node_idx" value="0"/>
+        <param name="rope_length" value="0.80"/>
         <param name="right_node_idx" value="24"/>
         <param name="rope_num_points" value="25"/>
     </node>

@@ -923,7 +923,7 @@ CDCPD::Output CDCPD::operator()(
 
     // Next step: optimization.
     // ???: most likely not 1.0
-    Optimizer opt(original_template, Y, 1.00);
+    Optimizer opt(original_template, Y, 1.01);
 
     Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain); // TODO perhaps optionally disable optimization?
 #ifdef DEBUG
