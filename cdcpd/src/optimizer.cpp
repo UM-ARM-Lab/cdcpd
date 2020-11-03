@@ -503,20 +503,20 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf& Y, const Matrix2Xi& E, const st
         }
         else
         {
-            std::cerr << "Gripper constraint cannot be satisfied." << endl;
+            // TODO: report this error in a better way, ideally passing it up to cdcpd_ros where we can use ros logging
+//            std::cerr << "Gripper constraint cannot be satisfied." << endl;
             for (const auto& fixed_point : fixed_points)
             {
-                const auto expr0 = vars[fixed_point.template_index + 0] - Y_copy(0, fixed_point.template_index);
-                const auto expr1 = vars[fixed_point.template_index + 1] - Y_copy(1, fixed_point.template_index);
-                const auto expr2 = vars[fixed_point.template_index + 2] - Y_copy(2, fixed_point.template_index);
-                gripper_objective_fn += 100.0 * (expr0 * expr0 + expr1 * expr1 + expr2 * expr2);
+                const auto expr0 = vars[fixed_point.template_index + 0] - fixed_point.position(0);
+                const auto expr1 = vars[fixed_point.template_index + 1] - fixed_point.position(1);
+                const auto expr2 = vars[fixed_point.template_index + 2] - fixed_point.position(2);
+                gripper_objective_fn += 1000.0 * (expr0 * expr0 + expr1 * expr1 + expr2 * expr2);
             }
         }
 
         // Build the objective function
         {
             GRBQuadExpr objective_fn(0);
-            objective_fn += gripper_objective_fn;
             for (ssize_t i = 0; i < num_vectors; ++i)
             {
                 const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
