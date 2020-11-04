@@ -90,7 +90,6 @@ int main(int argc, char *argv[])
       [&](std_srvs::EmptyRequest &req, std_srvs::EmptyResponse &res)
       {
         // unused
-        ROS_WARN("hello");
         (void) req;
         (void) res;
         needs_reset = true;
