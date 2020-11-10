@@ -134,6 +134,7 @@ int main(int argc, char *argv[])
     if (needs_reset){
       ROS_INFO("Resetting CDCPD");
       needs_reset = false;
+      template_cloud = makeCloud(template_vertices);
       cdcpd = std::make_unique<CDCPD>(template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
     }
 

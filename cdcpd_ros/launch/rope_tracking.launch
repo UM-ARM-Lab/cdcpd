@@ -1,5 +1,5 @@
 <launch>
-    <node pkg="cdcpd_ros" type="node" name="cdcpd">
+    <node pkg="cdcpd_ros" type="node" name="cdcpd" respawn="true">
         <param name="kinect_channel" value="qhd"/>
         <param name="left_tf_name" value="left_tool"/>
         <param name="right_tf_name" value="right_tool"/>
