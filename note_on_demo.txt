@@ -1,4 +1,0 @@
-final demo we wanna show:
-- cloth_self_occlusion_4
-- cloth_edge_cover_3
-
