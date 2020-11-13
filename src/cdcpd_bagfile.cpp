@@ -141,10 +141,24 @@ void to_file(const std::string fname, const cv::Mat m) {
     ofs.close();
 }
 
+cv::Mat padding_img(const cv::Mat& in) {
+	// padding the image (some points are out of image)
+	cv::Mat out;
+	int top, bottom, left, right;
+	top = (int) (0.1*in.rows); bottom = top;
+    left = (int) (0.1*in.cols); right = left;
+	int borderType = cv::BORDER_CONSTANT;
+	cv::Scalar white(255, 255, 255);
+	cv::copyMakeBorder( in, out, top, bottom, left, right, borderType, white );
+	
+    return out;
+}
+
 cv::Mat draw_vis(const cv::Mat& rgb_image,
 				 const Matrix3Xf& template_vertices,
 				 const Matrix2Xi& template_edges,
-				 const Matx33d& intrinsics) {
+				 const Matx33d& intrinsics,
+                 const cv::Scalar& color) {
 	// project 3D point to 2D plane
 	Matrix3d intri_eigen_temp;
 	cv::cv2eigen(intrinsics, intri_eigen_temp);
@@ -153,32 +167,21 @@ cv::Mat draw_vis(const cv::Mat& rgb_image,
 	proj_mat.array().rowwise() /= proj_mat.row(2).array();	
 	Matrix2Xf pixels_temp = proj_mat.topRows(2);
 	Matrix2Xi pixels = pixels_temp.cast<int>();
-	cv::Scalar red( 255, 0, 0 );
-	cv::Scalar blue( 0, 0, 255 );
-	cv::Scalar yellow(255, 255, 0);
 
-	// padding the image (some points are out of image)
-	cv::Mat out;
-	int top, bottom, left, right;
-	top = (int) (0.1*rgb_image.rows); bottom = top;
-    left = (int) (0.1*rgb_image.cols); right = left;
-	int borderType = cv::BORDER_CONSTANT;
-	cv::Scalar white(255, 255, 255);
-	cv::copyMakeBorder( rgb_image, out, top, bottom, left, right, borderType, white );
-	
+    cv::Mat out = rgb_image.clone();
+
 	for(int i = 0; i < template_vertices.cols(); i++) {
-		cv::Point vertex(pixels(0, i)+left, pixels(1, i)+top);
-		cv::circle(out, vertex,	2, yellow, cv::FILLED, cv::LINE_8 );
+		cv::Point vertex(pixels(0, i), pixels(1, i));
+		cv::circle(out, vertex,	3, color, cv::FILLED, cv::LINE_8 );
 	}
 	
 	for(int e = 0; e < template_edges.cols(); e++) {
 		int pt1 = template_edges(0, e);
 		int pt2 = template_edges(1, e);
-		cv::Point start(pixels(0, pt1)+left, pixels(1, pt1)+top);
-		cv::Point end(pixels(0, pt2)+left, pixels(1, pt2)+top);
-		cv::line(out, start, end, yellow);
+		cv::Point start(pixels(0, pt1), pixels(1, pt1));
+		cv::Point end(pixels(0, pt2), pixels(1, pt2));
+		cv::line(out, start, end, color, 2);
 	}
-	cv::cvtColor(out, out, CV_BGR2RGB);
 	return out;
 }
 
@@ -207,7 +210,7 @@ vm::Marker draw_cylinder_marker(const std::vector<float>& cylinder_data,
 	marker.scale.y = 2*cylinder_data[6]-0.01;
 	marker.scale.z = cylinder_data[7]-0.01;
 
-	marker.color.a = 0.5; // Don't forget to set the alpha!
+	marker.color.a = 1.0; // Don't forget to set the alpha!
 	marker.color.r = 0.0;
 	marker.color.g = 1.0;
 	marker.color.b = 0.0;
@@ -1016,8 +1019,12 @@ int main(int argc, char* argv[])
 	//test_velocity_calc();
     ros::init(argc, argv, "cdcpd_bagfile");
     cout << "Starting up..." << endl;
-	
-
+	std::chrono::time_point<std::chrono::system_clock> start, end; 
+    std::chrono::duration<double> elapsed_seconds; 
+    double time_cdcpd = 0;
+    double time_pred_0 = 0;
+    double time_pred_1 = 0;
+    double time_pred_2 = 0;
 
 	// cout << template_vertices << endl;
     // cout << template_edges << endl;
@@ -1082,8 +1089,11 @@ int main(int argc, char* argv[])
 	const bool is_pred1 = ROSHelpers::GetParam<bool>(ph, "is_pred1", true);
 	const bool is_pred2 = ROSHelpers::GetParam<bool>(ph, "is_pred2", true);
 	const bool is_no_pred = ROSHelpers::GetParam<bool>(ph, "is_no_pred", true);
+	const bool is_truth = ROSHelpers::GetParam<bool>(ph, "is_truth", true);
 	const bool is_sim = ROSHelpers::GetParam<bool>(ph, "is_sim", true);
 	const bool is_rope = ROSHelpers::GetParam<bool>(ph, "is_rope", true);
+    const bool is_combined_truth = ROSHelpers::GetParam<bool>(ph, "is_combined", false);
+    // const bool show_truth = ROSHelpers::GetParam<bool>(ph, "show_truth", false);
 	const bool is_gripper_info = ROSHelpers::GetParam<bool>(ph, "is_gripper_info", true);	
     const double translation_dir_deformability = ROSHelpers::GetParam<double>(ph, "translation_dir_deformablity", 1.0);
     const double translation_dis_deformability = ROSHelpers::GetParam<double>(ph, "translation_dis_deformablity", 1.0);
@@ -1157,6 +1167,7 @@ int main(int argc, char* argv[])
 	topics.push_back(std::string("comp_normals"));
     #endif
 
+    start = std::chrono::system_clock::now(); 
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
 	std::string folder;
     if (is_sim) {
@@ -1374,6 +1385,12 @@ int main(int argc, char* argv[])
 		}
     }
     bag.close();
+    end = std::chrono::system_clock::now(); 
+    elapsed_seconds = end-start;
+    time_cdcpd += elapsed_seconds.count();
+    time_pred_0 += elapsed_seconds.count();
+    time_pred_1 += elapsed_seconds.count();
+    time_pred_2 += elapsed_seconds.count();
 
     cout << "rgb images size: " << color_images.size() << endl;
     cout << "depth images size: " << depth_images.size() << endl;
@@ -1503,14 +1520,28 @@ int main(int argc, char* argv[])
     auto output_without_prediction_publisher = nh.advertise<PointCloud> ("cdcpd/output_without_prediction", 1);
 	auto output_without_prediction_order_pub = nh.advertise<vm::Marker> ("cdcpd/output_without_prediction_order", 10);
     if (is_no_pred) {
-		if (is_sim) {
+        if (is_sim) {
+            cdcpd_without_prediction = CDCPD(template_cloud_without_prediction,
+                    template_edges,
+                    nh_ptr,
+                    translation_dir_deformability,
+                    translation_dis_deformability,
+                    rotation_deformability,
+                    g_ind,
+                    #ifdef SHAPE_COMP
+                    obstacle_param,
+                    #endif
+                    false,
+                    alpha,
+                    beta,
+                    lambda,
+                    k_spring,
+                    zeta,
+                    cylinder_data,
+                    is_sim);
+	    } else {
 			cdcpd_without_prediction = CDCPD(template_cloud_without_prediction,
                 template_edges,
-                nh_ptr,
-                translation_dir_deformability,
-                translation_dis_deformability,
-                rotation_deformability,
-                g_ind,
                 #ifdef SHAPE_COMP
                 obstacle_param,
                 #endif
@@ -1522,25 +1553,12 @@ int main(int argc, char* argv[])
 				zeta,
 				cylinder_data,
 				is_sim);
-		} else {
-			cdcpd_without_prediction = CDCPD(template_cloud_without_prediction,
-                template_edges,
-                #ifdef SHAPE_COMP
-                obstacle_param,
-                #endif
-                false,
-                alpha,
-                beta,
-                lambda,
-                k_spring,
-				zeta,
-				cylinder_data,
-				is_sim);
-		}
+        }
 	}
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud_pred1 = Matrix3Xf2pcptr(template_vertices);
     auto output_pred1_publisher = nh.advertise<PointCloud> ("cdcpd/output_pred_deform_model", 1);
+	auto output_pred1_order_pub = nh.advertise<vm::Marker> ("cdcpd/output_pred1_order", 10);
 	CDCPD cdcpd_pred1;
 	if (is_pred1) {
 		if (is_sim) {
@@ -1669,28 +1687,42 @@ int main(int argc, char* argv[])
 	cv::VideoWriter video_pred1;
 	cv::VideoWriter video_pred2;
 	cv::VideoWriter video_cdcpd;
+	cv::VideoWriter video_comb;
 	cv::VideoWriter video_cpd_phy;
+	cv::VideoWriter video_truth;
 
     auto [color_image_init, depth_image_init, intrinsics_init] = toOpenCv(*color_iter, *depth_iter, *info_iter, is_sim);
     to_file(workingDir + "/trash.txt", depth_image_init);
 	cout << intrinsics_init << endl;
-	int pad_row = (int) (0.1*color_image_init.rows);
-	int pad_col = (int) (0.1*color_image_init.cols);
+	// int pad_row = (int) (0.1*color_image_init.rows);
+	// int pad_col = (int) (0.1*color_image_init.cols);
+    int fps;
+    if (is_sim) {
+        fps=24;
+    } else {
+        fps=10;    
+    }
 	if (is_record) {
 		mkdir((workingDir+"/../video/ICRA/" + bagfile + "_" + time_str).c_str(), 0777);
-		video_pred0.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_0.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+		video_pred0.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_0.avi",CV_FOURCC('M','J','P','G'), fps, cv::Size(color_image_init.cols,color_image_init.rows));
 		if (is_pred1) {
-			video_pred1.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_1.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_pred1.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/pred_1.avi",CV_FOURCC('M','J','P','G'), fps, cv::Size(color_image_init.cols,color_image_init.rows));
 		}
 		if (is_pred2) {
-			video_pred2.open(workingDir+"/../video/ICRA/" + bagfile + "_" +time_str + "/pred_2.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_pred2.open(workingDir+"/../video/ICRA/" + bagfile + "_" +time_str + "/pred_2.avi",CV_FOURCC('M','J','P','G'), fps, cv::Size(color_image_init.cols,color_image_init.rows));
 		}
 		if (is_no_pred) {
-			video_cdcpd.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/cdcpd.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_cdcpd.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/cdcpd.avi",CV_FOURCC('M','J','P','G'), fps, cv::Size(color_image_init.cols,color_image_init.rows));
 		}
 		if (is_cpd_physics) {	
-			video_cpd_phy.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/cpd_physics.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols+2*pad_col,color_image_init.rows+2*pad_row));
+			video_cpd_phy.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/cpd_physics.avi",CV_FOURCC('M','J','P','G'), fps, cv::Size(color_image_init.cols,color_image_init.rows));
 		}
+        // if (is_combined_truth) {
+		// 	video_comb.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/combined.avi",CV_FOURCC('M','J','P','G'), 10, cv::Size(color_image_init.cols,color_image_init.rows));
+        // }
+        if (is_truth) {
+			video_truth.open(workingDir+"/../video/ICRA/" + bagfile + "_" + time_str + "/truth.avi",CV_FOURCC('M','J','P','G'), fps, cv::Size(color_image_init.cols,color_image_init.rows));
+        }
 	}
     while(color_iter != color_images.cend() && depth_iter != depth_images.cend() && info_iter != camera_infos.cend())
     {
@@ -1707,7 +1739,7 @@ int main(int argc, char* argv[])
         // {
         //     rate.sleep();
         // }
-
+        
         if (stepper != "r")
         {
             cout << "Waiting for input, enter 'r' to run without stopping, anything else to step once ... " << std::flush;
@@ -1717,6 +1749,7 @@ int main(int argc, char* argv[])
         {
             // rate.sleep();
         }
+         
         if (!ros::ok())
         {
             exit(-1);
@@ -1792,6 +1825,7 @@ int main(int argc, char* argv[])
 		
 		std::vector<bool> is_grasped;
         
+        start = std::chrono::system_clock::now(); 
 		CDCPD::Output out;
 		cout << "prediction choice: 0" << endl;
         if (is_sim) {
@@ -1814,6 +1848,9 @@ int main(int argc, char* argv[])
 			out = cdcpd(rgb_image, depth_image, hsv_mask, intrinsics, template_cloud, true, is_interaction, true, 0, fixed_points);
         }
         template_cloud = out.gurobi_output;
+        end = std::chrono::system_clock::now();
+        elapsed_seconds = end-start;
+        time_pred_0 += elapsed_seconds.count();
 
         #ifdef COMP
         auto out_without_constrain = cdcpd_without_constrain(rgb_image, depth_image, hsv_mask, template_cloud_without_constrain, template_edges, false, false);
@@ -1821,6 +1858,7 @@ int main(int argc, char* argv[])
 		out_without_constrain.gurobi_output->header.frame_id = frame_id;
         #endif
 
+        start = std::chrono::system_clock::now();
 		CDCPD::Output out_without_prediction;
         if (is_no_pred) {
 			cout << "no prediction used" << endl;
@@ -1836,8 +1874,12 @@ int main(int argc, char* argv[])
 			}
 			template_cloud_without_prediction = out_without_prediction.gurobi_output;
 			out_without_prediction.gurobi_output->header.frame_id = frame_id;
-		}
+		}  
+        end = std::chrono::system_clock::now();
+        elapsed_seconds = end-start;
+        time_cdcpd += elapsed_seconds.count();
 
+        start = std::chrono::system_clock::now();
 		CDCPD::Output out_pred1;
         if (is_pred1) {
 			cout << "prediction choice: 1" << endl;
@@ -1850,7 +1892,11 @@ int main(int argc, char* argv[])
 			template_cloud_pred1 = out_pred1.gurobi_output;
 			out_pred1.gurobi_output->header.frame_id = frame_id;
         }
+        end = std::chrono::system_clock::now();
+        elapsed_seconds = end-start;
+        time_pred_1 += elapsed_seconds.count();
 		
+        start = std::chrono::system_clock::now();
 		CDCPD::Output out_pred2;
         if (is_pred2) {
 			cout << "prediction choice: 2" << endl;
@@ -1863,8 +1909,14 @@ int main(int argc, char* argv[])
 			template_cloud_pred2 = out_pred2.gurobi_output;
 			out_pred2.gurobi_output->header.frame_id = frame_id;
         }
+        end = std::chrono::system_clock::now();
+        elapsed_seconds = end-start;
+        time_pred_2 += elapsed_seconds.count();
 
-		ifstream cpd_phy_result;
+        cv::Mat draw_img;
+	    cv::cvtColor(rgb_image, draw_img, CV_BGR2RGB);
+		
+        ifstream cpd_phy_result;
 		PointCloud::Ptr cpd_phy_pc(new PointCloud);
   		cpd_phy_result.open(ros::package::getPath("cdcpd_ros") + "/src/cpd_physics/" + bagfile + "/result" + std::to_string(frame) + ".txt", ios::in);
 		// cout << "try to open cpd physics file " << ros::package::getPath("cdcpd_ros") + "/src/cpd_physics/" + bagfile + "/result" + std::to_string(frame) + ".txt" << endl;
@@ -1915,10 +1967,19 @@ int main(int argc, char* argv[])
         		cpd_phy_edges(0, i) = i;
         		cpd_phy_edges(1, i - 1) = i;
     		}
-			cv::Mat demo_cpd_phy = draw_vis(rgb_image,
-									  	  	cpd_phy_pc->getMatrixXfMap().topRows(3),
-									  	  	cpd_phy_edges,
-									  	  	intrinsics);
+			// cv::Mat demo_cpd_phy = padding_img(rgb_image);
+            cv::Mat demo_cpd_phy = draw_vis(draw_img,
+                                    cpd_phy_pc->getMatrixXfMap().topRows(3),
+                                    cpd_phy_edges,
+                                    intrinsics,
+                                    cv::Scalar(0, 255, 255));
+            if (is_combined_truth) {   
+                demo_cpd_phy = draw_vis(demo_cpd_phy,
+                                        one_frame_truth,
+                                                    template_edges,
+                                                    intrinsics,
+                                                    cv::Scalar(0, 0, 255));
+			}
 			video_cpd_phy.write(demo_cpd_phy);
 		}
 
@@ -1978,7 +2039,6 @@ int main(int argc, char* argv[])
 		{
 			vm::Marker order_cpdphysics = pc_to_marker(cpd_phy_pc, cpd_phy_edges, frame_id, 1, points_on_rope);
 			order_cpdphysics_pub.publish(order_cpdphysics);
-			cpd_phy_result.close();
 		}        
 
         #ifdef COMP
@@ -2001,6 +2061,13 @@ int main(int argc, char* argv[])
         if (is_pred1) {
         	pcl_conversions::toPCL(time, out_pred1.gurobi_output->header.stamp);
 			output_pred1_publisher.publish(out_pred1.gurobi_output);
+            vm::Marker order_pred1;
+            if (!is_rope) {
+			    order_pred1 = pc_to_marker(out_pred1.gurobi_output, template_edges, frame_id, num_height, num_width);
+			} else {
+                order_pred1 = pc_to_marker(out_pred1.gurobi_output, template_edges, frame_id, 1, points_on_rope);
+			}
+            output_pred1_order_pub.publish(order_pred1);
         }
 
         if (is_pred2) {
@@ -2009,34 +2076,112 @@ int main(int argc, char* argv[])
         }
 		
 		if (is_record) {
-			cv::Mat demo_im = draw_vis(rgb_image,
-									  out.gurobi_output->getMatrixXfMap().topRows(3),
-									  template_edges,
-									  intrinsics);
+			// cv::Mat demo_im = padding_img(rgb_image);
+            cout << "before drawing" << endl;
+            cv::Mat demo_im = draw_vis(draw_img,
+							   out.gurobi_output->getMatrixXfMap().topRows(3),
+                               template_edges,
+                               intrinsics,
+                               cv::Scalar(0, 255, 255));
+            if (is_combined_truth) {   
+                demo_im = draw_vis(demo_im,
+                                        one_frame_truth,
+                                                    template_edges,
+                                                    intrinsics,
+                                                    cv::Scalar(0, 0, 255));
+			}
+            cout << "after drawing" << endl;
 			video_pred0.write(demo_im);
+            cout << "after writing" << endl;
 			if (is_pred1) {
-				cv::Mat demo_pred1 = draw_vis(rgb_image,
-									  	  	  out_pred1.gurobi_output->getMatrixXfMap().topRows(3),
-									  	  	  template_edges,
-									  	  	  intrinsics);
+				// cv::Mat demo_pred1 = padding_img(draw_img);
+                cv::Mat demo_pred1 = draw_vis(draw_img,
+                                      out_pred1.gurobi_output->getMatrixXfMap().topRows(3),
+                                      template_edges,
+                                      intrinsics,
+                                      cv::Scalar(0, 255, 255));
+                if (is_combined_truth) {   
+                    demo_pred1 = draw_vis(demo_pred1,
+                                          one_frame_truth,
+                                          template_edges,
+                                          intrinsics,
+                                          cv::Scalar(0, 0, 255));
+                }
 				video_pred1.write(demo_pred1);
 			}
 			if (is_pred2) {
-				cv::Mat demo_pred2 = draw_vis(rgb_image,
-									  	  	  out_pred2.gurobi_output->getMatrixXfMap().topRows(3),
-									  	  	  template_edges,
-									  	  	  intrinsics);
+				// cv::Mat demo_pred2 = padding_img(draw_img);
+                cv::Mat demo_pred2 = draw_vis(draw_img,
+                                      out_pred2.gurobi_output->getMatrixXfMap().topRows(3),
+                                      template_edges,
+                                      intrinsics,
+                                      cv::Scalar(0, 255, 255));
+                if (is_combined_truth) {   
+                    demo_pred2 = draw_vis(demo_pred2,
+                                          one_frame_truth,
+                                                  template_edges,
+                                                  intrinsics,
+                                                  cv::Scalar(0, 0, 255));
+                }
 				video_pred2.write(demo_pred2);
 			}
 			if (is_no_pred) {
-				cv::Mat demo_no_pred = draw_vis(rgb_image,
-									  	  	  	out_without_prediction.gurobi_output->getMatrixXfMap().topRows(3),
-									  	  	  	template_edges,
-									  	  	  	intrinsics);
-				video_cdcpd.write(demo_no_pred);
+				// cv::Mat demo_no_pred = padding_img(draw_img);
+                cv::Mat demo_no_pred = draw_vis(draw_img,
+                                        out_without_prediction.gurobi_output->getMatrixXfMap().topRows(3),
+                                        template_edges,
+                                        intrinsics,
+                                        cv::Scalar(0, 255, 255));
+                if (is_combined_truth) {   
+                    demo_no_pred = draw_vis(demo_no_pred,
+                                            one_frame_truth,
+                                                    template_edges,
+                                                    intrinsics,
+                                                    cv::Scalar(0, 0, 255));
+				}
+                video_cdcpd.write(demo_no_pred);
 				cv::imwrite(workingDir+"/../temp/result"+std::to_string(frame)+".png", demo_no_pred);
 			}
+			if (is_truth) {
+				// cv::Mat demo_truth = padding_img(draw_img);
+                cv::Mat demo_truth = draw_vis(draw_img,
+                                      one_frame_truth,
+                                      template_edges,
+                                      intrinsics,
+                                      cv::Scalar(0, 255, 255));
+				video_truth.write(demo_truth);
+			}
+            /*
+            if (is_combined_truth) {
+				// cv::Mat comb_img = padding_img(draw_img);
+                cv::Mat comb_img = draw_vis(draw_img,
+                                    out_without_prediction.gurobi_output->getMatrixXfMap().topRows(3),
+                                    template_edges,
+                                    intrinsics,
+                                    cv::Scalar(255, 0, 255));
+                comb_img = draw_vis(comb_img,
+                                    out.gurobi_output->getMatrixXfMap().topRows(3),
+									template_edges,
+									intrinsics,
+                                    cv::Scalar(255, 255, 0));
+                comb_img = draw_vis(comb_img,
+                                    one_frame_truth,
+									template_edges,
+									intrinsics,
+                                    cv::Scalar(255, 255, 255));
+                
+		        if(cpd_phy_result.is_open()) {
+			        comb_img = draw_vis(comb_img,
+									    cpd_phy_pc->getMatrixXfMap().topRows(3),
+									    cpd_phy_edges,
+									    intrinsics,
+                                        cv::Scalar(0, 255, 255));
+                }
+				video_comb.write(comb_img);
+            }
+            */
 		}
+		cpd_phy_result.close();
         ++color_iter;
         ++depth_iter;
         ++info_iter;
@@ -2067,6 +2212,19 @@ int main(int argc, char* argv[])
 	if (is_cpd_physics) {
 		video_cpd_phy.release();
 	}
+    if (is_truth) {
+        video_truth.release();
+    }
+    /*
+    if (is_combined_truth) {
+        video_comb.release();
+    }
+    */
+    end = std::chrono::system_clock::now();
+    cout << "Time per Frame (CDCPD): " << time_cdcpd / double(frame) << endl;
+    cout << "Time per Frame (pred_0): " << time_pred_0 / double(frame) << endl;
+    cout << "Time per Frame (pred_1): " << time_pred_1 / double(frame) << endl;
+    cout << "Time per Frame (pred_2): " << time_pred_2 / double(frame) << endl;
 
     cout << "Test ended" << endl;
 
