@@ -8,22 +8,32 @@
 *.egg-info
 *.swp
 *DS_Store
+*~
+*.autosave
 tags
 
 # CLion artifacts
-build
-install
-CMakeCache.txt
-CMakeFiles/
-CTestTestfile.cmake
-DartConfiguration.tcl
-Makefile
-cdcpd-config.cmake
-cdcpd.cbp
-cmake_install.cmake
-tests/CMakeFiles/
-tests/CTestTestfile.cmake
-tests/Makefile
-tests/cmake_install.cmake
+cdcpd/build
+cdcpd/install
+cdcpd/CMakeCache.txt
+cdcpd/CMakeFiles/
+cdcpd/CTestTestfile.cmake
+cdcpd/DartConfiguration.tcl
+cdcpd/Makefile
+cdcpd/cdcpd-config.cmake
+cdcpd/cdcpd.cbp
+cdcpd/cmake_install.cmake
+cdcpd/tests/CMakeFiles/
+cdcpd/tests/CTestTestfile.cmake
+cdcpd/tests/Makefile
+cdcpd/tests/cmake_install.cmake
 
 .qglviewer.xml
+
+# Vim Ctags file
+cdcpd_ros/tags
+
+# CLion artifacts
+cdcpd_ros/cmake-build-debug
+
+cdcpd_ros/src/cpd_physics/
