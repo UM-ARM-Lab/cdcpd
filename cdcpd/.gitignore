@@ -6,3 +6,24 @@
 *.so
 *.pstat
 *.egg-info
+*.swp
+*DS_Store
+tags
+
+# CLion artifacts
+build
+install
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+DartConfiguration.tcl
+Makefile
+cdcpd-config.cmake
+cdcpd.cbp
+cmake_install.cmake
+tests/CMakeFiles/
+tests/CTestTestfile.cmake
+tests/Makefile
+tests/cmake_install.cmake
+
+.qglviewer.xml

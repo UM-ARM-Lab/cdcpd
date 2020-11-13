@@ -1,4 +1,0 @@
-glplotlib>=0.1.1
-catkin-pkg>=0.4.12
-pyyaml>=5.1
-rospkg>=1.1.9
