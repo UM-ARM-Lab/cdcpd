@@ -1,0 +1,8 @@
+.idea
+.vscode
+*.pyc
+*.log
+*/build
+*.so
+*.pstat
+*.egg-info
