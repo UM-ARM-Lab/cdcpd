@@ -11,6 +11,8 @@
 *~
 *.autosave
 tags
+logs
+cmake-build-*
 
 # CLion artifacts
 cdcpd/build
