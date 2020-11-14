@@ -15,8 +15,8 @@ Requirements
   * [OpenCV](https://opencv.org/)
   * [Gurobi](https://www.gurobi.com/)
   * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
-  * [faiss](https://github.com/facebookresearch/faiss)
-  * [fgt](https://github.com/gadomski/fgt)
+  * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
+  * [fgt-0.4.6](https://github.com/gadomski/fgt)
   * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
   
 Installation
@@ -24,18 +24,18 @@ Installation
 
 #### Installing ROS (ignore it if you already have one)
 
-Run `install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `install_scripts/install_ros_neotic.sh` if you use Ubuntu 20.04
+Run `sudo install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo install_scripts/install_ros_neotic.sh` if you use Ubuntu 20.04
 
 #### Installing third-party library
 
 Recommended organization of third party library: place the source code under `~/local/src` and install under `~/local`.
 
-* OpenCV: specify your installing directory and run `install_scripts/install_opencv.sh`
+* OpenCV: specify your installing directory and run `sudo install_scripts/install_opencv.sh`
 * Gurobi: follow instructions here `https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html`
 * Eigen: `sudo apt install libeigen3-dev`
-* faiss: specify your installing directory and run `install_scripts/install_faiss.sh`
-* fgt: specify your installing directory and run `install_scripts/install_fgt.sh`
-* CGAL-5.0.3: specify your installing directory and **download soruce code manually** and run `install_scripts/install_cgal.sh`
+* faiss-1.6.3: specify your installing directory and run `sudo install_scripts/install_faiss.sh`
+* fgt-0.4.6: specify your installing directory and run `sudo install_scripts/install_fgt.sh`
+* CGAL-5.0.3: specify your installing directory and run `sudo install_scripts/install_cgal.sh`
 
 
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
