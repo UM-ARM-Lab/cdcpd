@@ -11,60 +11,40 @@ Requirements
 ------------
   * Environment:
     * Ubuntu 18.04
-    * ROS melodic
-  * OpenCV
+    * ROS Melodic
+  * [OpenCV](https://opencv.org/)
   * [Gurobi](https://www.gurobi.com/)
-  * Eigen
+  * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
   * [faiss](https://github.com/facebookresearch/faiss)
   * [fgt](https://github.com/gadomski/fgt)
-  * CGAL (Note that Qt5 should be installed for visualization)
-  * [smmap](https://github.com/UM-ARM-Lab/smmap/tree/smmap_cdcpd)
+  * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
   
 Installation
 ------------
 
-#### Create Workspace (ignore it if you already have a catkin workspace)
+#### Installing ROS (ignore it if you already have one)
 
-Run the following command
-```bash
-source /opt/ros/melodic/setup.bash
-mkdir -p ~/catkin_ws/src
-cd ~/catkin_ws/
-catkin build
-source devel/setup.bash
-catkin_init_workspace
-```
+Run `install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `install_scripts/install_ros_neotic.sh` if you use Ubuntu 20.04
 
-#### Build prerequisite
+#### Installing third-party library
 
-We will put dependent catkin packages in src.
+Recommended organization of third party library: place the source code under `~/local/src` and install under `~/local`.
 
-```bash
-cd src
-```
+* OpenCV: specify your installing directory and run `install_scripts/install_opencv.sh`
+* Gurobi: follow instructions here `https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html`
+* Eigen: `sudo apt install libeigen3-dev`
+* faiss: specify your installing directory and run `install_scripts/install_faiss.sh`
+* fgt: specify your installing directory and run `install_scripts/install_fgt.sh`
+* CGAL-5.0.3: specify your installing directory and **download soruce code manually** and run `install_scripts/install_cgal.sh`
 
-##### smmap
 
-NOTE:
-* now smmap and smmap\_utilities are private repo in ARM Lab. To use it, we need to make it public, or extract codes we need.
-* comment out `find_package` for MoveIt in `sdf_tools/CMakeLists` if you don't use MoveIt
+#### Create catkin workspace (ignore it if you already have a catkin workspace)
 
-```bash
-git clone https://github.com/UM-ARM-Lab/arc_utilities.git
-git clone https://github.com/UM-ARM-Lab/smmap_utilities.git
-git clone https://github.com/UM-ARM-Lab/kinematics_toolbox.git
-git clone https://github.com/UM-ARM-Lab/deformable_manipulation_interface.git
-git clone https://github.com/UM-ARM-Lab/sdf_tools.git
-cd sdf_tools; git checkout EightConnected; cd ..;
-git clone https://github.com/UM-ARM-Lab/smmap.git
-cd smmap
-git checkout smmap_cdcpd
-cd ..
-```
+Specify workspace name and run `create_ws.sh`
 
 #### Build from source
 
-Run the following command
+Run the following command under the directory `$WS_PATH/src`
 ```
 git clone https://github.com/UM-ARM-Lab/cdcpd.git
 cd cdcpd
@@ -76,10 +56,6 @@ catkin build
 
 Gurobi is a proprietary optimization package that we use. Please obtain a [free academic license](https://www.gurobi.com/academia/academic-program-and-licenses).
 Note that Gurobi licence activation requires a university network. If you are not on campus, follow these instructions to setup a VPN: [UMVPN](https://documentation.its.umich.edu/vpn/vpn-linux-vpn-instructions).
-
-#### Faiss Installation
-
-It is recommended to follow the instruction [here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md).
 
 Demo
 ------------
