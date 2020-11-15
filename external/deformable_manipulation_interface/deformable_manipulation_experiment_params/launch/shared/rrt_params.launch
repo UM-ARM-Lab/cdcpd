@@ -1,0 +1,26 @@
+<launch>
+    <group ns="rrt">
+        <param name="timeout"                           value="600.0"                   type="double"/>
+        <param name="reuse_old_results"                 value="false"                   type="bool"/>
+        <param name="store_new_results"                 value="false"                   type="bool"/>
+
+        <param name="use_brute_force_nn"                value="false"                   type="bool"/>
+        <param name="kd_tree_grow_threshold"            value="500"                     type="int"/>
+
+        <param name="forward_tree_extend_iterations"    value="10"                      type="int"/>
+        <param name="backward_tree_extend_iterations"   value="10"                      type="int"/>
+        <param name="goal_bias"                         value="0.10"                    type="double"/>
+        <param name="use_cbirrt_style_projection"       value="false"                   type="bool"/>
+        <param name="best_near_radius"                  value="0.001"                   type="double"/>
+
+        <param name="band_dist2_scaling_factor"         value="0.000001"                type="double"/>
+        <param name="band_max_points"                   value="500"                     type="double"/>
+
+        <param name="feasibility_distance_scale_factor" value="0.0"                     type="double"/>
+
+        <!-- Used to test shortcut smoothing -->
+        <param name="use_stored_path"                   value="false"                   type="bool"/>
+        <param name="path_file_name_prefix"             value="rrt_path"                type="string"/>
+        <param name="path_file_name_suffix_to_load"     value="placeholder"             type="string"/>
+    </group>
+</launch>

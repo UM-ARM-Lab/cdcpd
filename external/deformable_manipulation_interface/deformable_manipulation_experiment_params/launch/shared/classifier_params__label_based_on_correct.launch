@@ -1,0 +1,56 @@
+<launch>
+    <!-- [none, kNN, svm, mlp, voxnet]-->
+    <arg name="classifier_type"/>
+    <arg name="normalize_lengths"/>
+    <arg name="normalize_connected_components"/>
+    <!-- [7, 13] -->
+    <arg name="dim"/>
+    <!-- [basic,
+          in_plane_gravity_aligned,
+          in_plane_gripper_aligned,
+          extend_downwards_gravity_aligned
+          extend_downwards_gripper_aligned] -->
+    <arg name="slice_type"/>
+    <arg name="threshold"       value="0.5"/>
+
+    <arg name="length_term"     value="normalized_lengths"              if="$(arg normalize_lengths)"/>
+    <arg name="length_term"     value="raw_lengths"                     unless="$(arg normalize_lengths)"/>
+    <arg name="components_term" value="normalized_connected_components" if="$(arg normalize_connected_components)"/>
+    <arg name="components_term" value="raw_connected_components"        unless="$(arg normalize_connected_components)"/>
+    <arg name="prefix"          value="$(arg slice_type)__label_based_on_correct_$(arg threshold)__$(arg length_term)__$(arg components_term)"/>
+
+    <group ns="classifier">
+        <param name="dim"                               value="$(arg dim)"                              type="int"/>
+        <param name="type"                              value="$(arg classifier_type)"                  type="string"/>
+        <param name="slice_type"                        value="$(arg slice_type)"                       type="string"/>
+        <param name="normalize_lengths"                 value="$(arg normalize_lengths)"                type="bool"/>
+        <param name="normalize_connected_components"    value="$(arg normalize_connected_components)"   type="bool"/>
+        <param name="accept_scale_factor"               value="6.0"                                     type="double"/>
+        <group ns="transformer">
+            <rosparam file="$(find smmap)/logs/rope_hooks_simple/$(arg prefix).scaler" command="load"/>
+        </group>
+    </group>
+    <group ns="kNN" if="$(eval classifier_type == 'kNN')">>
+        <arg name="root_folder" value="/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/rope_hooks_simple/generate_training_examples"/>
+        <param name="data_file"     value="$(arg root_folder)/$(arg prefix)__scaled_data.ssv" type="string"/>
+        <param name="accuracy"      value="0.65"    type="double"   if="$(eval threshold == 0.5)"/>
+    </group>
+    <group ns="svm" if="$(eval classifier_type == 'svm')">
+        <param name="model_file"    value="$(find smmap)/logs/rope_hooks_simple/$(arg prefix)__svm.model" type="string"/>
+        <param name="accuracy"      value="0.73"    type="double"   if="$(eval threshold == 0.5)"/>
+    </group>
+    <group ns="mlp" if="$(eval classifier_type == 'mlp')">
+        <param name="threshold"     value="0.5"                     type="double"/>
+        <param name="model_file"    value="$(find smmap)/logs/rope_hooks_simple/$(arg prefix)__torch_model_cpu.pt" type="string"/>
+        <param name="accuracy"      value="0.76"    type="double"   if="$(eval threshold == 0.5)"/>
+    </group>
+    <group ns="voxnet" if="$(eval classifier_type == 'voxnet')">
+        <param name="threshold"     value="0.5"                     type="double"/>
+        <param name="model_file"    value="$(find smmap)/logs/rope_hooks_simple/rope_voxnet_multichannel_b64_cuda.pt" type="string"/>
+        <param name="accuracy"      value="0.89"   type="double"/>
+    </group>
+    <group ns="none">
+        <!-- Note that this is unused for the 'none' classifier -->
+        <param name="accuracy"      value="1.0"    type="double"/>
+    </group>
+</launch>

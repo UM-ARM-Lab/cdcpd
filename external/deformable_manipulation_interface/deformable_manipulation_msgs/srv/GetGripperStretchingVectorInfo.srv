@@ -1,0 +1,6 @@
+string name
+---
+string to_gripper_name
+uint64[] attatched_indices
+uint64[] neighbor_indices
+float64[] contributions

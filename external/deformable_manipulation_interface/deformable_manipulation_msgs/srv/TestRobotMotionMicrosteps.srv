@@ -1,0 +1,11 @@
+# define the request
+std_msgs/Header header
+string[] grippers_names
+geometry_msgs/Pose[] starting_object_configuration
+geometry_msgs/Pose[] starting_gripper_poses
+geometry_msgs/Pose[] target_gripper_poses
+int32 num_substeps
+---
+# define the result
+deformable_manipulation_msgs/WorldState start_after_settling
+deformable_manipulation_msgs/WorldState[] microsteps

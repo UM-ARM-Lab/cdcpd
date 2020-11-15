@@ -1,0 +1,203 @@
+<launch>
+    <arg name="planner_node_name"/>
+
+    <!-- Arguments to override default params -->
+    <arg name="task_max_time"               default="3600.0"/>
+
+    <!-- Defines which world building routines we use, and which task specification -->
+    <param name="deformable_type"           value="rope"                type="string"/>
+    <param name="task_type"                 value="rope_hooks"          type="string"/>
+
+    <!-- planner, controller params -->
+    <arg name="stretching_cosine_threshold"     default="0.55"/>
+    <arg name="desired_motion_scale_factor"     default="1"/>
+
+    <!-- World parameters for planning - used by both nodes -->
+    <arg name="grid_resolution"         value="0.025"/>
+    <arg name="world_x_min"             value="-1.3"/>
+    <arg name="world_x_max"             value="1.3"/>
+    <arg name="world_y_min"             value="-0.45"/>
+    <arg name="world_y_max"             value="0.45"/>
+    <arg name="world_z_min"             value="-0.4"/>
+    <arg name="world_z_max"             value="0.4"/>
+    <arg name="world_x_center"          value="$(eval (world_x_max + world_x_min) / 2.0)"/>
+    <arg name="world_y_center"          value="$(eval (world_y_max + world_y_min) / 2.0)"/>
+    <arg name="world_z_center"          value="$(eval (world_z_max + world_z_min) / 2.0)"/>
+    <arg name="world_x_size"            value="$(eval world_x_max - world_x_min)"/>
+    <arg name="world_y_size"            value="$(eval world_y_max - world_y_min)"/>
+    <arg name="world_z_size"            value="$(eval world_z_max - world_z_min)"/>
+
+    <param name="world_x_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_x_min"           value="$(arg world_x_min)"      type="double"/>
+    <param name="world_x_max"           value="$(arg world_x_max)"      type="double"/>
+
+    <param name="world_y_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_y_min"           value="$(arg world_y_min)"      type="double"/>
+    <param name="world_y_max"           value="$(arg world_y_max)"      type="double"/>
+
+    <param name="world_z_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_z_min"           value="$(arg world_z_min)"      type="double"/>
+    <param name="world_z_max"           value="$(arg world_z_max)"      type="double"/>
+
+    <param name="sdf_resolution_scale"  value="8"                       type="int"/>
+
+    <!-- Rope physical parameters -->
+    <param name="rope_segment_length"   value="0.02"        type="double"/>
+    <param name="rope_num_links"        value="39"          type="int"/>
+    <param name="rope_radius"           value="0.01"        type="double"/>
+
+    <!-- Rope starting position params-->
+    <arg name="rope_com_x"              value="$(eval world_x_min + 0.2)"/>
+    <arg name="rope_com_y"              value="$(eval world_y_center)"/>
+    <arg name="rope_com_z"              value="$(eval world_z_center)"/>
+    <param name="rope_com_x"            value="$(arg rope_com_x)"   type="double"/>
+    <param name="rope_com_y"            value="$(arg rope_com_y)"   type="double"/>
+    <param name="rope_com_z"            value="$(arg rope_com_z)"   type="double"/>
+
+    <!-- Set a unit vector defining what direction the rope is created in -->
+    <param name="rope_extension_x"      value="0.0"     type="double"/>
+    <param name="rope_extension_y"      value="-1.0"    type="double"/>
+    <param name="rope_extension_z"      value="0.0"     type="double"/>
+
+    <!-- Obstacle parameters -->
+    <arg name="wall_thickness"          value="$(eval grid_resolution * 4.0)"/>
+    <param name="wall_thickness"        value="$(arg wall_thickness)"   type="double"/>
+
+    <!-- Note that this 'cylinder' is actually a rectangular object in practice -->
+    <arg name="cylinder_com_x"          value="$(eval world_x_min + 0.3)"/>
+    <arg name="cylinder_com_y"          value="$(eval world_y_center + 0.2)"/>
+    <arg name="cylinder_com_z"          value="$(eval world_z_center)"/>
+    <arg name="cylinder_height"         value="$(eval world_z_size)"/>
+    <arg name="cylinder_radius"         value="$(eval grid_resolution * 2.0)"/>
+    <param name="cylinder_com_x"        value="$(arg cylinder_com_x)"   type="double"/>
+    <param name="cylinder_com_y"        value="$(arg cylinder_com_y)"   type="double"/>
+    <param name="cylinder_com_z"        value="$(arg cylinder_com_z)"   type="double"/>
+    <param name="cylinder_height"       value="$(arg cylinder_height)"  type="double"/>
+    <param name="cylinder_radius"       value="$(arg cylinder_radius)"  type="double"/>
+
+    <arg name="task_progress_wall_width"            value="$(eval grid_resolution * 2.0)"/>
+    <arg name="task_progress_wall_length"           value="$(eval world_y_size)"/>
+    <arg name="task_progress_wall_lower_height"     value="$(eval world_z_size / 2.0 - 0.05)"/>
+    <arg name="task_progress_wall_upper_height"     value="$(eval world_z_size - task_progress_wall_lower_height - 0.1)"/>
+    <arg name="task_progress_wall_x_com"            value="$(eval world_x_min + 0.7)"/>
+    <arg name="task_progress_wall_y_com"            value="$(eval world_y_center)"/>
+    <arg name="task_progress_wall_lower_z_com"      value="$(eval world_z_min + task_progress_wall_lower_height / 2.0)"/>
+    <arg name="task_progress_wall_upper_z_com"      value="$(eval world_z_max - task_progress_wall_upper_height / 2.0)"/>
+    <param name="task_progress_wall_width"          value="$(arg task_progress_wall_width)"         type="double"/>
+    <param name="task_progress_wall_length"         value="$(arg task_progress_wall_length)"        type="double"/>
+    <param name="task_progress_wall_lower_height"   value="$(arg task_progress_wall_lower_height)"  type="double"/>
+    <param name="task_progress_wall_upper_height"   value="$(arg task_progress_wall_upper_height)"  type="double"/>
+    <param name="task_progress_wall_x_com"          value="$(arg task_progress_wall_x_com)"         type="double"/>
+    <param name="task_progress_wall_y_com"          value="$(arg task_progress_wall_y_com)"         type="double"/>
+    <param name="task_progress_wall_lower_z_com"    value="$(arg task_progress_wall_lower_z_com)"   type="double"/>
+    <param name="task_progress_wall_upper_z_com"    value="$(arg task_progress_wall_upper_z_com)"   type="double"/>
+
+    <arg name="gripper_separator_length"            value="$(eval world_x_size - 0.8)"/>
+    <arg name="gripper_separator_width"             value="$(eval grid_resolution * 2.0)"/>
+    <arg name="gripper_separator_lower_height"      value="$(eval task_progress_wall_lower_height + 0.025)"/>
+    <arg name="gripper_separator_upper_height"      value="$(eval task_progress_wall_upper_height + 0.025)"/>
+    <arg name="gripper_separator_y_offset"          value="-0.25"/>
+    <arg name="gripper_separator_x_com"             value="$(eval world_x_min + gripper_separator_length / 2.0)"/>
+    <arg name="gripper_separator_y_com"             value="$(eval world_y_center + gripper_separator_y_offset)"/>
+    <arg name="gripper_separator_lower_z_com"       value="$(eval world_z_min + gripper_separator_lower_height / 2.0)"/>
+    <arg name="gripper_separator_upper_z_com"       value="$(eval world_z_max - gripper_separator_upper_height / 2.0)"/>
+    <param name="gripper_separator_length"          value="$(arg gripper_separator_length)"         type="double"/>
+    <param name="gripper_separator_width"           value="$(arg gripper_separator_width)"          type="double"/>
+    <param name="gripper_separator_lower_height"    value="$(arg gripper_separator_lower_height)"   type="double"/>
+    <param name="gripper_separator_upper_height"    value="$(arg gripper_separator_upper_height)"   type="double"/>
+    <param name="gripper_separator_x_com"           value="$(arg gripper_separator_x_com)"          type="double"/>
+    <param name="gripper_separator_y_com"           value="$(arg gripper_separator_y_com)"          type="double"/>
+    <param name="gripper_separator_lower_z_com"     value="$(arg gripper_separator_lower_z_com)"    type="double"/>
+    <param name="gripper_separator_upper_z_com"     value="$(arg gripper_separator_upper_z_com)"    type="double"/>
+
+    <arg name="hook_length"             value="0.075"/>
+    <arg name="hook_radius"             value="0.025"/>
+    <arg name="hook_com_offset_y"       value="-0.15"/>
+    <arg name="hook_com_x"              value="$(eval task_progress_wall_x_com - task_progress_wall_width / 2.0 - hook_length / 2.0)"/>
+    <arg name="hook_com_y"              value="$(eval world_y_center + hook_com_offset_y)"/>
+    <arg name="hook_com_z"              value="$(eval world_z_min + gripper_separator_lower_height - hook_radius)"/>
+    <param name="hook_length"           value="$(arg hook_length)"  type="double"/>
+    <param name="hook_radius"           value="$(arg hook_radius)"  type="double"/>
+    <param name="hook_com_x"            value="$(arg hook_com_x)"   type="double"/>
+    <param name="hook_com_y"            value="$(arg hook_com_y)"   type="double"/>
+    <param name="hook_com_z"            value="$(arg hook_com_z)"   type="double"/>
+
+    <group ns="deform_simulator_node">
+        <param name="tf_wait_time"                      value="0.0"/>
+
+        <param name="num_simsteps_per_gripper_command"  value="4"       type="int"/>
+        <param name="viewer_width"                      value="480"     type="int"/>
+        <param name="viewer_height"                     value="1000"    type="int"/>
+
+        <param name="camera_override"                   value="true"    type="bool"/>
+        <group ns="camera">
+            <param name="home_x"                        value="-2.3"    type="double"/>
+            <param name="home_y"                        value="0.0"     type="double"/>
+            <param name="home_z"                        value="4.1"     type="double"/>
+
+            <param name="looks_at_x"                    value="-0.3"    type="double"/>
+            <param name="looks_at_y"                    value="-0.01"   type="double"/>
+            <param name="looks_at_z"                    value="-0.01"   type="double"/>
+
+            <param name="up_x"                          value="0.05"    type="double"/>
+            <param name="up_y"                          value="0.0"     type="double"/>
+            <param name="up_z"                          value="0.01"    type="double"/>
+        </group>
+    </group>
+
+    <group ns="$(arg planner_node_name)">
+        <group ns="task">
+            <param name="first_control_loop_triggers_plan"      value="true"                                type="bool"/>
+
+            <param name="max_time"                              value="$(arg task_max_time)"                type="double"/>
+            <param name="error_threshold_along_normal"          value="0.055"                               type="double"/>
+            <param name="error_threshold_distance_to_normal"    value="0.025"                               type="double"/>
+            <param name="error_threshold_task_done"             value="0.4"                                 type="double"/>
+            <param name="max_stretch_factor"                    value="1.15"                                type="double"/>
+            <param name="max_band_length"                       value="0.874"                               type="double"/>
+            <param name="desired_motion_scale_factor"           value="$(arg desired_motion_scale_factor)"  type="double"/>
+        </group>
+
+        <param name="controller_min_distance_to_obstacles"      value="0.002"                               type="double"/>
+
+        <param name="enable_stuck_detection"                                value="true"        type="bool"/>
+        <group ns="stuck_detection">
+            <param name="num_lookahead_steps"                               value="10"          type="int"/>
+            <param name="band_overstretch_prediction_annealing_factor"      value="0.7"         type="double"/>
+            <param name="max_pose_history_steps"                            value="100"         type="int"/>
+            <param name="error_delta_threshold_for_progress"                value="1.0"         type="double"/>
+            <param name="grippers_distance_delta_threshold_for_progress"    value="0.03"        type="double"/>
+        </group>
+
+        <group ns="rrt">
+            <param name="min_gripper_distance_to_obstacles" value="0.03"                        type="double"/>
+            <param name="target_min_distance_scale_factor"  value="1.1"                         type="double"/>
+            <param name="max_robot_dof_step_size"           value="0.05"                        type="double"/>
+            <param name="min_robot_dof_step_size"           value="0.05"                        type="double"/>
+            <param name="max_gripper_rotation"              value="0.7"                         type="double"/>
+            <param name="max_shortcut_index_distance"       value="40"                          type="int"/>
+            <param name="max_smoothing_iterations"          value="1500"                        type="int"/>
+            <param name="smoothing_band_dist_threshold"     value="0.001"                       type="double"/>
+
+            <param name="planning_x_min"                    value="$(arg world_x_min)"          type="double"/>
+            <param name="planning_x_max"                    value="$(arg world_x_max)"          type="double"/>
+            <param name="planning_y_min"                    value="$(arg world_y_min)"          type="double"/>
+            <param name="planning_y_max"                    value="$(arg world_y_max)"          type="double"/>
+            <param name="planning_z_min"                    value="$(arg world_z_min)"          type="double"/>
+            <param name="planning_z_max"                    value="$(arg world_z_max)"          type="double"/>
+        </group>
+
+        <group ns="diminishing_rigidity">
+            <param name="default_deformability"         value="10.0"            type="double"/>
+        </group>
+
+        <group ns="jacobian_controller">
+            <param name="collision_scaling_factor"      value="200.0"           type="double"/>
+        </group>
+
+        <group ns="stretching_constraint_controller">
+            <param name="stretching_cosine_threshold"   value="$(arg stretching_cosine_threshold)"  type="double"/>
+            <param name="fix_step_size"                 value="true"                                type="bool"/>
+        </group>
+    </group>
+</launch>

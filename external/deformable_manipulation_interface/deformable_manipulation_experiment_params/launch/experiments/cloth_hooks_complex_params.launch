@@ -1,0 +1,404 @@
+<launch>
+    <arg name="planner_node_name"/>
+
+    <!-- Arguments to override default params -->
+    <arg name="task_max_time"               default="3600.0"/>
+
+    <!-- Defines which world building routines we use, and which task specification -->
+    <param name="deformable_type"           value="cloth"               type="string"/>
+    <param name="task_type"                 value="cloth_hooks_complex" type="string"/>
+
+    <!-- planner, controller params -->
+    <arg name="stretching_cosine_threshold"     default="0.55"/>
+    <arg name="desired_motion_scale_factor"     default="1"/>
+
+    <!-- World parameters for planning - used by both nodes -->
+    <arg name="grid_resolution"         value="0.025"/>
+    <param name="sdf_resolution_scale"  value="8"                       type="int"/>
+    <arg name="world_x_min"             value="-1.3"/>
+    <arg name="world_x_max"             value="1.3"/>
+    <arg name="world_y_min"             value="-0.6"/>
+    <arg name="world_y_max"             value="0.6"/>
+    <arg name="world_z_min"             value="-0.4"/>
+    <arg name="world_z_max"             value="0.4"/>
+    <arg name="world_x_mid"             value="$(eval (world_x_max + world_x_min) / 2.0)"/>
+    <arg name="world_y_mid"             value="$(eval (world_y_max + world_y_min) / 2.0)"/>
+    <arg name="world_z_mid"             value="$(eval (world_z_max + world_z_min) / 2.0)"/>
+    <arg name="world_x_size"            value="$(eval world_x_max - world_x_min)"/>
+    <arg name="world_y_size"            value="$(eval world_y_max - world_y_min)"/>
+    <arg name="world_z_size"            value="$(eval world_z_max - world_z_min)"/>
+
+    <param name="world_x_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_x_min"           value="$(arg world_x_min)"      type="double"/>
+    <param name="world_x_max"           value="$(arg world_x_max)"      type="double"/>
+
+    <param name="world_y_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_y_min"           value="$(arg world_y_min)"      type="double"/>
+    <param name="world_y_max"           value="$(arg world_y_max)"      type="double"/>
+
+    <param name="world_z_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_z_min"           value="$(arg world_z_min)"      type="double"/>
+    <param name="world_z_max"           value="$(arg world_z_max)"      type="double"/>
+
+    <!-- Cloth size params -->
+    <arg name="cloth_x_size"                    value="0.5"/>
+    <arg name="cloth_y_size"                    value="1.0"/>
+    <arg name="cloth_num_control_points_x"      value="40"/>
+    <arg name="cloth_num_control_points_y"      value="80"/>
+
+    <param name="cloth_x_size"                  value="$(arg cloth_x_size)"                 type="double"/>
+    <param name="cloth_y_size"                  value="$(arg cloth_y_size)"                 type="double"/>
+    <param name="cloth_num_control_points_x"    value="$(arg cloth_num_control_points_x)"   type="int"/>
+    <param name="cloth_num_control_points_y"    value="$(arg cloth_num_control_points_y)"   type="int"/>
+
+    <!-- Cloth position params -->
+    <param name="cloth_com_x"           value="$(eval world_x_min + cloth_x_size / 2 + 0.05)" type="double"/>
+    <param name="cloth_com_y"           value="$(eval world_y_mid)"                         type="double"/>
+    <param name="cloth_com_z"           value="$(eval world_z_mid + 0.05)"                  type="double"/>
+    <param name="cloth_orientation_x"   value="0.0"                                         type="double"/>
+    <param name="cloth_orientation_y"   value="0.0"                                         type="double"/>
+    <param name="cloth_orientation_z"   value="1.0"                                         type="double"/>
+    <param name="cloth_orientation_w"   value="0.0"                                         type="double"/>
+
+    <arg name="node_offset"                     value="2"/>
+    <arg name="left_gripper_node_idx_offset"    value="$(eval (cloth_num_control_points_x + 1) * node_offset)"/>
+    <arg name="right_gripper_node_idx_offset"   value="$(eval -(cloth_num_control_points_x - 1) * node_offset)"/>
+    <arg name="left_gripper_attached_node_idx"  value="$(eval left_gripper_node_idx_offset + 0)"/>
+    <arg name="right_gripper_attached_node_idx" value="$(eval right_gripper_node_idx_offset + (cloth_num_control_points_x * (cloth_num_control_points_y - 1)))"/>
+    <param name="left_gripper_attached_node_idx"   value="$(arg left_gripper_attached_node_idx)"   type="int"/>
+    <param name="right_gripper_attached_node_idx"  value="$(arg right_gripper_attached_node_idx)"  type="int"/>
+
+    <!-- Obstacle parameters -->
+    <!-- Note: "left, top, right, bottom" refer to a top down view, with +'ve x pointing right -->
+    <!--                                                             -->
+    <!--      +'ve y                       -->
+    <!--         |                         -->
+    <!--         |                         -->
+    <!--         |                         -->
+    <!--         |                         -->
+    <!--         |                         -->
+    <!--         |                         -->
+    <!--         +______________ +'ve x    -->
+    <!--                                   -->
+    <rosparam param="obstacle_list">
+        [
+        "floor",
+        "ceiling",
+        "walls/top",
+        "walls/bottom",
+        "walls/left",
+        "walls/right",
+        "initial_obstacle",
+        "task_progress_wall/lower",
+        "task_progress_wall/upper",
+        "hook",
+        "gripper_separator/lower",
+        "gripper_separator/lower/pt2",
+        "gripper_separator/upper",
+        "gripper_separator/upper/pt2",
+        ]
+    </rosparam>
+    <arg name="dark_gray"   value="0.3, 0.3, 0.3"/>
+    <arg name="light_gray"  value="0.6, 0.6, 0.6"/>
+    <arg name="dark_cyan"   value="0.0, 0.5, 0.5"/>
+    <arg name="purple"      value="0.7, 0.0, 0.8"/>
+
+    <arg name="wall_thickness"          value="$(eval grid_resolution * 4.0)"/>
+
+    <group ns="floor">
+        <arg name="thickness"   value="$(eval grid_resolution * 4)"/>
+        <arg name="mid_z"       value="$(eval world_z_min - thickness / 2)"/>
+
+        <param name="obstacle_id"   value="2"   type="int"/>
+        <param name="type"          value="box" type="string"/>
+        <rosparam subst_value="true" param="pose_pos">[$(arg world_x_mid), $(arg world_y_mid), $(arg mid_z)]</rosparam>
+        <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+        <rosparam subst_value="true" param="extents">[$(arg world_x_size), $(arg world_y_size), $(arg thickness)]</rosparam>
+        <rosparam subst_value="true" param="color">[$(arg light_gray)]</rosparam>
+    </group>
+    <group ns="ceiling">
+        <arg name="thickness"   value="$(eval grid_resolution * 4)"/>
+        <arg name="size_x"      value="$(eval world_x_size)"/>
+        <arg name="size_y"      value="$(eval world_y_size)"/>
+        <arg name="mid_z"       value="$(eval world_z_max + thickness / 2)"/>
+
+        <param name="obstacle_id"   value="2"   type="int"/>
+        <param name="type"          value="box" type="string"/>
+        <rosparam subst_value="true" param="pose_pos">[$(arg world_x_mid), $(arg world_y_mid), $(arg mid_z)]</rosparam>
+        <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+        <rosparam subst_value="true" param="extents">[$(arg size_x), $(arg size_y), $(arg thickness)]</rosparam>
+        <rosparam subst_value="true" param="color">[$(arg light_gray), 0.0]</rosparam>
+    </group>
+    <group ns="walls">
+        <arg name="alpha"      value="0.0"/>
+        <arg name="height"     value="$(eval world_z_size + wall_thickness * 2)"/>
+        <group ns="top">
+            <arg name="length" value="$(eval world_x_size + wall_thickness * 2)"/>
+            <arg name="com_x"  value="$(eval world_x_mid)"/>
+            <arg name="com_y"  value="$(eval world_y_max + wall_thickness / 2)"/>
+            <arg name="com_z"  value="$(eval world_z_mid)"/>
+
+            <param name="obstacle_id"   value="2"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg com_x), $(arg com_y), $(arg com_z)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg length), $(arg wall_thickness), $(arg height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), $(arg alpha)]</rosparam>
+        </group>
+        <group ns="bottom">
+            <arg name="length" value="$(eval world_x_size + wall_thickness * 2)"/>
+            <arg name="com_x"  value="$(eval world_x_mid)"/>
+            <arg name="com_y"  value="$(eval world_y_min - wall_thickness / 2)"/>
+            <arg name="com_z"  value="$(eval world_z_mid)"/>
+
+            <param name="obstacle_id"   value="2"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg com_x), $(arg com_y), $(arg com_z)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg length), $(arg wall_thickness), $(arg height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), $(arg alpha)]</rosparam>
+        </group>
+        <group ns="right">
+            <arg name="length" value="$(eval world_y_size)"/>
+            <arg name="com_x"  value="$(eval world_x_max + wall_thickness / 2)"/>
+            <arg name="com_y"  value="$(eval world_y_mid)"/>
+            <arg name="com_z"  value="$(eval world_z_mid)"/>
+
+            <param name="obstacle_id"   value="2"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg com_x), $(arg com_y), $(arg com_z)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg wall_thickness), $(arg length), $(arg height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), $(arg alpha)]</rosparam>
+        </group>
+        <group ns="left">
+            <arg name="length" value="$(eval world_y_size)"/>
+            <arg name="com_x"  value="$(eval world_x_min - wall_thickness / 2)"/>
+            <arg name="com_y"  value="$(eval world_y_mid)"/>
+            <arg name="com_z"  value="$(eval world_z_mid)"/>
+
+            <param name="obstacle_id"   value="2"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg com_x), $(arg com_y), $(arg com_z)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg wall_thickness), $(arg length), $(arg height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), $(arg alpha)]</rosparam>
+        </group>
+    </group>
+    <group ns="initial_obstacle">
+        <arg name="initial_obstacle_com_x"  value="$(eval world_x_min + 0.65)"/>
+        <arg name="initial_obstacle_com_y"  value="$(eval world_y_mid - grid_resolution * 4)"/>
+        <arg name="initial_obstacle_com_z"  value="$(eval world_z_mid)"/>
+        <arg name="initial_obstacle_height" value="$(eval world_z_size)"/>
+        <arg name="initial_obstacle_width"  value="$(eval grid_resolution * 4.0)"/>
+
+        <param name="obstacle_id" value="5" type="int"/>
+        <rosparam subst_value="true" param="pose_pos">[$(arg initial_obstacle_com_x), $(arg initial_obstacle_com_y), $(arg initial_obstacle_com_z)]</rosparam>
+        <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+        <rosparam subst_value="true" param="extents">[$(arg initial_obstacle_width), $(arg initial_obstacle_width), $(arg initial_obstacle_height)]</rosparam>
+        <rosparam subst_value="true" param="color">[$(arg dark_cyan)]</rosparam>
+    </group>
+
+    <arg name="progress_wall_x_offset"      value="1.2"/>
+    <arg name="hook_y_offset"               value="$(eval grid_resolution * 6)"/>
+    <arg name="gripper_separator_offset"    value="$(eval grid_resolution * 12)"/>
+
+    <group ns="task_progress_wall">
+        <arg name="thickness"       value="$(eval grid_resolution * 2)"/>
+        <arg name="lower_height"    value="$(eval world_z_size - grid_resolution * 16)"/>
+        <arg name="upper_height"    value="$(eval world_z_size  - lower_height - grid_resolution * 4)"/>
+        <arg name="x_com"           value="$(eval world_x_min + progress_wall_x_offset)"/>
+        <arg name="y_com"           value="$(eval world_y_mid)"/>
+
+        <group ns="lower">
+            <arg name="z_com"       value="$(eval world_z_min + lower_height / 2)"/>
+
+            <param name="obstacle_id"   value="3"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg thickness), $(arg world_y_size), $(arg lower_height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+        </group>
+        <group ns="upper">
+            <arg name="z_com"       value="$(eval world_z_max - upper_height / 2)"/>
+
+            <param name="obstacle_id"   value="4"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg thickness), $(arg world_y_size), $(arg upper_height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+        </group>
+    </group>
+    <group ns="hook">
+        <arg name="width"           value="$(eval grid_resolution * 2)"/>
+        <arg name="length"          value="$(eval grid_resolution * 6)"/>
+        <arg name="x_com"           value="$(eval world_x_min + progress_wall_x_offset - length / 2 - grid_resolution)"/>
+        <arg name="y_com"           value="$(eval world_y_mid + hook_y_offset)"/>
+        <arg name="z_com"           value="$(eval world_z_min + world_z_size - grid_resolution * 15 - width / 2)"/>
+
+        <param name="obstacle_id"   value="6"   type="int"/>
+        <param name="type"          value="box" type="string"/>
+        <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+        <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+        <rosparam subst_value="true" param="extents">[$(arg length), $(arg width), $(arg width)]</rosparam>
+        <rosparam subst_value="true" param="color">[$(arg dark_cyan), 1.0]</rosparam>
+    </group>
+    <group ns="gripper_separator">
+        <arg name="thickness"       value="$(eval grid_resolution * 2)"/>
+        <arg name="lower_height"    value="$(eval world_z_size - grid_resolution * 15)"/>
+        <arg name="upper_height"    value="$(eval world_z_size  - lower_height - grid_resolution * 2)"/>
+        <arg name="length"          value="$(eval world_x_size - grid_resolution * 16)"/>
+        <arg name="x_com"           value="$(eval world_x_min + length / 2)"/>
+        <arg name="y_com"           value="$(eval world_y_mid + gripper_separator_offset)"/>
+
+        <group ns="lower">
+            <arg name="z_com"       value="$(eval world_z_min + lower_height / 2)"/>
+
+            <param name="obstacle_id"   value="3"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg length), $(arg thickness), $(arg lower_height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+
+            <group ns="pt2">
+                <arg name="x_size"      value="$(eval thickness)"/>
+                <arg name="y_size"      value="$(eval abs(gripper_separator_offset - hook_y_offset))"/>
+                <arg name="z_size"      value="$(eval grid_resolution)"/>
+
+                <arg name="x_com_pt2"   value="$(eval world_x_min + progress_wall_x_offset)"/>
+                <arg name="y_com_pt2"   value="$(eval world_y_mid + (gripper_separator_offset + hook_y_offset) / 2 - grid_resolution)"/>
+                <arg name="z_com_pt2"   value="$(eval world_z_min + lower_height - z_size / 2)"/>
+
+                <param name="obstacle_id"   value="3"   type="int"/>
+                <param name="type"          value="box" type="string"/>
+                <rosparam subst_value="true" param="pose_pos">[$(arg x_com_pt2), $(arg y_com_pt2), $(arg z_com_pt2)]</rosparam>
+                <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+                <rosparam subst_value="true" param="extents">[$(arg x_size), $(arg y_size), $(arg z_size)]</rosparam>
+                <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+            </group>
+        </group>
+        <group ns="upper">
+            <arg name="z_com"       value="$(eval world_z_max - upper_height / 2)"/>
+
+            <param name="obstacle_id"   value="4"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg length), $(arg thickness), $(arg upper_height)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+
+            <group ns="pt2">
+                <arg name="x_size"      value="$(eval thickness)"/>
+                <arg name="y_size"      value="$(eval abs(gripper_separator_offset - hook_y_offset))"/>
+                <arg name="z_size"      value="$(eval grid_resolution)"/>
+
+                <arg name="x_com_pt2"   value="$(eval world_x_min + progress_wall_x_offset)"/>
+                <arg name="y_com_pt2"   value="$(eval world_y_mid + (gripper_separator_offset + hook_y_offset) / 2 - grid_resolution)"/>
+                <arg name="z_com_pt2"   value="$(eval world_z_max - upper_height + z_size / 2)"/>
+
+                <param name="obstacle_id"   value="4"   type="int"/>
+                <param name="type"          value="box" type="string"/>
+                <rosparam subst_value="true" param="pose_pos">[$(arg x_com_pt2), $(arg y_com_pt2), $(arg z_com_pt2)]</rosparam>
+                <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+                <rosparam subst_value="true" param="extents">[$(arg x_size), $(arg y_size), $(arg z_size)]</rosparam>
+                <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+            </group>
+        </group>
+    </group>
+
+
+    <!-- Cover region params -->
+    <!-- Cover points region params -->
+    <param name="cover_region_x_min"    value="$(eval world_x_max - 0.1)"                               type="double"/>
+    <param name="cover_region_y_min"    value="$(eval world_y_mid - cloth_y_size / 2.0)"                type="double"/>
+    <param name="cover_region_z_min"    value="$(eval world_z_mid)"                                     type="double"/>
+    <param name="cover_region_x_res"    value="1"                                                       type="double"/>
+    <param name="cover_region_y_res"    value="$(eval cloth_y_size / (cloth_num_control_points_y - 1))" type="double"/>
+    <param name="cover_region_z_res"    value="1"                                                       type="double"/>
+    <param name="cover_region_x_steps"  value="1"                                                       type="int"/>
+    <param name="cover_region_y_steps"  value="$(eval cloth_num_control_points_y)"                      type="int"/>
+    <param name="cover_region_z_steps"  value="1"                                                       type="int"/>
+
+    <group ns="deform_simulator_node">
+        <param name="tf_wait_time"                      value="0.0"/>
+
+        <param name="num_simsteps_per_gripper_command"  value="20"      type="int"/>
+        <param name="cloth_linear_stiffness"            value="0.1"     type="double"/>
+        <param name="viewer_width"                      value="960"     type="int"/>
+        <param name="viewer_height"                     value="1000"    type="int"/>
+        <param name="display_grippers_axes"             value="false"   type="bool"/>
+
+        <param name="camera_override"                   value="true"    type="bool"/>
+        <group ns="camera">
+            <param name="home_x"                        value="-2.3"    type="double"/>
+            <param name="home_y"                        value="0.0"     type="double"/>
+            <param name="home_z"                        value="4.1"     type="double"/>
+
+            <param name="looks_at_x"                    value="-0.3"    type="double"/>
+            <param name="looks_at_y"                    value="-0.01"   type="double"/>
+            <param name="looks_at_z"                    value="-0.01"   type="double"/>
+
+            <param name="up_x"                          value="0.05"    type="double"/>
+            <param name="up_y"                          value="0.0"     type="double"/>
+            <param name="up_z"                          value="0.01"    type="double"/>
+        </group>
+    </group>
+
+    <group ns="$(arg planner_node_name)">
+        <group ns="task">
+            <param name="first_control_loop_triggers_plan"      value="true"    type="bool"/>
+
+            <param name="max_time"                              value="1e15"    type="double"/>
+            <param name="error_threshold_along_normal"          value="0.055"   type="double"/>
+            <param name="error_threshold_distance_to_normal"    value="0.025"   type="double"/>
+            <param name="error_threshold_task_done"             value="0.4"     type="double"/>
+            <param name="max_stretch_factor"                    value="1.05"    type="double"/>
+            <param name="max_band_length"                       value="1.02834" type="double"/>
+        </group>
+
+        <param name="controller_min_distance_to_obstacles"      value="0.002"   type="double"/>
+
+        <param name="enable_stuck_detection"                                value="true"        type="bool"/>
+        <group ns="stuck_detection">
+            <param name="num_lookahead_steps"                               value="10"          type="int"/>
+            <param name="band_overstretch_prediction_annealing_factor"      value="0.7"         type="double"/>
+            <param name="max_pose_history_steps"                            value="100"         type="int"/>
+            <param name="error_delta_threshold_for_progress"                value="1.0"         type="double"/>
+            <param name="grippers_distance_delta_threshold_for_progress"    value="0.03"        type="double"/>
+        </group>
+
+        <group ns="rrt">
+            <param name="min_gripper_distance_to_obstacles" value="0.03"                        type="double"/>
+            <param name="target_min_distance_scale_factor"  value="1.1"                         type="double"/>
+            <param name="max_robot_dof_step_size"           value="0.05"                        type="double"/>
+            <param name="min_robot_dof_step_size"           value="0.05"                        type="double"/>
+            <param name="max_gripper_rotation"              value="0.7"                         type="double"/>
+            <param name="max_shortcut_index_distance"       value="40"                          type="int"/>
+            <param name="max_smoothing_iterations"          value="500"                         type="int"/>
+            <param name="smoothing_band_dist_threshold"     value="0.001"                       type="double"/>
+
+            <param name="planning_x_min"                    value="$(arg world_x_min)"          type="double"/>
+            <param name="planning_x_max"                    value="$(arg world_x_max)"          type="double"/>
+            <param name="planning_y_min"                    value="$(arg world_y_min)"          type="double"/>
+            <param name="planning_y_max"                    value="$(arg world_y_max)"          type="double"/>
+            <param name="planning_z_min"                    value="$(arg world_z_min)"          type="double"/>
+            <param name="planning_z_max"                    value="$(arg world_z_max)"          type="double"/>
+        </group>
+
+        <group ns="diminishing_rigidity">
+            <param name="default_deformability"         value="10.0"            type="double"/>
+        </group>
+
+        <group ns="jacobian_controller">
+            <param name="collision_scaling_factor"      value="200.0"           type="double"/>
+        </group>
+
+        <group ns="stretching_constraint_controller">
+            <param name="stretching_cosine_threshold"   value="$(arg stretching_cosine_threshold)"  type="double"/>
+            <param name="fix_step_size"                 value="true"                                type="bool"/>
+        </group>
+    </group>
+</launch>

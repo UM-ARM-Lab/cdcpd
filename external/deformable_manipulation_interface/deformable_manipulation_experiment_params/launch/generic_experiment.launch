@@ -1,0 +1,186 @@
+<launch>
+    <!-- Task and logging arguments -->
+    <arg name="task_type"/>
+    <arg name="bandits_logging_enabled"                 default="false"/>
+    <arg name="controller_logging_enabled"              default="false"/>
+    <arg name="test_id"                                 default="default"/>
+    <arg name="task_max_time_override"                  default="false"/>
+    <arg name="task_max_time"                           if="$(arg task_max_time_override)"/>
+
+    <!-- Simulator arguments -->
+    <arg name="launch_simulator"                        default="true"/>
+    <arg name="start_bullet_viewer"                     default="true"/>
+    <arg name="screenshots_enabled"                     default="false"/>
+
+    <!-- Planner trial type -->
+    <!--<arg name="trial_type"                              default="diminishing_rigidity_single_model_least_squares_stretching_constraint_controller"/>-->
+    <arg name="trial_type"                              default="diminishing_rigidity_single_model_least_squares_stretching_avoidance_controller"/>
+    <!--<arg name="trial_type"                              default="constraint_single_model_constraint_controller"/>-->
+    <!--<arg name="trial_type"                              default="multi_model_bandit_test"/>-->
+
+    <!-- Planner visualization arguments -->
+    <arg name="disable_smmap_visualizations"            default="false"/>
+    <arg name="visualize_object_desired_motion"         default="false"/>
+    <arg name="visualize_gripper_motion"                default="false"/>
+    <arg name="visualize_object_predicted_motion"       default="false"/>
+    <arg name="visualize_rrt"                           default="true"/>
+    <arg name="visualize_free_space_graph"              default="false"/>
+    <arg name="visualize_correspondences"               default="false"/>
+
+    <!-- Model/Controller arguments -->
+    <!-- Diminishing rigidity -->
+    <arg name="deformability_override"                  default="false"/>
+    <arg name="translational_deformability"             if="$(arg deformability_override)"/>
+    <arg name="rotational_deformability"                if="$(arg deformability_override)"/>
+    <!-- Adaptive Jacobian -->
+    <arg name="adaptive_model_learning_rate"            default="0.000001"/>
+    <!-- Directional rigidity -->
+    <arg name="translational_dir_deformability"         default="4.0"/>
+    <arg name="translational_dis_deformability"         default="10.0"/>
+    <arg name="rotational_dis_deformability"            default="20.0"/>
+    <!-- Stretching Avoidance Controller -->
+    <arg name="stretching_cosine_threshold_override"    default="false"/>
+    <arg name="stretching_cosine_threshold"             if="$(arg stretching_cosine_threshold_override)"/>
+    <!-- Multi-model Bandit  -->
+    <arg name="process_noise_factor"                    default="0.1"/>
+    <arg name="observation_noise_factor"                default="0.01"/>
+    <arg name="bandit_algorithm"                        default="UCB"/>
+    <arg name="correlation_strength_factor"             default="0.9"/>
+
+    <!-- Transition classifier arguments -->
+    <arg name="classifier_type"                             default="none"/>
+    <arg name="classifier_dimension"                        default="13"/>
+    <arg name="classifier_slice_type"                       default="basic"/>
+    <arg name="classifier_normalize_lengths"                default="true"/>
+    <arg name="classifier_normalize_connected_components"   default="false"/>
+
+    <!-- Planner internal arguments -->
+    <arg name="launch_planner"                          default="true"/>
+    <arg name="collect_results_for_all_models"          default="false"/>
+    <arg name="use_random_seed"                         default="false"/>
+    <!-- MD5 sum of Dale McConachie: a8710913d2b5df6c a30cd67f3860ddb3 -->
+    <arg name="static_seed"                             default="a8710913d2b5df6c"/>
+    <arg name="rrt_num_trials"                          default="0"/>
+    <arg name="test_paths_in_bullet"                    default="false"/>
+    <arg name="rerun_forever"                           default="false"/>
+
+    <arg name="planner_node_name"       value="smmap_planner_node"/>
+    <!-- Setup task parameters -->
+    <include file="$(find deformable_manipulation_experiment_params)/launch/experiments/$(arg task_type)_params.launch">
+        <arg name="planner_node_name"   value="$(arg planner_node_name)"/>
+    </include>
+    <!-- Logging/data folders -->
+    <arg name="root_log_folder"  value="$(find smmap)/logs"/>
+    <arg name="root_data_folder" value="/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans"/>
+    <param name="test_id"        value="$(arg test_id)"                                              type="string"/>
+    <param name="log_folder"     value="$(arg root_log_folder)/$(arg task_type)/$(arg test_id)/"     type="string"/>
+    <param name="data_folder"    value="$(arg root_data_folder)/$(arg task_type)/$(arg test_id)/"    type="string"/>
+
+    <!-- Setup the simulator -->
+    <group ns="deform_simulator_node">
+        <param name="start_bullet_viewer"               value="$(arg start_bullet_viewer)"      type="bool"/>
+        <param name="screenshots_enabled"               value="$(arg screenshots_enabled)"      type="bool"/>
+        <param name="settle_time"                       value="4.0"                             type="double"/>
+        <param name="display_grippers_axes"             value="false"                           type="bool"/>
+    </group>
+    <env name="OSG_FILE_PATH" value="$(find OpenSceneGraph)/data"/>
+    <node name="deform_simulator_node" pkg="deform_simulator" type="custom_scene_node" required="true" if="$(arg launch_simulator)"/>
+
+    <!-- Setup the planner -->
+    <group ns="$(arg planner_node_name)">
+        <param name="trial_type"                        value="$(arg trial_type)"                           type="string"/>
+        <param name="use_random_seed"                   value="$(arg use_random_seed)"                      type="bool"/>
+        <param name="static_seed"                       value="$(arg static_seed)"                          type="string"   unless="$(arg use_random_seed)"/>
+        <param name="rerun_forever"                     value="$(arg rerun_forever)"                        type="bool"/>
+
+        <param name="disable_smmap_visualizations"      value="$(arg disable_smmap_visualizations)"         type="bool"/>
+        <param name="visualize_object_desired_motion"   value="$(arg visualize_object_desired_motion)"      type="bool"/>
+        <param name="visualize_gripper_motion"          value="$(arg visualize_gripper_motion)"             type="bool"/>
+        <param name="visualize_object_predicted_motion" value="$(arg visualize_object_predicted_motion)"    type="bool"/>
+        <param name="visualize_rrt"                     value="$(arg visualize_rrt)"                        type="bool"/>
+        <param name="visualize_free_space_graph"        value="$(arg visualize_free_space_graph)"           type="bool"/>
+        <param name="visualize_correspondences"         value="$(arg visualize_correspondences)"            type="bool"/>
+
+        <param name="bandits_logging_enabled"           value="$(arg bandits_logging_enabled)"              type="bool"/>
+        <param name="controller_logging_enabled"        value="$(arg controller_logging_enabled)"           type="bool"/>
+
+        <!-- Params shared by this file and transition_learning.launch -->
+        <include file="$(find deformable_manipulation_experiment_params)/launch/shared/classifier_params__no_data.launch">
+            <arg name="classifier_type"                 value="$(arg classifier_type)"/>
+            <arg name="dim"                             value="$(arg classifier_dimension)"/>
+            <arg name="slice_type"                      value="$(arg classifier_slice_type)"/>
+            <arg name="normalize_lengths"               value="$(arg classifier_normalize_lengths)"/>
+            <arg name="normalize_connected_components"  value="$(arg classifier_normalize_connected_components)"/>
+        </include>
+        <include file="$(find deformable_manipulation_experiment_params)/launch/shared/transition_estimation_params.launch"/>
+        <include file="$(find deformable_manipulation_experiment_params)/launch/shared/rrt_params.launch"/>
+
+        <group ns="rrt">
+            <param name="num_trials"                    value="$(arg rrt_num_trials)"                       type="int"/>
+            <param name="test_paths_in_bullet"          value="$(arg test_paths_in_bullet)"                 type="bool"/>
+        </group>
+
+        <!-- Only used for debugging -->
+        <group ns="world_state">
+            <param name="use_stored_world_state"        value="false"                                       type="bool"/>
+            <param name="file_name_prefix"              value="world_state"                                 type="string"/>
+            <param name="file_name_suffix_to_load"      value="band_weirdness_controller_only"              type="string"/>
+        </group>
+        <group ns="band">
+            <param name="use_stored_band"               value="false"                                       type="bool"/>
+            <param name="file_name_prefix"              value="band"                                        type="string"/>
+            <param name="file_name_suffix_to_load"      value="stuck_on_edge_of_obstacle"                   type="string"/>
+        </group>
+
+        <!-- Dinimishing Rigidity parameters and overrides -->
+        <group ns="diminishing_rigidity">
+            <param name="translational_deformability"   value="$(arg translational_deformability)"      type="double"   if="$(arg deformability_override)"/>
+            <param name="rotational_deformability"      value="$(arg rotational_deformability)"         type="double"   if="$(arg deformability_override)"/>
+        </group>
+
+        <!-- Adaptive Jacobian parameters and overrides -->
+        <group ns="adaptive_model">
+            <param name="adaptive_model_learning_rate"  value="$(arg adaptive_model_learning_rate)"     type="double"/>
+        </group>
+
+        <!-- Constraint Model parameters and overrides -->
+        <group ns="constraint_model">
+            <param name="translational_dir_deformability"   value="$(arg translational_dir_deformability)"  type="double"/>
+            <param name="translational_dis_deformability"   value="$(arg translational_dis_deformability)"  type="double"/>
+            <param name="rotational_dis_deformability"      value="$(arg rotational_dis_deformability)"     type="double"/>
+        </group>
+
+        <!-- Multi-model parameters and overrides -->
+        <group ns="multi_model">
+            <param name="bandit_algorithm"                  value="$(arg bandit_algorithm)"                 type="string"/>
+            <param name="process_noise_factor"              value="$(arg process_noise_factor)"             type="double"/>
+            <param name="observation_noise_factor"          value="$(arg observation_noise_factor)"         type="double"/>
+            <param name="collect_results_for_all_models"    value="$(arg collect_results_for_all_models)"   type="bool"/>
+            <param name="correlation_strength_factor"       value="$(arg correlation_strength_factor)"      type="double"/>
+            <param name="reward_scale_annealing_factor"     value="0.9"                                     type="double"/>
+            <param name="reward_std_dev_factor_start"       value="1.0"                                     type="double"/>
+
+            <param name="deformability_range_min"           value="0.0"                                     type="double"/>
+            <param name="deformability_range_max"           value="25.0"                                    type="double"/>
+            <param name="deformability_range_step"          value="4.0"                                     type="double"/>
+
+            <param name="adaptive_learning_rate_min"        value="1e-10"                                   type="double"/>
+            <param name="adaptive_learning_rate_max"        value="1.1e0"                                   type="double"/>
+            <param name="adaptive_learning_rate_step"       value="10.0"                                    type="double"/>
+        </group>
+
+        <!-- Old pure Jacobian based controller -->
+        <group ns="jacobian_controller">
+            <param name="optimization_enabled"          value="true"                                    type="bool"/>
+        </group>
+
+        <!-- Stretching avoidance controller arguments -->
+        <group ns="stretching_avoidance_controller">
+            <!--<param name="solver_type"                   value="nomad_optimization"                      type="string"/>-->
+            <!--<param name="solver_type"                   value="random_sampling"                         type="string"/>-->
+            <param name="solver_type"                   value="gradient_descent"                        type="string"/>
+            <param name="max_sampling_counts"           value="5000"                                    type="int"/>
+        </group>
+    </group>
+    <node name="$(arg planner_node_name)" pkg="smmap" type="planner_test_node" required="true" if="$(arg launch_planner)"/>
+</launch>

@@ -1,0 +1,196 @@
+<launch>
+    <arg name="planner_node_name"/>
+
+    <!-- Arguments to override default params -->
+    <arg name="task_max_time"           default="3600.0"/>
+    <param name="max_gripper_velocity"  value="0.5"/>
+    <param name="max_dof_velocity"      value="1.8"/>
+
+    <!-- Defines which world building routines we use, and which task specification -->
+    <param name="deformable_type"       value="cloth"                   type="string"/>
+    <param name="task_type"             value="live_cloth_placemat"     type="string"/>
+
+    <!-- planner, controller params -->
+    <arg name="desired_motion_scale_factor"     default="1"/>
+
+    <!-- READ THIS! READ THIS! READ THIS! All of the "tabbed in" parameters are measured in the bullet(task) frame, but unscaled distances -->
+
+        <!-- Table size params: +'ve X points towards the door -->
+        <!--<arg name="table_x_half_extents"    value="$(eval 30.0 / 2.0 * 0.0254)"/> &lt;!&ndash; 30 inches is the width of the table, converted into meters &ndash;&gt;-->
+        <!--<arg name="table_y_half_extents"    value="$(eval 42.0 / 2.0 * 0.0254)"/> &lt;!&ndash; 42 inches is the length of the table, converted into meters &ndash;&gt;-->
+        <arg name="table_x_half_extents"    value="$(eval 23.625 / 2.0 * 0.0254)"/> <!-- 23.625 inches is the width of the table, converted into meters -->
+        <arg name="table_y_half_extents"    value="$(eval 47.25 / 2.0 * 0.0254)"/>  <!-- 47.25  inches is the length of the table, converted into meters -->
+        <arg name="table_height"            value="0.7005"/>                      <!-- Height is mostly arbitrary, set to be above the floor somewhere and work well with the SDF resolution -->
+        <arg name="table_thickness"         value="0.1005"/>
+
+        <param name="table_x_half_extents"  value="$(arg table_x_half_extents)" type="double"/>
+        <param name="table_y_half_extents"  value="$(arg table_y_half_extents)" type="double"/>
+        <param name="table_height"          value="$(arg table_height)"         type="double"/>
+        <param name="table_thickness"       value="$(arg table_thickness)"      type="double"/>
+        <!-- TODO: Table legs? -->
+
+        <!-- Table position params -->
+        <arg name="table_surface_x"         value="0.0"/>
+        <arg name="table_surface_y"         value="0.0"/>
+        <arg name="table_surface_z"         value="$(arg table_height)"/>
+
+        <param name="table_surface_x"       value="$(arg table_surface_x)"  type="double"/>
+        <param name="table_surface_y"       value="$(arg table_surface_y)"  type="double"/>
+        <param name="table_surface_z"       value="$(arg table_surface_z)"  type="double"/>
+
+        <!-- Obstacle parameters -->
+        <arg   name="cylinder_radius" value="0.016"/>
+        <arg   name="cylinder_height" value="$(arg table_surface_z)"/>
+
+        <param name="cylinder_height" value="$(arg cylinder_height)"                            type="double"/>
+        <param name="cylinder_radius" value="$(arg cylinder_radius)"                            type="double"/>
+
+
+        <arg   name="cylinder_com_x"  value="$(eval table_surface_x - 5.0 * 0.0254)"/>
+        <arg   name="cylinder_com_y"  value="$(eval table_surface_y + 3.0 * 0.0254)"/>
+        <!--<arg   name="cylinder_com_x"  value="$(eval table_surface_x + 500.0)"                   type="double"/>-->
+        <!--<arg   name="cylinder_com_y"  value="$(eval table_surface_y + 500.0)"                   type="double"/>-->
+        <param name="cylinder_com_x"  value="$(eval cylinder_com_x)"                            type="double"/>
+        <param name="cylinder_com_y"  value="$(eval cylinder_com_y)"                            type="double"/>
+        <param name="cylinder_com_z"  value="$(eval table_surface_z + (cylinder_height / 2.0))" type="double"/>
+
+        <!-- Cloth size params -->
+        <arg   name="cloth_x_size"                  value="$(eval 13.0 * 0.0254)"/>
+        <arg   name="cloth_y_size"                  value="$(eval 18.0 * 0.0254)"/>
+        <arg   name="cloth_num_control_points_x"    value="14"/>
+        <arg   name="cloth_num_control_points_y"    value="19"/>
+
+        <param name="cloth_x_size"                  value="$(arg cloth_x_size)"                 type="double"/>
+        <param name="cloth_y_size"                  value="$(arg cloth_y_size)"                 type="double"/>
+        <param name="cloth_num_control_points_x"    value="$(arg cloth_num_control_points_x)"   type="int"/>
+        <param name="cloth_num_control_points_y"    value="$(arg cloth_num_control_points_y)"   type="int"/>
+
+        <!-- Cloth position params -->
+        <param name="cloth_com_x"           value="$(eval cylinder_com_x - cylinder_radius * 1.5 - cloth_x_size / 2.0)"  type="double"/>
+        <param name="cloth_com_y"           value="0.0"                                             type="double"/>
+        <param name="cloth_com_z"           value="$(eval table_surface_z + 0.1)"                   type="double"/>
+        <param name="cloth_orientation_x"   value="0.0"                                             type="double"/>
+        <param name="cloth_orientation_y"   value="0.0"                                             type="double"/>
+        <param name="cloth_orientation_z"   value="1.0"                                             type="double"/>
+        <param name="cloth_orientation_w"   value="0.0"                                             type="double"/>
+
+
+        <!-- Shrink the cover region to account for the sensor that we're using (CDCPD) -->
+        <arg name="cover_region_x_size"     value="0.31118818"/>
+        <arg name="cover_region_y_size"     value="0.43943098"/>
+
+        <!-- Cover points region params -->
+        <param name="cover_region_x_min"    value="$(eval table_surface_x + table_x_half_extents - cover_region_x_size - 0.02)" type="double"/>
+        <param name="cover_region_y_min"    value="$(eval table_surface_y - cover_region_y_size / 2.0 + 0.05)"      type="double"/>
+        <param name="cover_region_z_min"    value="$(eval table_surface_z)"                                         type="double"/>
+        <param name="cover_region_x_res"    value="$(eval cover_region_x_size / (cloth_num_control_points_x - 1))"  type="double"/>
+        <param name="cover_region_y_res"    value="$(eval cover_region_y_size / (cloth_num_control_points_y - 1))"  type="double"/>
+        <param name="cover_region_z_res"    value="1"                                                               type="double"/>
+        <param name="cover_region_x_steps"  value="$(arg cloth_num_control_points_x)"                               type="int"/>
+        <param name="cover_region_y_steps"  value="$(arg cloth_num_control_points_y)"                               type="int"/>
+        <param name="cover_region_z_steps"  value="1"                                                               type="int"/>
+
+        <!-- World parameters for planning - used by both nodes -->
+        <arg name="grid_resolution"         value="0.02"/>
+        <arg name="world_x_min"             value="$(eval table_surface_x - table_x_half_extents * 2.4)"/>
+        <arg name="world_x_max"             value="$(eval table_surface_x + table_x_half_extents * 1.5)"/>
+        <arg name="world_y_min"             value="$(eval table_surface_y - table_y_half_extents * 1.5)"/>
+        <arg name="world_y_max"             value="$(eval table_surface_y + table_y_half_extents * 1.5)"/>
+        <arg name="world_z_min"             value="$(eval table_height - 0.1)"/>
+        <arg name="world_z_max"             value="$(eval table_height + 0.2)"/>
+
+        <param name="world_x_step"          value="$(arg grid_resolution)"  type="double"/>
+        <param name="world_x_min"           value="$(arg world_x_min)"      type="double"/>
+        <param name="world_x_max"           value="$(arg world_x_max)"      type="double"/>
+
+        <param name="world_y_step"          value="$(arg grid_resolution)"  type="double"/>
+        <param name="world_y_min"           value="$(arg world_y_min)"      type="double"/>
+        <param name="world_y_max"           value="$(arg world_y_max)"      type="double"/>
+
+        <param name="world_z_step"          value="$(arg grid_resolution)"  type="double"/>
+        <param name="world_z_min"           value="$(arg world_z_min)"      type="double"/>
+        <param name="world_z_max"           value="$(arg world_z_max)"      type="double"/>
+
+        <param name="sdf_resolution_scale"  value="4"                       type="int"/>
+
+    <group ns="static_transform_publishers">
+        <!-- TF2 parameters and settings to enable live robot demonstrations -->
+        <!-- Note that we are using convenient coordinates for the table, so we need a transform to move to connect to the world frame -->
+        <node name="bullet_to_table_surface_tf_publisher"
+              pkg="tf2_ros"
+              type="static_transform_publisher"
+              args="-$(arg table_surface_x) -$(arg table_surface_y) -$(arg table_surface_z) 0 0 0 table_surface bullet_origin"/>
+    </group>
+
+    <group ns="deform_simulator_node">
+        <param name="tf_wait_time"                      value="3600"    type="double"/>
+
+        <param name="num_simsteps_per_gripper_command"  value="10"      type="int"/>
+        <param name="cloth_linear_stiffness"            value="0.8"     type="double"/>
+
+        <param name="viewer_width"                      value="800"     type="int"/>
+        <param name="viewer_height"                     value="800"     type="int"/>
+    </group>
+
+
+    <group ns="$(arg planner_node_name)">
+        <!-- TODO: Update these parameters to make them work for this task -->
+        <group ns="task">
+            <param name="max_time"                              value="$(arg task_max_time)"                type="double"/>
+            <param name="error_threshold_along_normal"          value="0.10"                                type="double"/>
+            <param name="error_threshold_distance_to_normal"    value="0.03"                                type="double"/>
+            <param name="error_threshold_task_done"             value="0.15"                                type="double"/>
+            <param name="max_stretch_factor"                    value="1.01"                                type="double"/>
+            <param name="max_band_length"                       value="0.380"                               type="double"/>
+            <param name="desired_motion_scale_factor"           value="$(arg desired_motion_scale_factor)"  type="double"/>
+        </group>
+
+        <param name="controller_min_distance_to_obstacles"      value="0.085"                               type="double"/>
+
+        <param name="enable_stuck_detection"                                value="true"        type="bool"/>
+        <!--<param name="enable_stuck_detection"                                value="false"        type="bool"/>-->
+        <group ns="stuck_detection">
+            <param name="num_lookahead_steps"                               value="10"          type="int"/>
+            <param name="band_overstretch_prediction_annealing_factor"      value="0.5"         type="double"/>
+            <param name="max_pose_history_steps"                            value="300"         type="int"/>
+            <param name="error_delta_threshold_for_progress"                value="0.1"         type="double"/>
+            <param name="grippers_distance_delta_threshold_for_progress"    value="0.01"        type="double"/>
+        </group>
+
+        <group ns="rrt">
+            <param name="min_gripper_distance_to_obstacles" value="0.085"                       type="double"/>
+            <param name="target_min_distance_scale_factor"  value="1.02"                         type="double"/>
+            <param name="max_gripper_rotation"              value="1.6"                         type="double"/>
+
+            <param name="max_robot_dof_step_size"           value="0.02"                        type="double"/>
+            <param name="min_robot_dof_step_size"           value="0.001"                       type="double"/>
+
+            <param name="max_shortcut_index_distance"       value="100"                         type="int"/>
+            <param name="max_smoothing_iterations"          value="500"                         type="int"/>
+            <param name="smoothing_band_dist_threshold"     value="0.001"                       type="double"/>
+
+
+            <!-- READ THIS! READ THIS! READ THIS! All of the "tabbed in" parameters are measured in the bullet(task) frame, but unscaled distances -->
+                <arg name="planning_boundary_margin"            value="0.000001"/>
+                <param name="planning_x_min"                    value="$(eval world_x_min + planning_boundary_margin)"  type="double"/>
+                <param name="planning_x_max"                    value="$(eval world_x_max + planning_boundary_margin)"  type="double"/>
+                <param name="planning_y_min"                    value="$(eval world_y_min + planning_boundary_margin)"  type="double"/>
+                <param name="planning_y_max"                    value="$(eval world_y_max + planning_boundary_margin)"  type="double"/>
+                <param name="planning_z_min"                    value="$(eval world_z_min + planning_boundary_margin)"  type="double"/>
+                <param name="planning_z_max"                    value="$(eval world_z_max + planning_boundary_margin)"  type="double"/>
+        </group>
+
+        <group ns="diminishing_rigidity">
+            <param name="default_deformability"         value="14.0"            type="double"/>
+        </group>
+
+        <group ns="jacobian_controller">
+            <param name="collision_scaling_factor"      value="1000.0"          type="double"/>
+        </group>
+
+        <group ns="stretching_constraint_controller">
+            <param name="stretching_cosine_threshold"   value="0.55"            type="double"/>
+            <param name="fix_step_size"                 value="false"           type="bool"/>
+        </group>
+    </group>
+</launch>
