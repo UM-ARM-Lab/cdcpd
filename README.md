@@ -19,6 +19,7 @@ Requirements
   * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
   * [NOMAD-3.8.1](https://www.gerad.ca/nomad/)
   * [libsvm](https://github.com/dmcconachie/libsvm)
+  * [PyTorch](https://pytorch.org/cppdocs/installing.html)
   
 Installation
 ------------
