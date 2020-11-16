@@ -18,6 +18,7 @@ Requirements
   * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
   * [fgt-0.4.6](https://github.com/gadomski/fgt)
   * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
+  * [NOMAD-3.8.1](https://www.gerad.ca/nomad/)
   
 Installation
 ------------
@@ -36,7 +37,12 @@ Recommended organization of third party library: place the source code under `~/
 * faiss-1.6.3: specify your installing directory and run `sudo install_scripts/install_faiss.sh`
 * fgt-0.4.6: specify your installing directory and run `sudo install_scripts/install_fgt.sh`
 * CGAL-5.0.3: specify your installing directory and run `sudo install_scripts/install_cgal.sh`
+* NOMAD-3.8.1: click 'Download' in [https://www.gerad.ca/nomad/](https://www.gerad.ca/nomad/), and download 3.8. Extract the zip file and put under `/opt`. At last, add the following to `~/.bashrc`
 
+```bash
+export NOMAD_HOME="/opt/nomad.3.8.1"
+export export PATH=$NOMAD_HOME/bin:$PATH
+```
 
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
 
