@@ -36,6 +36,7 @@ Recommended organization of third party library: place the source code under `~/
 export LD_LIBRARY_PATH=~/local/lib:$LD_LIBRARY_PATH
 export PKG_CONFIG_PATH=~/local/lib/pkgconfig:$PKG_CONFIG_PATH
 export PATH=~/local/bin:${PATH}
+export CMAKE_PREFIX_PATH=~/local:$CMAKE_PREFIX_PATH
 ```
 
 * OpenCV: specify your installing directory and run `sudo install_scripts/install_opencv.sh`
