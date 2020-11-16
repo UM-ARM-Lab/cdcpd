@@ -30,7 +30,13 @@ Run `sudo install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `s
 
 #### Installing third-party library
 
-Recommended organization of third party library: place the source code under `~/local/src` and install under `~/local`.
+Recommended organization of third party library: place the source code under `~/local/src` and install under `~/local`. If you do so, you can link to those libraries easily by adding below to `~/.bashrc`.
+
+```bash
+export LD_LIBRARY_PATH=~/local/lib:$LD_LIBRARY_PATH
+export PKG_CONFIG_PATH=~/local/lib/pkgconfig:$PKG_CONFIG_PATH
+export PATH=~/local/bin:${PATH}
+```
 
 * OpenCV: specify your installing directory and run `sudo install_scripts/install_opencv.sh`
 * Gurobi: follow instructions here `https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html`
