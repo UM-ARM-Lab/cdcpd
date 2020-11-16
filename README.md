@@ -41,7 +41,7 @@ Recommended organization of third party library: place the source code under `~/
 
 ```bash
 export NOMAD_HOME="/opt/nomad.3.8.1"
-export export PATH=$NOMAD_HOME/bin:$PATH
+export PATH=$NOMAD_HOME/bin:$PATH
 ```
 
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
