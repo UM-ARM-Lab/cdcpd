@@ -19,6 +19,7 @@ Requirements
   * [fgt-0.4.6](https://github.com/gadomski/fgt)
   * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
   * [NOMAD-3.8.1](https://www.gerad.ca/nomad/)
+  * [libsvm](https://github.com/dmcconachie/libsvm)
   
 Installation
 ------------
@@ -55,6 +56,7 @@ Developer help : nomad -d keyword(s) (or 'all')
 Version        : nomad -v
 Usage          : nomad -u
 ```
+* libsvm: specify your installing directory and run `sudo install_scripts/install_svm.sh`
 
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
 
