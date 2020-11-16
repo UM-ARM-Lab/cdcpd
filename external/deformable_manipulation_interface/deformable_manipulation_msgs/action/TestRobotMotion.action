@@ -1,0 +1,13 @@
+# define the goal
+std_msgs/Header header
+string[] gripper_names
+deformable_manipulation_msgs/VectorPose[] poses_to_test # Note that each entry in this vector should be N poses, where N is the number of grippers
+deformable_manipulation_msgs/VectorConfiguration[] configurations_to_test # Note that each entry in this vector should be a vector of M numbers, where M is the DOF of the robot
+bool robot_configurations_valid
+---
+# define the result
+# (empty)
+---
+# define the feedback
+uint64 test_id
+deformable_manipulation_msgs/WorldState world_state

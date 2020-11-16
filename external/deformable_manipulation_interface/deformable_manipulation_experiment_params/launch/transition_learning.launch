@@ -1,0 +1,99 @@
+<launch>
+    <!-- Task and logging arguments -->
+    <arg name="task_type"/>
+    <arg name="bandits_logging_enabled"                 default="true"/>
+    <arg name="controller_logging_enabled"              default="false"/>
+    <arg name="test_id"                                 default="default"/>
+    <arg name="task_max_time_override"                  default="false"/>
+    <arg name="task_max_time"                           if="$(arg task_max_time_override)"/>
+
+    <!-- Simulator arguments -->
+    <arg name="launch_simulator"                        default="true"/>
+    <arg name="start_bullet_viewer"                     default="true"/>
+    <arg name="screenshots_enabled"                     default="false"/>
+
+    <!-- Planner/Tester visualization arguments -->
+    <arg name="disable_smmap_visualizations"            default="false"/>
+    <arg name="visualize_gripper_motion"                default="false"/>
+
+    <!-- Transition classifier arguments -->
+    <arg name="classifier_type"                             default="none"/>
+    <arg name="classifier_dimension"                        default="13"/>
+    <arg name="classifier_slice_type"                       default="basic"/>
+    <arg name="classifier_normalize_lengths"                default="true"/>
+    <arg name="classifier_normalize_connected_components"   default="false"/>
+
+    <!-- Planner/Tester internal arguments -->
+    <arg name="planner_node_name"                       value="transition_learning_data_generation_node"/>
+    <arg name="use_random_seed"                         default="false"/>
+    <!-- MD5 sum of Dale McConachie: a8710913d2b5df6c a30cd67f3860ddb3 -->
+    <arg name="static_seed"                             default="a8710913d2b5df6c"/>
+
+    <arg name="launch_tester"                           default="true"/>
+    <arg name="generate_test_data"                      default="false"/>
+    <arg name="generate_trajectories"                   default="false"/>
+    <arg name="visualize_trajectories"                  default="true"/>
+    <arg name="generate_transitions"                    default="false"/>
+    <arg name="generate_meaningful_mistakes"            default="false"/>
+    <arg name="generate_features"                       default="false"/>
+
+    <arg name="test_classifier"                         default="false"/>
+    <arg name="num_classifier_tests"                    default="100"/>
+
+    <!-- Setup task parameters -->
+    <include file="$(find deformable_manipulation_experiment_params)/launch/experiments/$(arg task_type)_params.launch">
+        <arg name="planner_node_name"   value="$(arg planner_node_name)"/>
+    </include>
+    <param name="log_folder"                            value="$(find smmap)/logs/$(arg task_type)/$(arg test_id)/"         type="string"/>
+
+    <!-- Setup the simulator -->
+    <group ns="deform_simulator_node">
+        <param name="start_bullet_viewer"               value="$(arg start_bullet_viewer)"      type="bool"/>
+        <param name="screenshots_enabled"               value="$(arg screenshots_enabled)"      type="bool"/>
+        <param name="settle_time"                       value="4.0"/>
+        <param name="tf_wait_time"                      value="0.0"/>
+    </group>
+    <env name="OSG_FILE_PATH" value="$(find OpenSceneGraph)/data"/>
+    <node name="deform_simulator_node" pkg="deform_simulator" type="custom_scene_node" required="true" if="$(arg launch_simulator)"/>
+
+    <!-- Setup the planner -->
+    <group ns="$(arg planner_node_name)">
+        <param name="use_random_seed"                   value="$(arg use_random_seed)"                      type="bool"/>
+        <param name="static_seed"                       value="$(arg static_seed)"                          type="string"   unless="$(arg use_random_seed)"/>
+
+        <param name="disable_smmap_visualizations"      value="$(arg disable_smmap_visualizations)"         type="bool"/>
+        <param name="visualize_gripper_motion"          value="$(arg visualize_gripper_motion)"             type="bool"/>
+        <param name="visualize_free_space_graph"        value="false"                                       type="bool"/>
+        <param name="visualize_correspondences"         value="false"                                       type="bool"/>
+
+        <arg name="root_data_folder" value="/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans"/>
+        <!--<param name="data_folder" value="$(arg root_data_folder)/$(arg task_type)/$(arg test_id)/$(arg classifier_type)_classifier_$(arg static_seed)" type="string"/>-->
+        <!--<param name="data_folder" value="$(arg root_data_folder)/$(arg task_type)/$(arg test_id)/$(arg classifier_type)" type="string"/>-->
+        <param name="data_folder" value="$(arg root_data_folder)/$(arg task_type)/$(arg test_id)" type="string"/>
+        <!--<param name="data_folder" value="$(arg root_data_folder)/$(arg task_type)/$(arg test_id)/raw_data" type="string"/>-->
+
+        <param name="generate_test_data"                value="$(arg generate_test_data)"                   type="bool"/>
+        <param name="generate_trajectories"             value="$(arg generate_trajectories)"                type="bool"/>
+        <param name="visualize_trajectories"            value="$(arg visualize_trajectories)"               type="bool"/>
+        <param name="generate_transitions"              value="$(arg generate_transitions)"                 type="bool"/>
+        <param name="generate_meaningful_mistakes"      value="$(arg generate_meaningful_mistakes)"         type="bool"/>
+        <param name="generate_features"                 value="$(arg generate_features)"                    type="bool"/>
+
+        <param name="test_classifier"                   value="$(arg test_classifier)"                      type="bool"/>
+        <group ns="rrt">
+            <param name="num_trials" value="$(arg num_classifier_tests)" type="int"/>
+        </group>
+
+        <!-- Params shared by this file and generic_experiment.launch -->
+        <include file="$(find deformable_manipulation_experiment_params)/launch/shared/classifier_params__label_based_on_correct.launch">
+            <arg name="classifier_type"                 value="$(arg classifier_type)"/>
+            <arg name="dim"                             value="$(arg classifier_dimension)"/>
+            <arg name="slice_type"                      value="$(arg classifier_slice_type)"/>
+            <arg name="normalize_lengths"               value="$(arg classifier_normalize_lengths)"/>
+            <arg name="normalize_connected_components"  value="$(arg classifier_normalize_connected_components)"/>
+        </include>
+        <include file="$(find deformable_manipulation_experiment_params)/launch/shared/transition_estimation_params.launch"/>
+        <include file="$(find deformable_manipulation_experiment_params)/launch/shared/rrt_params.launch"/>
+    </group>
+    <node name="$(arg planner_node_name)" pkg="smmap" type="transition_learning_data_generation_node" required="true" if="$(arg launch_tester)"/>
+</launch>

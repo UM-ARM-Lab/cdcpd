@@ -1,0 +1,138 @@
+<launch>
+    <arg name="planner_node_name"/>
+
+    <!-- Arguments to override default params -->
+    <arg name="task_max_time"               default="3600.0"/>
+    <arg name="stretching_cosine_threshold" default="0.55"/>
+
+    <!-- Defines which world building routines we use, and which task specification -->
+    <param name="deformable_type"           value="rope"                    type="string"/>
+    <param name="task_type"                 value="rope_cylinder_coverage"  type="string"/>
+
+    <!-- planner, controller params -->
+    <arg name="desired_motion_scale_factor"     default="1"/>
+
+    <!-- Rope phyiscal parameters -->
+    <arg name="rope_num_links"              value="50"/>
+    <arg name="rope_length"                 value="$(eval 38.0 * 0.0254)"/>
+    <arg name="rope_radius"                 value="0.01"/>
+    <arg name="rope_segment_length"         value="$(eval rope_length / rope_num_links)"/>
+
+    <param name="rope_segment_length"       value="$(arg rope_segment_length)"/>
+    <param name="rope_num_links"            value="$(arg rope_num_links)"/>
+    <param name="rope_radius"               value="$(arg rope_radius)"/>
+
+    <!-- Table size params -->
+    <arg name="table_x_half_extents"    value="$(eval 30.0 / 2.0 * 0.0254)"/> <!-- 30 inches is the width of the table, converted into meters -->
+    <arg name="table_y_half_extents"    value="$(eval 42.0 / 2.0 * 0.0254)"/> <!-- 42 inches is the length of the table, converted into meters -->
+    <!--<arg name="table_x_half_extents"    value="$(eval 23.625 / 2.0 * 0.0254)"/> &lt;!&ndash; 23.625 inches is the width of the table, converted into meters &ndash;&gt;-->
+    <!--<arg name="table_y_half_extents"    value="$(eval 47.25 / 2.0 * 0.0254)"/>  &lt;!&ndash; 47.25  inches is the length of the table, converted into meters &ndash;&gt;-->
+    <arg name="table_height"            value="0.7"/>
+    <arg name="table_thickness"         value="0.05"/>
+
+    <param name="table_x_half_extents"  value="$(arg table_x_half_extents)"/>
+    <param name="table_y_half_extents"  value="$(arg table_y_half_extents)"/>
+    <param name="table_height"          value="$(arg table_height)"/>
+    <param name="table_thickness"       value="$(arg table_thickness)"/>
+
+    <!-- Table position params -->
+    <arg name="table_surface_x"         value="0.0"/>
+    <arg name="table_surface_y"         value="0.0"/>
+    <arg name="table_surface_z"         value="$(arg table_height)"/>
+
+    <param name="table_surface_x"       value="$(arg table_surface_x)"/>
+    <param name="table_surface_y"       value="$(arg table_surface_y)"/>
+    <param name="table_surface_z"       value="$(arg table_surface_z)"/>
+
+    <!-- Cylinder position params -->
+    <arg name="cylinder_radius"         value="$(eval 2.0 * 0.0254)"/>
+    <arg name="cylinder_height"         value="$(eval 5.5 * 0.0254)"/>
+
+    <param name="cylinder_radius"       value="$(arg cylinder_radius)"/>
+    <param name="cylinder_height"       value="$(arg cylinder_height)"/>
+
+    <param name="cylinder_com_x"        value="$(eval table_surface_x + 0.05)"/>
+    <param name="cylinder_com_y"        value="$(eval table_surface_y - 0.13)"/>
+    <param name="cylinder_com_z"        value="$(eval table_surface_z + (cylinder_height / 2.0))"/>
+
+    <!-- Rope position params-->
+    <param name="rope_com_x"            value="$(eval table_surface_x + (rope_segment_length * 15.0))"/>
+    <param name="rope_com_y"            value="$(arg table_surface_y)"/>
+    <param name="rope_com_z"            value="$(eval table_surface_z + (rope_radius * 5.0))"/>
+
+    <!-- Set a unit vector defining what direction the rope is created in -->
+    <param name="rope_extension_x"      value="1.0"     type="double"/>
+    <param name="rope_extension_y"      value="0.0"     type="double"/>
+    <param name="rope_extension_z"      value="0.0"     type="double"/>
+
+    <!-- World parameters for planning -->
+    <arg name="grid_resolution"         value="0.02"/>
+
+    <param name="world_x_step"          value="$(arg grid_resolution)"/>
+    <param name="world_x_min"           value="$(eval table_surface_x - table_x_half_extents)"/>
+    <param name="world_x_max"           value="$(eval table_surface_x + table_x_half_extents)"/>
+
+    <param name="world_y_step"          value="$(arg grid_resolution)"/>
+    <param name="world_y_min"           value="$(eval table_surface_y - table_y_half_extents)"/>
+    <param name="world_y_max"           value="$(eval table_surface_y + table_y_half_extents)"/>
+
+    <param name="world_z_step"          value="$(arg grid_resolution)"/>
+    <param name="world_z_min"           value="$(eval table_surface_z)"/>
+    <param name="world_z_max"           value="$(eval table_surface_z + cylinder_height + (rope_radius * 5.0))"/>
+
+    <param name="sdf_resolution_scale"  value="2"                       type="int"/>
+
+    <group ns="$(arg planner_node_name)">
+        <group ns="task">
+            <param name="max_time"                              value="$(arg task_max_time)"                type="double"/>
+            <param name="error_threshold_along_normal"          value="0.01"                                type="double"/>
+            <param name="error_threshold_distance_to_normal"    value="0.01"                                type="double"/>
+            <param name="error_threshold_task_done"             value="0.4"                                 type="double"/>
+            <param name="max_stretch_factor"                    value="$(eval (0.025 + 0.005) / 0.025)"     type="double"/>
+            <param name="max_band_length"                       value="0.874"                               type="double"/>
+            <param name="desired_motion_scale_factor"           value="$(arg desired_motion_scale_factor)"  type="double"/>
+        </group>
+
+        <param name="controller_min_distance_to_obstacles"      value="0.07"                                type="double"/>
+
+        <param name="enable_stuck_detection"                                value="false"       type="bool"/>
+        <group ns="stuck_detection">
+            <!-- Note that these values are meaningless, included only to allow other code to run -->
+            <param name="num_lookahead_steps"                               value="10"          type="int"/>
+            <param name="band_overstretch_prediction_annealing_factor"      value="0.7"         type="double"/>
+            <param name="max_pose_history_steps"                            value="100"         type="int"/>
+            <param name="error_delta_threshold_for_progress"                value="1.0"         type="double"/>
+            <param name="grippers_distance_delta_threshold_for_progress"    value="0.03"        type="double"/>
+        </group>
+
+        <group ns="rrt">
+        </group>
+
+        <group ns="diminishing_rigidity">
+            <param name="default_deformability"         value="10.0"            type="double"/>
+        </group>
+
+        <group ns="jacobian_controller">
+            <param name="collision_scaling_factor"      value="200.0"           type="double"/>
+        </group>
+
+        <group ns="stretching_constraint_controller">
+            <param name="stretching_cosine_threshold"   value="$(arg stretching_cosine_threshold)"  type="double"/>
+            <param name="fix_step_size"                 value="true"                                type="bool"/>
+        </group>
+    </group>
+
+    <group ns="static_transform_publishers">
+        <!-- TF2 parameters and settings to enable live robot demonstrations -->
+        <!-- Note that we are using convenient coordinates for the table, so we need a transform to move to connect to the world frame -->
+        <node name="bullet_to_table_surface_tf_publisher"
+              pkg="tf2_ros"
+              type="static_transform_publisher"
+              args="-$(arg table_surface_x) -$(arg table_surface_y) -$(arg table_surface_z) 0 0 0 table_surface bullet_origin"/>
+    </group>
+
+    <group ns="deform_simulator_node">
+        <param name="num_simsteps_per_gripper_command"  value="4"/>
+        <param name="tf_wait_time"                      value="3600"        type="double"/>
+    </group>
+</launch>

@@ -1,0 +1,11 @@
+# define the goal
+std_msgs/Header header
+deformable_manipulation_msgs/RobotPathTest[] tests
+std_msgs/String[] filenames
+---
+# define the result
+# (empty)
+---
+# define the feedback
+uint64 test_id
+deformable_manipulation_msgs/RobotPathTestResult test_result

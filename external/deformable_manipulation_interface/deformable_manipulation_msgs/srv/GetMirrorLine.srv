@@ -1,0 +1,5 @@
+---
+std_msgs/Header header
+float64 mid_x
+float64 min_y
+float64 max_y

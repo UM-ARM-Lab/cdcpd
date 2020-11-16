@@ -1,0 +1,61 @@
+<launch>
+    <param name="deformable_type"       value="cloth"/>
+    <param name="task_type"             value="cloth_wall"/>
+
+    <param name="default_deformability"     value="14.0"/>
+    <param name="collision_scaling_factor"  value="1000.0"/>
+    <param name="stretching_threshold"      value="$(eval (0.012 + 0.002) / 0.012)"/>
+    <param name="max_time"                  value="20.0"/>
+
+    <!--<param name="cloth_com_x"           value="-0.2"/>-->
+    <!--<param name="cloth_com_z"           value="0.0"/>-->
+
+    <param name="cloth_x_size"          value="0.625"/>
+    <param name="cloth_num_divs_x"      value="50"/>
+
+    <param name="cloth_y_size"          value="0.5"/>
+    <param name="cloth_num_divs_y"      value="40"/>
+
+    <param name="cloth_cylinder_com_x"  value="0.0"/>
+    <param name="cloth_cylinder_com_y"  value="0.0"/>
+    <param name="cloth_cylinder_com_z"  value="0.8"/>
+
+    <param name="cloth_cylinder_height" value="1.0"/>
+    <param name="cloth_cylinder_radius" value="0.04"/>
+
+
+
+
+    <param name="world_x_step"          value="0.02"/>
+    <param name="world_x_min"           value="-0.4"/>
+    <param name="world_x_max"           value="0.4"/>
+
+    <param name="world_y_step"          value="0.02"/>
+    <param name="world_y_min"           value="-0.3"/>
+    <param name="world_y_max"           value="0.3"/>
+
+    <param name="world_z_step"          value="0.02"/>
+    <param name="world_z_min"           value="0.5"/>
+    <param name="world_z_max"           value="1.1"/>
+
+
+
+
+    <param name="cover_region_x_min"    value="-0.3"/>
+    <param name="cover_region_x_steps"  value="1"/>
+    <param name="cover_region_x_res"    value="0.02"/>
+
+    <param name="cover_region_y_min"    value="-0.25"/>
+    <param name="cover_region_y_steps"  value="26"/>
+    <param name="cover_region_y_res"    value="0.02"/>
+
+    <param name="cover_region_z_min"    value="0.6"/>
+    <param name="cover_region_z_steps"  value="20"/>
+    <param name="cover_region_z_res"    value="0.02"/>
+
+
+
+    <group ns="deform_simulator_node">
+        <param name="num_simsteps_per_gripper_command"  value="10"/>
+    </group>
+</launch>

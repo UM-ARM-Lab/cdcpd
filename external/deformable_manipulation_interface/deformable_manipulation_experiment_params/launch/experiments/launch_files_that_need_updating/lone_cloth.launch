@@ -1,0 +1,55 @@
+<launch>
+    <!-- Task and logging arguments -->
+    <arg name="task_type"                               default="cloth_single_pole"/>
+    <arg name="logging_enabled"                         default="true"/>
+    <arg name="test_id"                                 default="default"/>
+    <arg name="task_max_time_override"                  default="false"/>
+    <arg name="task_max_time"                           if="$(arg task_max_time_override)"/>
+
+    <!-- Simulator arguments -->
+    <arg name="launch_simulator"                        default="true"/>
+    <arg name="start_bullet_viewer"                     default="true"/>
+    <arg name="screenshots_enabled"                     default="false"/>
+
+    <!-- Planner visualization arguments -->
+    <arg name="disable_all_visualizations"              default="false"/>
+    <arg name="visualize_object_desired_motion"         default="false"/>
+    <arg name="visualize_object_predicted_motion"       default="false"/>
+
+    <!-- Model arguments -->
+    <!-- Diminishing rigidity -->
+    <arg name="use_diminishing_rigidity_model"          default="true"/>
+    <arg name="deformability_override"                  default="false"/>
+    <arg name="translational_deformability"             if="$(arg deformability_override)"/>
+    <arg name="rotational_deformability"                if="$(arg deformability_override)"/>
+    <!-- Adaptive Jacobian -->
+    <arg name="use_adaptive_model"                      default="false"/>
+    <arg name="adaptive_model_learning_rate"            default="0.000001"/>
+    <!-- Constraint -->
+    <arg name="use_constraint_model"                    default="false"/>
+    <!-- Multi-model -->
+    <arg name="use_multi_model"                         default="false"/>
+    <arg name="kalman_parameters_override"              default="false"/>
+    <arg name="process_noise_factor"                    if="$(arg kalman_parameters_override)"/>
+    <arg name="observation_noise_factor"                if="$(arg kalman_parameters_override)"/>
+    <arg name="bandit_algorithm"                        default="UCB"/>
+    <arg name="correlation_strength_factor_override"    default="false"/>
+    <arg name="correlation_strength_factor"             if="$(arg correlation_strength_factor_override)"/>
+
+    <!-- Setup task parameters -->
+    <include file="$(find deformable_manipulation_experiment_params)/launch/$(arg task_type)_params.launch"/>
+    <param name="logging_enabled"                       value="$(arg logging_enabled)"                                      type="bool"/>
+    <param name="log_folder"                            value="$(find smmap)/logs/$(arg task_type)/$(arg test_id)/"         type="string"/>
+
+    <!-- Setup the simulator -->
+    <group ns="deform_simulator_node">
+        <param name="start_bullet_viewer"               value="$(arg start_bullet_viewer)"      type="bool"/>
+        <param name="screenshots_enabled"               value="$(arg screenshots_enabled)"      type="bool"/>
+        <param name="settle_time"                       value="1000000.0"/>
+        <param name="visualize_strain_lines"            value="true"/>
+        <param name="max_strain"                        value="0.2"/>
+    </group>
+    <env name="OSG_FILE_PATH" value="$(find OpenSceneGraph)/data"/>
+    <node name="deform_simulator_node" pkg="deform_simulator" type="custom_scene_node" required="true" if="$(arg launch_simulator)"/>
+
+</launch>

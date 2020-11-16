@@ -1,0 +1,149 @@
+<launch>
+    <!-- Arguments to override default params -->
+    <arg name="task_max_time"               default="6.0"/>
+    <arg name="stretching_cosine_threshold" default="0.4"/>
+
+    <!-- Defines which world building routines we use, and which task specification -->
+    <param name="deformable_type"       value="rope"                                type="string"/>
+    <param name="task_type"             value="rope_cylinder_coverage_two_grippers" type="string"/>
+
+    <arg name="desired_motion_scale_factor"     default="50"/>
+
+    <!-- Rope phyiscal parameters -->
+    <arg name="rope_segment_length"     value="0.02"/>
+    <arg name="rope_radius"             value="0.01"/>
+
+    <param name="rope_segment_length"   value="$(arg rope_segment_length)"  type="double"/>
+    <param name="rope_num_links"        value="29"                          type="int"/>
+    <param name="rope_radius"           value="$(arg rope_radius)"          type="double"/>
+
+    <!-- Table size params -->
+    <arg name="table_x_half_extents"    value="1.5"/>
+    <arg name="table_y_half_extents"    value="1.5"/>
+    <arg name="table_height"            value="0.7"/>
+    <arg name="table_thickness"         value="0.05"/>
+
+    <param name="table_x_half_extents"  value="$(arg table_x_half_extents)" type="double"/>
+    <param name="table_y_half_extents"  value="$(arg table_y_half_extents)" type="double"/>
+    <param name="table_height"          value="$(arg table_height)"         type="double"/>
+    <param name="table_thickness"       value="$(arg table_thickness)"      type="double"/>
+
+    <!-- Table position params -->
+    <arg name="table_surface_x"         value="0.0"/>
+    <arg name="table_surface_y"         value="0.0"/>
+    <arg name="table_surface_z"         value="$(arg table_height)"/>
+
+    <param name="table_surface_x"       value="$(arg table_surface_x)"      type="double"/>
+    <param name="table_surface_y"       value="$(arg table_surface_y)"      type="double"/>
+    <param name="table_surface_z"       value="$(arg table_surface_z)"      type="double"/>
+
+    <!-- Cylinder position params -->
+    <arg name="rope_cylinder_radius"    value="0.15"/>
+    <arg name="rope_cylinder_height"    value="0.7"/>
+
+    <param name="rope_cylinder_radius"  value="$(arg rope_cylinder_radius)" type="double"/>
+    <param name="rope_cylinder_height"  value="$(arg rope_cylinder_height)" type="double"/>
+
+    <param name="rope_cylinder_com_x"   value="$(eval table_surface_x)"                                 type="double"/>
+    <param name="rope_cylinder_com_y"   value="$(eval table_surface_y + (rope_cylinder_radius * 1.05))" type="double"/>
+    <param name="rope_cylinder_com_z"   value="$(eval table_surface_z + (rope_cylinder_height / 2.0))"  type="double"/>
+
+    <!-- Rope position params-->
+    <param name="rope_com_x"            value="$(eval table_surface_x + (rope_segment_length * 3.0))"   type="double"/>
+    <param name="rope_com_y"            value="$(arg table_surface_y)"                                  type="double"/>
+    <param name="rope_com_z"            value="$(eval table_surface_z + (rope_radius * 30.0))"          type="double"/>
+
+    <!-- World parameters for planning -->
+    <arg name="grid_resolution"         value="0.05"/>
+    <arg name="world_x_min"             value="$(eval table_surface_x - (1.5 * table_x_half_extents))"/>
+    <arg name="world_x_max"             value="$(eval table_surface_x + (1.5 * table_x_half_extents))"/>
+    <arg name="world_y_min"             value="$(eval table_surface_y - table_y_half_extents)"/>
+    <arg name="world_y_max"             value="$(eval table_surface_y + table_y_half_extents)"/>
+    <arg name="world_z_min"             value="$(eval table_surface_z)"/>
+    <arg name="world_z_max"             value="$(eval table_surface_z + rope_cylinder_height + (rope_radius * 5.0))"/>
+
+    <param name="world_x_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_x_min"           value="$(arg world_x_min)"      type="double"/>
+    <param name="world_x_max"           value="$(arg world_x_max)"      type="double"/>
+
+    <param name="world_y_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_y_min"           value="$(arg world_y_min)"      type="double"/>
+    <param name="world_y_max"           value="$(arg world_y_max)"      type="double"/>
+
+    <param name="world_z_step"          value="$(arg grid_resolution)"  type="double"/>
+    <param name="world_z_min"           value="$(arg world_z_min)"      type="double"/>
+    <param name="world_z_max"           value="$(arg world_z_max)"      type="double"/>
+
+    <group ns="deform_simulator_node">
+        <param name="num_simsteps_per_gripper_command"  value="4"       type="int"/>
+        <param name="viewer_width"                      value="1280"    type="int"/>
+        <param name="viewer_height"                     value="720"     type="int"/>
+
+        <param name="camera_override"                   value="true"    type="bool"/>
+        <group ns="camera">
+            <param name="home_x"                        value="0.0"     type="double"/>
+            <param name="home_y"                        value="-0.1"    type="double"/>
+            <param name="home_z"                        value="2.5"     type="double"/>
+
+            <param name="looks_at_x"                    value="0.0"     type="double"/>
+            <param name="looks_at_y"                    value="0.2"     type="double"/>
+            <param name="looks_at_z"                    value="0.7"     type="double"/>
+        </group>
+    </group>
+
+    <group ns="smmap_planner_node">
+        <group ns="task">
+            <param name="max_time"                            value="$(arg task_max_time)"                  type="double"/>
+            <param name="error_threshold_along_normal"        value="0.05"                                  type="double"/>
+            <param name="error_threshold_distance_to_normal"  value="0.025"                                 type="double"/>
+            <param name="error_threshold_task_done"           value="0.4"                                   type="double"/>
+            <param name="max_stretch_factor"                  value="1.1"                                   type="double"/>
+            <param name="max_band_length"                     value="-1.0"                                  type="double"/>
+            <param name="desired_motion_scale_factor"         value="$(arg desired_motion_scale_factor)"    type="double"/>
+        </group>
+
+        <param name="controller_min_distance_to_obstacles"    value="0.002"                                  type="double"/>
+
+        <param name="enable_stuck_detection"                                value="false"        type="bool"/>
+        <group ns="stuck_detection">
+            <param name="num_lookahead_steps"                               value="10"           type="int"/>
+            <param name="band_overstretch_prediction_annealing_factor"      value="0.5"          type="double"/>
+            <param name="max_pose_history_steps"                            value="100"          type="int"/>
+            <param name="error_delta_threshold_for_progress"                value="1.0"          type="double"/>
+            <param name="grippers_distance_delta_threshold_for_progress"    value="0.03"         type="double"/>
+        </group>
+
+        <!--<group ns="rrt">-->
+            <!--<param name="timeout"                           value="3600.0"                      type="double"/>-->
+            <!--<param name="reuse_old_results"                 value="false"                       type="bool"/>-->
+            <!--<param name="store_new_results"                 value="true"                        type="bool"/>-->
+            <!--<param name="goal_bias"                         value="0.01"                        type="double"/>-->
+            <!--<param name="min_gripper_distance_to_obstacles" value="0.03"                        type="double"/>-->
+            <!--<param name="target_min_distance_scale_factor"  value="1.1"                         type="double"/>-->
+            <!--<param name="max_shortcut_index_distance"       value="20"                          type="int"/>-->
+            <!--<param name="max_smoothing_iterations"          value="1500"                        type="int"/>-->
+            <!--<param name="max_failed_smoothing_iterations"   value="15000"                       type="int"/>-->
+
+            <!--<param name="planning_x_min"                    value="$(arg world_x_min)"          type="double"/>-->
+            <!--<param name="planning_x_max"                    value="$(arg world_x_max)"          type="double"/>-->
+            <!--<param name="planning_y_min"                    value="$(arg world_y_min)"          type="double"/>-->
+            <!--<param name="planning_y_max"                    value="$(arg world_y_max)"          type="double"/>-->
+            <!--<param name="planning_z_min"                    value="$(arg world_z_min)"          type="double"/>-->
+            <!--<param name="planning_z_max"                    value="$(arg world_z_max)"          type="double"/>-->
+        <!--</group>-->
+
+        <group ns="diminishing_rigidity">
+            <param name="default_deformability"         value="10.0"            type="double"/>
+        </group>
+
+        <group ns="jacobian_controller">
+            <param name="collision_scaling_factor"      value="200.0"           type="double"/>
+        </group>
+
+        <group ns="stretching_avoidance_controller">
+            <param name="stretching_cosine_threshold"   value="$(arg stretching_cosine_threshold)"  type="double"/>
+            <param name="fix_step_size"                 value="true"                                type="bool"/>
+        </group>
+
+    </group>
+</launch>

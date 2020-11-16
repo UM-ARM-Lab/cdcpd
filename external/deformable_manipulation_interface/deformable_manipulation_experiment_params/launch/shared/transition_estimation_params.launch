@@ -1,0 +1,16 @@
+<launch>
+    <group ns="transition_estimation">
+        <param name="mistake_distance_threshold"            value="0.5"                     type="double"/>
+        <param name="default_propagation_confidence"        value="1.0"                     type="double"/>
+        <param name="default_band_dist_threshold"           value="1.0"                     type="double"/>
+        <param name="confidence_threshold"                  value="0.2"                     type="double"/>
+        <param name="template_misalignment_scale_factor"    value="1.0"                     type="double"/>
+        <param name="tighten_delta_scale_factor"            value="1.0"                     type="double"/>
+        <param name="homotopy_changes_scale_factor"         value="1.0"                     type="double"/>
+        <param name="use_stored_transitions"                value="false"                   type="bool"/>
+        <param name="file_name_prefix"                      value="../learned_transitions"  type="string"/>
+        <rosparam>
+            file_name_suffixes_to_load: [""]
+        </rosparam>
+    </group>
+</launch>

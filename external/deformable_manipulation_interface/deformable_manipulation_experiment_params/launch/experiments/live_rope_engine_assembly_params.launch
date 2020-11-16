@@ -1,0 +1,404 @@
+<launch>
+    <arg name="planner_node_name"/>
+
+    <!-- Arguments to override default params -->
+    <arg name="task_max_time"           default="3600.0"/>
+    <param name="max_gripper_velocity"  value="0.3"/>
+    <param name="max_dof_velocity"      value="1.5"/>
+
+    <!-- Defines which world building routines we use, and which task specification -->
+    <param name="deformable_type"       value="rope"                        type="string"/>
+    <param name="task_type"             value="live_rope_engine_assembly"   type="string"/>
+
+    <!-- planner, controller params -->
+    <arg name="desired_motion_scale_factor"     default="1"/>
+
+    <!-- Rope phyiscal parameters -->
+    <arg name="rope_num_links"              value="30"/>
+    <!--<arg name="rope_length"                 value="$(eval 38.0 * 0.0254)"/>-->
+    <arg name="rope_length"                 value="$(eval 15 * 0.0254)"/>
+    <arg name="rope_radius"                 value="0.01"/>
+    <arg name="rope_segment_length"         value="$(eval rope_length / rope_num_links)"/>
+
+    <param name="rope_length"               value="$(arg rope_length)"          type="double"/>
+    <param name="rope_segment_length"       value="$(arg rope_segment_length)"  type="double"/>
+    <param name="rope_num_links"            value="$(arg rope_num_links)"       type="int"/>
+    <param name="rope_radius"               value="$(arg rope_radius)"          type="double"/>
+
+    <!-- READ THIS! READ THIS! READ THIS! All of the "tabbed in" parameters are measured in the bullet(task) frame, but unscaled distances -->
+
+        <!-- Table size params: +'ve X points towards the door -->
+        <!--<arg name="table_x_half_extents"    value="$(eval 30.0 / 2.0 * 0.0254)"/> &lt;!&ndash; 30 inches is the width of the table, converted into meters &ndash;&gt;-->
+        <!--<arg name="table_y_half_extents"    value="$(eval 42.0 / 2.0 * 0.0254)"/> &lt;!&ndash; 42 inches is the length of the table, converted into meters &ndash;&gt;-->
+        <arg name="table_x_half_extents"    value="$(eval 23.625 / 2.0 * 0.0254)"/> <!-- 23.625 inches is the width of the table, converted into meters -->
+        <arg name="table_y_half_extents"    value="$(eval 47.25 / 2.0 * 0.0254)"/>  <!-- 47.25  inches is the length of the table, converted into meters -->
+        <arg name="table_height"            value="0.7005"/>                      <!-- Height is mostly arbitrary, set to be above the floor somewhere and work well with the SDF resolution -->
+        <arg name="table_thickness"         value="0.1005"/>
+
+        <param name="table_x_half_extents"  value="$(arg table_x_half_extents)" type="double"/>
+        <param name="table_y_half_extents"  value="$(arg table_y_half_extents)" type="double"/>
+        <param name="table_height"          value="$(arg table_height)"         type="double"/>
+        <param name="table_thickness"       value="$(arg table_thickness)"      type="double"/>
+        <!-- TODO: Table legs? -->
+
+        <!-- Table position params -->
+        <arg name="table_surface_x"         value="0.0"/>
+        <arg name="table_surface_y"         value="0.0"/>
+        <arg name="table_surface_z"         value="$(arg table_height)"/>
+
+        <param name="table_surface_x"       value="$(arg table_surface_x)"  type="double"/>
+        <param name="table_surface_y"       value="$(arg table_surface_y)"  type="double"/>
+        <param name="table_surface_z"       value="$(arg table_surface_z)"  type="double"/>
+
+        <!-- Rope position params - not really used -->
+        <param name="rope_com_x"            value="$(eval table_surface_x - table_x_half_extents / 2.0)"/>
+        <param name="rope_com_y"            value="$(arg table_surface_y)"/>
+        <param name="rope_com_z"            value="$(eval table_surface_z + (rope_radius * 5.0))"/>
+
+        <!-- Set a unit vector defining what direction the rope is created in -->
+        <param name="rope_extension_x"      value="0.0"     type="double"/>
+        <param name="rope_extension_y"      value="1.0"     type="double"/>
+        <param name="rope_extension_z"      value="0.0"     type="double"/>
+
+        <!-- Cover points region params -->
+        <param name="cover_region_x_min"    value="$(eval table_surface_x + table_x_half_extents - 0.15)"   type="double"/>
+        <param name="cover_region_y_min"    value="$(eval table_surface_y - rope_length / 2.0)"             type="double"/>
+        <param name="cover_region_z_min"    value="$(eval table_surface_z + 0.02)"                          type="double"/>
+        <param name="cover_region_x_res"    value="1"                                                       type="double"/>
+        <param name="cover_region_y_res"    value="$(eval rope_segment_length)"                             type="double"/>
+        <param name="cover_region_z_res"    value="1"                                                       type="double"/>
+        <param name="cover_region_x_steps"  value="1"                                                       type="int"/>
+        <param name="cover_region_y_steps"  value="$(eval rope_num_links)"                                  type="int"/>
+        <param name="cover_region_z_steps"  value="1"                                                       type="int"/>
+
+        <!-- World parameters for planning - used by both nodes -->
+        <arg name="grid_resolution"         value="0.025"/>
+        <param name="sdf_resolution_scale"  value="8" type="int"/>
+        <arg name="world_x_min"             value="$(eval table_surface_x - table_x_half_extents * 2.4)"/>
+        <arg name="world_x_max"             value="$(eval table_surface_x + table_x_half_extents * 1.5)"/>
+        <arg name="world_y_min"             value="$(eval table_surface_y - table_y_half_extents * 1.5)"/>
+        <arg name="world_y_max"             value="$(eval table_surface_y + table_y_half_extents * 1.5)"/>
+        <arg name="world_z_min"             value="$(eval table_height - 0.1)"/>
+        <arg name="world_z_max"             value="$(eval table_height + 0.5)"/>
+        <arg name="world_x_mid"             value="$(eval (world_x_max + world_x_min) / 2.0)"/>
+        <arg name="world_y_mid"             value="$(eval (world_y_max + world_y_min) / 2.0)"/>
+        <arg name="world_z_mid"             value="$(eval (world_z_max + world_z_min) / 2.0)"/>
+        <arg name="world_x_size"            value="$(eval world_x_max - world_x_min)"/>
+        <arg name="world_y_size"            value="$(eval world_y_max - world_y_min)"/>
+        <arg name="world_z_size"            value="$(eval world_z_max - world_z_min)"/>
+
+        <param name="world_x_step"          value="$(arg grid_resolution)"  type="double"/>
+        <param name="world_x_min"           value="$(arg world_x_min)"      type="double"/>
+        <param name="world_x_max"           value="$(arg world_x_max)"      type="double"/>
+
+        <param name="world_y_step"          value="$(arg grid_resolution)"  type="double"/>
+        <param name="world_y_min"           value="$(arg world_y_min)"      type="double"/>
+        <param name="world_y_max"           value="$(arg world_y_max)"      type="double"/>
+
+        <param name="world_z_step"          value="$(arg grid_resolution)"  type="double"/>
+        <param name="world_z_min"           value="$(arg world_z_min)"      type="double"/>
+        <param name="world_z_max"           value="$(arg world_z_max)"      type="double"/>
+
+        <rosparam param="obstacle_list">
+            [
+            "lower_rectangle",
+            "mid_rectangle",
+            "upper_rectangle",
+            "upper_plate",
+            "shaft_housing",
+            "shaft",
+            "upper_inner_cylinder",
+            "upper_outer_cylinder",
+            "exhaust_outer",
+            "exhaust_inner",
+            "intake_horizontal",
+            "intake_vertical",
+            ]
+        </rosparam>
+        <arg name="dark_gray"   value="0.3, 0.3, 0.3"/>
+        <arg name="light_gray"  value="0.6, 0.6, 0.6"/>
+        <arg name="dark_cyan"   value="0.0, 0.5, 0.5"/>
+        <arg name="purple"      value="0.7, 0.0, 0.8"/>
+
+        <arg name="physical_height"     value="0.225"/>
+        <arg name="engine_scale"        value="$(eval physical_height / (25 * grid_resolution))"/>
+        <arg name="engine_origin_x"     value="$(eval table_surface_x / engine_scale)"/>
+        <arg name="engine_origin_y"     value="$(eval table_surface_y / engine_scale)"/>
+        <arg name="engine_origin_z"     value="$(eval table_surface_z / engine_scale)"/>
+        <group ns="lower_rectangle">
+            <arg name="x_size"          value="$(eval grid_resolution * 8)"/>
+            <arg name="y_size"          value="$(eval grid_resolution * 14)"/>
+            <arg name="z_size"          value="$(eval grid_resolution * 5)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + z_size / 2)"/>
+
+            <param name="obstacle_id"   value="2"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, -0.707, 0.707]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg x_size), $(arg y_size), $(arg z_size)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_cyan), 1.0]</rosparam>
+        </group>
+        <group ns="mid_rectangle">
+            <arg name="x_size"          value="$(eval grid_resolution * 10)"/>
+            <arg name="y_size"          value="$(eval grid_resolution * 16)"/>
+            <arg name="z_size"          value="$(eval grid_resolution * 1)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 5 + z_size / 2)"/>
+
+            <param name="obstacle_id"   value="3"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, -0.707, 0.707]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg x_size), $(arg y_size), $(arg z_size)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), 1.0]</rosparam>
+        </group>
+        <group ns="upper_rectangle">
+            <arg name="x_size"          value="$(eval grid_resolution * 8)"/>
+            <arg name="y_size"          value="$(eval grid_resolution * 14)"/>
+            <arg name="z_size"          value="$(eval grid_resolution * 5)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 6 + z_size / 2)"/>
+
+            <param name="obstacle_id"   value="2"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, -0.707, 0.707]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg x_size), $(arg y_size), $(arg z_size)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_cyan), 1.0]</rosparam>
+        </group>
+        <group ns="upper_plate">
+            <arg name="x_size"          value="$(eval grid_resolution * 8)"/>
+            <arg name="y_size"          value="$(eval grid_resolution * 12)"/>
+            <arg name="z_size"          value="$(eval grid_resolution)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 11 + z_size / 2)"/>
+
+            <param name="obstacle_id"   value="3"   type="int"/>
+            <param name="type"          value="box" type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, -0.707, 0.707]</rosparam>
+            <rosparam subst_value="true" param="extents">[$(arg x_size), $(arg y_size), $(arg z_size)]</rosparam>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), 1.0]</rosparam>
+        </group>
+
+        <group ns="shaft_housing">
+            <arg name="length"          value="$(eval grid_resolution * 12)"/>
+            <arg name="radius"          value="$(eval grid_resolution * 2)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 5.5)"/>
+
+            <param name="obstacle_id"   value="4"           type="int"/>
+            <param name="type"          value="cylinder"    type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.5, 0.5, -0.5, 0.5]</rosparam>
+            <param                       name="height"  value="$(eval length)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), 1.0]</rosparam>
+        </group>
+        <group ns="shaft">
+            <arg name="length"          value="$(eval grid_resolution * 12)"/>
+            <arg name="radius"          value="$(eval grid_resolution * 1)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y - grid_resolution * 3)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 5.5)"/>
+
+            <param name="obstacle_id"   value="5"           type="int"/>
+            <param name="type"          value="cylinder"    type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.5, 0.5, -0.5, 0.5]</rosparam>
+            <param                       name="height"  value="$(eval length)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+        </group>
+
+        <group ns="upper_inner_cylinder">
+            <arg name="height"          value="$(eval grid_resolution * 11)"/>
+            <arg name="radius"          value="$(eval grid_resolution * 4)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 12 + height / 2)"/>
+
+            <param name="obstacle_id"   value="6"           type="int"/>
+            <param name="type"          value="cylinder"    type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, -0.707, 0.707]</rosparam>
+            <param                       name="height"  value="$(eval height)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg dark_gray), 1.0]</rosparam>
+        </group>
+        <group ns="upper_outer_cylinder">
+            <arg name="height"          value="$(eval grid_resolution * 9)"/>
+            <arg name="radius"          value="$(eval grid_resolution * 6)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 13 + height / 2)"/>
+
+            <param name="obstacle_id"   value="7"           type="int"/>
+            <param name="type"          value="cylinder"    type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, -0.707, 0.707]</rosparam>
+            <param                       name="height"  value="$(eval height)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg dark_cyan), 1.0]</rosparam>
+        </group>
+
+        <group ns="exhaust_outer">
+            <arg name="length"          value="$(eval grid_resolution * 12)"/>
+            <arg name="radius"          value="$(eval grid_resolution * 2)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x - grid_resolution * 8)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 17)"/>
+
+            <param name="obstacle_id"   value="8"           type="int"/>
+            <param name="type"          value="capsule"     type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <param                       name="height"  value="$(eval length)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+        </group>
+        <group ns="exhaust_inner">
+            <arg name="length"          value="$(eval grid_resolution * 2)"/>
+            <arg name="radius"          value="$(eval grid_resolution)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x - grid_resolution * 16)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 17)"/>
+
+            <param name="obstacle_id"   value="8"           type="int"/>
+            <param name="type"          value="cylinder"    type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[-0.5, 0.5, 0.5, -0.5]</rosparam>
+            <param                       name="height"  value="$(eval length)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+        </group>
+
+        <group ns="intake_horizontal">
+            <arg name="length"          value="$(eval grid_resolution * 4)"/>
+            <arg name="radius"          value="$(eval grid_resolution)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x + grid_resolution * 6)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 17)"/>
+
+            <param name="obstacle_id"   value="8"           type="int"/>
+            <param name="type"          value="capsule"     type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, 0.0, 1.0]</rosparam>
+            <param                       name="height"  value="$(eval length)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+        </group>
+        <group ns="intake_vertical">
+            <arg name="height"          value="$(eval grid_resolution * 3)"/>
+            <arg name="radius"          value="$(eval grid_resolution)"/>
+            <arg name="x_com"           value="$(eval engine_origin_x + grid_resolution * 8)"/>
+            <arg name="y_com"           value="$(eval engine_origin_y)"/>
+            <arg name="z_com"           value="$(eval engine_origin_z + grid_resolution * 17 + height / 2)"/>
+
+            <param name="obstacle_id"   value="8"           type="int"/>
+            <param name="type"          value="cylinder"     type="string"/>
+            <param name="scale"         value="$(arg engine_scale)" type="double"/>
+            <rosparam subst_value="true" param="pose_pos">[$(arg x_com), $(arg y_com), $(arg z_com)]</rosparam>
+            <rosparam subst_value="true" param="pose_quat">[0.0, 0.0, -0.707, 0.707]</rosparam>
+            <param                       name="height"  value="$(eval height)"/>
+            <param                       name="radius"  value="$(eval radius)"/>
+            <rosparam subst_value="true" param="color">[$(arg purple), 1.0]</rosparam>
+        </group>
+
+    <group ns="static_transform_publishers">
+        <!-- TF2 parameters and settings to enable live robot demonstrations -->
+        <!-- Note that we are using convenient coordinates for the table, so we need a transform to move to connect to the world frame -->
+        <node name="bullet_to_table_surface_tf_publisher"
+              pkg="tf2_ros"
+              type="static_transform_publisher"
+              args="-$(arg table_surface_x) -$(arg table_surface_y) -$(arg table_surface_z) 0 0 0 table_surface bullet_origin"/>
+    </group>
+
+    <group ns="deform_simulator_node">
+        <param name="tf_wait_time"                      value="5.0"     type="double"/>
+
+        <param name="num_simsteps_per_gripper_command"  value="4"      type="int"/>
+
+        <param name="viewer_width"                      value="800"     type="int"/>
+        <param name="viewer_height"                     value="800"     type="int"/>
+    </group>
+
+    <group ns="$(arg planner_node_name)">
+        <!-- TODO: Update these parameters to make them work for this task -->
+        <group ns="task">
+            <param name="first_control_loop_triggers_plan"      value="true"                                type="bool"/>
+
+            <param name="max_time"                              value="$(arg task_max_time)"                type="double"/>
+            <param name="error_threshold_along_normal"          value="0.04"                                type="double"/>
+            <param name="error_threshold_distance_to_normal"    value="0.02"                                type="double"/>
+            <param name="error_threshold_task_done"             value="0.15"                                type="double"/>
+            <param name="max_stretch_factor"                    value="1.01"                                type="double"/>
+            <param name="max_band_length"                       value="$(eval rope_length * 1.01)"          type="double"/>
+            <param name="desired_motion_scale_factor"           value="$(arg desired_motion_scale_factor)"  type="double"/>
+        </group>
+
+        <param name="controller_min_distance_to_obstacles"      value="0.085"                               type="double"/>
+
+        <param name="enable_stuck_detection"                                value="true"        type="bool"/>
+        <group ns="stuck_detection">
+            <param name="num_lookahead_steps"                               value="10"          type="int"/>
+            <param name="band_overstretch_prediction_annealing_factor"      value="0.5"         type="double"/>
+            <param name="max_pose_history_steps"                            value="300"         type="int"/>
+            <param name="error_delta_threshold_for_progress"                value="0.1"         type="double"/>
+            <param name="grippers_distance_delta_threshold_for_progress"    value="0.01"        type="double"/>
+        </group>
+
+        <group ns="rrt">
+            <param name="min_gripper_distance_to_obstacles" value="0.05"                        type="double"/>
+            <param name="target_min_distance_scale_factor"  value="1.02"                        type="double"/>
+            <param name="max_gripper_rotation"              value="2.0"                         type="double"/>
+
+            <param name="max_robot_dof_step_size"           value="0.02"                        type="double"/>
+            <param name="min_robot_dof_step_size"           value="0.001"                       type="double"/>
+
+            <param name="max_shortcut_index_distance"       value="200"                         type="int"/>
+            <param name="max_smoothing_iterations"          value="1000"                        type="int"/>
+            <param name="smoothing_band_dist_threshold"     value="0.001"                       type="double"/>
+
+
+            <!-- READ THIS! READ THIS! READ THIS! All of the "tabbed in" parameters are measured in the bullet(task) frame, but unscaled distances -->
+                <arg name="planning_boundary_margin"            value="0.000001"/>
+                <param name="planning_x_min"                    value="$(eval world_x_min + planning_boundary_margin)"  type="double"/>
+                <param name="planning_x_max"                    value="$(eval world_x_max + planning_boundary_margin)"  type="double"/>
+                <param name="planning_y_min"                    value="$(eval world_y_min + planning_boundary_margin)"  type="double"/>
+                <param name="planning_y_max"                    value="$(eval world_y_max + planning_boundary_margin)"  type="double"/>
+                <param name="planning_z_min"                    value="$(eval world_z_min + planning_boundary_margin)"  type="double"/>
+                <param name="planning_z_max"                    value="$(eval world_z_max + planning_boundary_margin)"  type="double"/>
+        </group>
+
+        <group ns="diminishing_rigidity">
+            <param name="default_deformability"         value="14.0"            type="double"/>
+        </group>
+
+        <group ns="jacobian_controller">
+            <param name="collision_scaling_factor"      value="1000.0"          type="double"/>
+        </group>
+
+        <group ns="stretching_constraint_controller">
+            <param name="stretching_cosine_threshold"   value="0.55"            type="double"/>
+            <param name="fix_step_size"                 value="false"           type="bool"/>
+        </group>
+    </group>
+</launch>

@@ -1,0 +1,54 @@
+<launch>
+    <arg name="task_type"/>
+    <arg name="test_id"/>
+
+    <!-- Simulator arguments -->
+    <arg name="launch_simulator"                        default="true"/>
+    <arg name="start_bullet_viewer"                     default="true"/>
+    <arg name="screenshots_enabled"                     default="false"/>
+
+    <!-- Tester arguments -->
+    <arg name="launch_tester"                           default="false"/>
+    <arg name="disable_smmap_visualizations"            default="false"/>
+    <arg name="visualize_free_space_graph"              default="false"/>
+    <arg name="visualize_correspondences"               default="false"/>
+
+    <arg name="planner_node_name"       value="to_trajectory_tester"/>
+    <!-- Setup task parameters -->
+    <include file="$(find deformable_manipulation_experiment_params)/launch/experiments/$(arg task_type)_params.launch">
+        <arg name="planner_node_name"   value="$(arg planner_node_name)"/>
+    </include>
+    <!-- Logging/data folders -->
+    <arg name="root_log_folder"  value="$(find smmap)/logs"/>
+    <arg name="root_data_folder" value="/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans"/>
+    <param name="test_id"        value="$(arg test_id)"                                              type="string"/>
+    <param name="log_folder"     value="$(arg root_log_folder)/$(arg task_type)/$(arg test_id)/"     type="string"/>
+    <param name="data_folder"    value="$(arg root_data_folder)/$(arg task_type)/$(arg test_id)/"    type="string"/>
+
+    <!-- Setup the simulator -->
+    <group ns="deform_simulator_node">
+        <param name="start_bullet_viewer"               value="$(arg start_bullet_viewer)"      type="bool"/>
+        <param name="screenshots_enabled"               value="$(arg screenshots_enabled)"      type="bool"/>
+        <param name="settle_time"                       value="4.0"                             type="double"/>
+        <param name="display_grippers_axes"             value="false"                           type="bool"/>
+    </group>
+    <env name="OSG_FILE_PATH" value="$(find OpenSceneGraph)/data"/>
+    <node name="deform_simulator_node" pkg="deform_simulator" type="custom_scene_node" required="true" if="$(arg launch_simulator)"/>
+
+    <!-- Setup the tester -->
+    <arg name="base_filename" value="$(arg root_data_folder)/$(arg task_type)/$(arg test_id)/seed_a8710913d2b5df6c__batch_test_4__2019-11-15__11-23-42"/>
+    <group ns="$(arg planner_node_name)">
+        <param name="disable_smmap_visualizations"      value="$(arg disable_smmap_visualizations)"         type="bool"/>
+        <param name="visualize_free_space_graph"        value="$(arg visualize_free_space_graph)"           type="bool"/>
+        <param name="visualize_correspondences"         value="$(arg visualize_correspondences)"            type="bool"/>
+
+        <param name="world_state_file"  value="$(arg base_filename)__starting_world_state.compressed"               type="string"/>
+        <param name="rrt_path_file"     value="$(arg base_filename)__trial_idx_001__rrt_path.compressed"            type="string"/>
+        <param name="test_result_file"  value="$(arg base_filename)__trial_idx_001__path_test_results.compressed"   type="string"/>
+
+        <!-- Params shared by this file and transition_learning.launch -->
+        <include file="$(find deformable_manipulation_experiment_params)/launch/shared/rrt_params.launch"/>
+    </group>
+    <node name="$(arg planner_node_name)" pkg="smmap" type="smmap_to_trajectory_tester" required="true" if="$(arg launch_tester)"/>
+
+</launch>

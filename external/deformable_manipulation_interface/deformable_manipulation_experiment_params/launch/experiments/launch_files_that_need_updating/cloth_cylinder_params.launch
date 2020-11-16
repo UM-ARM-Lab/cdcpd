@@ -1,0 +1,17 @@
+<launch>
+    <param name="deformable_type" value="cloth"/>
+    <param name="task_type" value="cloth_cylinder_coverage"/>
+
+    <param name="default_deformability"     value="14.0"/>
+    <param name="collision_scaling_factor"  value="1000.0"/>
+    <param name="stretching_threshold"      value="$(eval (0.012 + 0.002) / 0.012)"/>
+    <param name="max_time"                  value="12.0"/>
+
+    <group ns="smmap_planner_node">
+        <param name="visualize_object_desired_motion"   value="false"/>
+        <param name="gripper_controller_type"           value="random_sampling"/>
+        <param name="max_sampling_counts"               value="5000"/>
+        <param name="stretching_cosine_threshold"       value="0.75"/>
+    </group>
+
+</launch>
