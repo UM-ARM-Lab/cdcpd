@@ -12,7 +12,6 @@ Requirements
   * Environment:
     * Ubuntu 18.04
     * ROS Melodic
-  * [OpenCV](https://opencv.org/)
   * [Gurobi](https://www.gurobi.com/)
   * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
   * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
@@ -39,7 +38,6 @@ export PATH=~/local/bin:${PATH}
 export CMAKE_PREFIX_PATH=~/local:$CMAKE_PREFIX_PATH
 ```
 
-* OpenCV: specify your installing directory and run `sudo install_scripts/install_opencv.sh`
 * Gurobi: follow instructions here `https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html`
 * Eigen: `sudo apt install libeigen3-dev`
 * faiss-1.6.3: specify your installing directory and run `sudo install_scripts/install_faiss.sh`
