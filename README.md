@@ -20,6 +20,7 @@ Requirements
   * [NOMAD-3.8.1](https://www.gerad.ca/nomad/)
   * [libsvm](https://github.com/dmcconachie/libsvm)
   * [PyTorch](https://pytorch.org/cppdocs/installing.html)
+  * [Ceres Solver-1.14.0](https://github.com/ceres-solver/ceres-solver/tree/1.14.0)
   
 Installation
 ------------
@@ -64,6 +65,7 @@ Usage          : nomad -u
 ```
 * libsvm: specify your installing directory and run `sudo install_scripts/install_svm.sh`
 * PyTorch: specify your installing directory and run `sudo install_scripts/install_torch.sh`
+* Ceres Solver: specify your installing directory and run `sudo install_scripts/install_ceres.sh`
 
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
 
