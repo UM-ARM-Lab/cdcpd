@@ -63,6 +63,7 @@ Version        : nomad -v
 Usage          : nomad -u
 ```
 * libsvm: specify your installing directory and run `sudo install_scripts/install_svm.sh`
+* PyTorch: specify your installing directory and run `sudo install_scripts/install_torch.sh`
 
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
 
