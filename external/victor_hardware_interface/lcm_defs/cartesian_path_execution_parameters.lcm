@@ -1,0 +1,9 @@
+package victor_hardware_interface;
+
+struct cartesian_path_execution_parameters
+{
+    victor_hardware_interface.cartesian_value_quantity max_velocity;
+    victor_hardware_interface.cartesian_value_quantity max_acceleration;
+    double max_nullspace_velocity;
+    double max_nullspace_acceleration;
+}

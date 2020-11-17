@@ -1,0 +1,13 @@
+package victor_hardware_interface;
+
+struct control_mode
+{
+    const int8_t IS_POSITION_MOTION=0; // Flag to bitmask
+    const int8_t IS_CARTESIAN_MOTION=1; // Flag to bitmask
+    const int8_t IS_IMPEDANCE_CONTROL=2; // Flag to bitmask
+    const int8_t JOINT_POSITION=0;
+    const int8_t JOINT_IMPEDANCE=2;
+    const int8_t CARTESIAN_POSE=1;
+    const int8_t CARTESIAN_IMPEDANCE=3;
+    int8_t mode;
+}

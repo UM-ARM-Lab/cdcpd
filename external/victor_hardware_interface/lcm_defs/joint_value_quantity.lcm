@@ -1,0 +1,12 @@
+package victor_hardware_interface;
+
+struct joint_value_quantity
+{
+    double joint_1;
+    double joint_2;
+    double joint_3;
+    double joint_4;
+    double joint_5;
+    double joint_6;
+    double joint_7;
+}

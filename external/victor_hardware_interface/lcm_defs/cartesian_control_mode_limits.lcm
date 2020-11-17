@@ -1,0 +1,9 @@
+package victor_hardware_interface;
+
+struct cartesian_control_mode_limits
+{
+    victor_hardware_interface.cartesian_value_quantity max_path_deviation;
+    victor_hardware_interface.cartesian_value_quantity max_cartesian_velocity;
+    victor_hardware_interface.cartesian_value_quantity max_control_force;
+    boolean stop_on_max_control_force;
+}

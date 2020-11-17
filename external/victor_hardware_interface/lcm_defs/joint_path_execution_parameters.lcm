@@ -1,0 +1,8 @@
+package victor_hardware_interface;
+
+struct joint_path_execution_parameters
+{
+    double joint_relative_velocity;
+    double joint_relative_acceleration;
+    double override_joint_acceleration;
+}

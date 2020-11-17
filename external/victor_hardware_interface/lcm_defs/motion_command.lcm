@@ -1,0 +1,10 @@
+package victor_hardware_interface;
+
+struct motion_command
+{
+    victor_hardware_interface.joint_value_quantity joint_position;
+    victor_hardware_interface.joint_value_quantity joint_velocity;
+    victor_hardware_interface.cartesian_pose cartesian_pose;
+    victor_hardware_interface.control_mode control_mode;
+    double timestamp;
+}

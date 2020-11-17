@@ -1,0 +1,12 @@
+package victor_hardware_interface;
+
+struct robotiq_3finger_object_status
+{
+    double timestamp;
+    int8_t status;
+    const int8_t IN_MOTION=0;
+    const int8_t AT_REQUESTED=1;
+    const int8_t STOPPED=2;
+    const int8_t CONTACT_OPENING=3;
+    const int8_t CONTACT_CLOSING=4;
+}

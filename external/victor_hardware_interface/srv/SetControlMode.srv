@@ -1,0 +1,4 @@
+victor_hardware_interface/ControlModeParameters new_control_mode
+---
+bool success
+string message

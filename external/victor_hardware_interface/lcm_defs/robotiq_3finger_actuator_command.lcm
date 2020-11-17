@@ -1,0 +1,9 @@
+package victor_hardware_interface;
+
+struct robotiq_3finger_actuator_command
+{
+    double timestamp;
+    double position;
+    double speed;
+    double force;
+}

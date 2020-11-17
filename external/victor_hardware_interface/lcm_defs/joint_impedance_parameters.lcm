@@ -1,0 +1,7 @@
+package victor_hardware_interface;
+
+struct joint_impedance_parameters
+{
+    victor_hardware_interface.joint_value_quantity joint_stiffness;
+    victor_hardware_interface.joint_value_quantity joint_damping;
+}

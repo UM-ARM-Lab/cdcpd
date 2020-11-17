@@ -1,0 +1,4 @@
+victor_hardware_interface/CartesianValueQuantity cartesian_stiffness
+float64 nullspace_stiffness
+victor_hardware_interface/CartesianValueQuantity cartesian_damping
+float64 nullspace_damping

@@ -1,0 +1,5 @@
+victor_hardware_interface/JointValueQuantity joint_position
+victor_hardware_interface/JointValueQuantity joint_velocity
+victor_hardware_interface/ControlMode control_mode
+geometry_msgs/Pose cartesian_pose
+std_msgs/Header header

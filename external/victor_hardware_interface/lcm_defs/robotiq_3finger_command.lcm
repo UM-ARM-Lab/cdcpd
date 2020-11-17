@@ -1,0 +1,10 @@
+package victor_hardware_interface;
+
+struct robotiq_3finger_command
+{
+    double timestamp;
+    victor_hardware_interface.robotiq_3finger_actuator_command finger_a_command;
+    victor_hardware_interface.robotiq_3finger_actuator_command finger_b_command;
+    victor_hardware_interface.robotiq_3finger_actuator_command finger_c_command;
+    victor_hardware_interface.robotiq_3finger_actuator_command scissor_command;
+}

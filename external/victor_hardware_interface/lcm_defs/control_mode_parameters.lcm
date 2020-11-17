@@ -1,0 +1,12 @@
+package victor_hardware_interface;
+
+struct control_mode_parameters
+{
+    victor_hardware_interface.joint_impedance_parameters joint_impedance_params;
+    victor_hardware_interface.cartesian_impedance_parameters cartesian_impedance_params;
+    victor_hardware_interface.cartesian_control_mode_limits cartesian_control_mode_limits;
+    victor_hardware_interface.joint_path_execution_parameters joint_path_execution_params;
+    victor_hardware_interface.cartesian_path_execution_parameters cartesian_path_execution_params;
+    victor_hardware_interface.control_mode control_mode;
+    double timestamp;
+}

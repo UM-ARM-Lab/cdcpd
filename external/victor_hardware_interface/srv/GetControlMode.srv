@@ -1,0 +1,3 @@
+---
+victor_hardware_interface/ControlModeParameters active_control_mode
+bool has_active_control_mode

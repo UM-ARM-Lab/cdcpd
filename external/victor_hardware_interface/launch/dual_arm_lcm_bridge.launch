@@ -1,0 +1,56 @@
+<launch>
+    <arg name="arm_command_gui"             default="false"/>
+    <arg name="talkative"                   default="true"/>
+    <!-- Note that changing these from the default requires matching changes in the Java code -->
+    <arg name="left_arm_recv_url"           default="udp://10.10.10.10:30002"/>
+    <arg name="right_arm_recv_url"          default="udp://10.10.10.10:30001"/>
+    
+    <!-- Allows users to have slightly modified versions of Victor's URDF -->
+    <arg name="model"                       default="$(find victor_description)/urdf/victor.urdf.xacro"/>
+    <param name="robot_description"         command="$(find xacro)/xacro --xacro-ns --inorder $(arg model)"/>
+
+    <include file="$(find victor_moveit_config)/launch/planning_context.launch">
+        <arg name="load_robot_description" value="false"/>
+    </include>
+    <node pkg="victor_hardware_interface" type="joint_state_publisher.py" name="joint_state_publisher"/>
+    <node pkg="robot_state_publisher"     type="robot_state_publisher"    name="robot_state_publisher"/>
+    <node pkg="victor_hardware_interface" type="arm_command_gui.py"       name="arm_command_gui"    if="$(arg arm_command_gui)"/>
+    
+    <group ns="left_arm">
+        <node pkg="victor_hardware_interface" type="victor_hardware_interface_arm_wrapper_node" name="left_arm_lcm_bridge_node" required="true" output="screen">
+            <param name="cartesian_pose_frame"  type="string" value="victor_left_arm_world_frame_kuka"/>
+            <param name="send_lcm_url"          type="string" value="udp://10.10.10.12:30000" />
+            <param name="recv_lcm_url"          type="string" value="$(arg left_arm_recv_url)"/>
+        </node>
+    </group>
+
+    <group ns="right_arm">
+        <node pkg="victor_hardware_interface" type="victor_hardware_interface_arm_wrapper_node" name="right_arm_lcm_bridge_node" required="true" output="screen">
+            <param name="cartesian_pose_frame"  type="string" value="victor_right_arm_world_frame_kuka"/>
+            <param name="send_lcm_url"          type="string" value="udp://10.10.10.11:30000"/>
+            <param name="recv_lcm_url"          type="string" value="$(arg right_arm_recv_url)"/>
+        </node>
+    </group>
+
+    <node pkg="joy"                       type="joy_node"                  name="xbox_joystick"/>
+    <node pkg="victor_hardware_interface" type="xbox_control.py"           name="xbox_to_victor">
+        <param name="enable_finger_open_close_control"     type="bool"     value="true"/>
+        <param name="enable_scissor_open_close_control"    type="bool"     value="true"/>
+    </node>
+    <node pkg="victor_hardware_interface" type="arm_wrench_republisher.py" name="arm_wrench_republisher" output="screen"/>
+    <node pkg="victor_hardware_interface" type="grasp_status_node.py"      name="grasp_status"/>
+
+    <group>
+      <machine name="victorbackpack"
+               address="victorbackpack.local"
+               user="armlab"
+               env-loader="~/ros_env.sh"
+               />
+      <node name="polly" pkg="amazon_ros_speech" type="polly.py"
+            args="'Maize leader, standing by'"
+            machine="victorbackpack"
+            if="$(arg talkative)"/>
+    </group>
+
+
+</launch>
