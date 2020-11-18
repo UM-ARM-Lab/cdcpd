@@ -84,7 +84,17 @@ catkin build
 #### Gurobi Licence
 
 Gurobi is a proprietary optimization package that we use. Please obtain a [free academic license](https://www.gurobi.com/academia/academic-program-and-licenses).
-Note that Gurobi licence activation requires a university network. If you are not on campus, follow these instructions to setup a VPN: [UMVPN](https://documentation.its.umich.edu/vpn/vpn-linux-vpn-instructions).
+
+#### Conflicting LZ4 declaration
+The combination of the operating system and ROS may lead to a specific declaration confliction for `LZ4_stream_t` and `LZ4_streamDecode_t`. The solution is described in [https://github.com/ethz-asl/lidar\_align/issues/16](https://github.com/ethz-asl/lidar_align/issues/16). Please just run the following commands in the terminal.
+
+```bash
+sudo mv /usr/include/flann/ext/lz4.h /usr/include/flann/ext/lz4.h.bak
+sudo mv /usr/include/flann/ext/lz4hc.h /usr/include/flann/ext/lz4.h.bak
+
+sudo ln -s /usr/include/lz4.h /usr/include/flann/ext/lz4.h
+sudo ln -s /usr/include/lz4hc.h /usr/include/flann/ext/lz4hc.h
+```
 
 Demo
 ------------
