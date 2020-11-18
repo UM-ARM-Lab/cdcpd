@@ -4,7 +4,7 @@ INSTALL_DIR=~/local
 SRC_REPO_DIR=$INSTALL_DIR/src
 
 sudo apt update
-sudo apt-get install -y libgmp-dev libmpfr-dev
+sudo apt-get install -y libgmp-dev libmpfr-dev libqt5svg5-dev
 
 mkdir -p $SRC_REPO_DIR; cd $SRC_REPO_DIR
 git clone https://github.com/CGAL/cgal.git
