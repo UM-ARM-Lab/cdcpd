@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 rosrun cdcpd_ros bagfile \
-_bagfile:=rope_edge_cover_2 \
+_bagfile:=../dataset/rope_edge_cover_2 \
 _zeta:=2.0 \
 _is_sim:=false \
 _is_rope:=true \

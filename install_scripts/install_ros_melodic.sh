@@ -8,6 +8,7 @@ echo "source /opt/ros/melodic/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 source /opt/ros/melodic/setup.bash
 sudo apt install -y python-rosdep python-rosinstall python-rosinstall-generator python-wstool build-essential python-rosdep
+sudo apt-get install -y librospack-dev libclass-loader-dev libroslz4-dev
 sudo rosdep init
 rosdep update
 

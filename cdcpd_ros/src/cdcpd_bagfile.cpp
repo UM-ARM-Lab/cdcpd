@@ -1169,13 +1169,7 @@ int main(int argc, char* argv[])
 
     start = std::chrono::system_clock::now(); 
     auto const bagfile = ROSHelpers::GetParam<std::string>(ph, "bagfile", "normal");
-	std::string folder;
-    if (is_sim) {
-    	folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test_blender/dataset/";
-    } else {
-    	folder = ros::package::getPath("cdcpd_ros") + "/../cdcpd_test/dataset/09_19_2020/";
-    }
-    rosbag::Bag bag(folder + bagfile + ".bag", rosbag::bagmode::Read);
+    rosbag::Bag bag(bagfile + ".bag", rosbag::bagmode::Read);
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
 	ifstream cpd_phy_test;

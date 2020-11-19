@@ -14,3 +14,5 @@ cmake-build-debug
 .idea
 
 src/cpd_physics/
+dataset/*
+

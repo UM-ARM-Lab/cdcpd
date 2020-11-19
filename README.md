@@ -69,7 +69,7 @@ Usage          : nomad -u
 
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
 
-Specify workspace name and run `create_ws.sh`
+Specify workspace name and run `create_ws.sh` and add `source ~/YOUR_WORKSPACE/devel/setup.bash` to `~/.bashrc`
 
 #### Build from source
 
