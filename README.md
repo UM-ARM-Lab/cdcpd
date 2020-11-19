@@ -98,12 +98,6 @@ sudo ln -s /usr/include/lz4hc.h /usr/include/flann/ext/lz4hc.h
 
 Demo
 ------------
-To run the demo, you will need to download some [dataset](https://drive.google.com/drive/folders/17_xRbsX6Pnk9KkTxouIu1FLqE1yNmIdW?usp=sharing).
-Also, you need to download [cdcpd_ros](https://github.com/UM-ARM-Lab/cdcpd_ros) and put it under the same folder as cdcpd.
-You need to specify `.bag` file path in the running command.
+To run the demo, you will need to download some [dataset](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing). Then run the corresponding scripts under `cdcpd/scripts`. You need to specify `.bag` file path in the shell script.
 
-To run the bagfile demo start, run the following node:
-* `rosrun cdcpd_ros bagfile _bagfile:="NAME_OF_BAG"`
-Note that the bag is assumed to exist in `cdcpd_test/datasets/`
-
-My own running result is [here](https://drive.google.com/open?id=1HovZ9eJMZ1WYyCsdsISw5YndlS-BUwSx), which includes bag files and MP4 files.
+My own running result is [here](https://drive.google.com/drive/folders/1MZTR-hEaU5czsxzUIKvPnCCAEd29aM4u?usp=sharing), which includes MP4 files.
