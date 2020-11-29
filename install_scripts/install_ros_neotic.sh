@@ -5,6 +5,6 @@ sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31
 sudo apt update
 sudo apt install -y ros-noetic-desktop-full
 echo "source /opt/ros/neotic/setup.bash" >> ~/.bashrc
-sudo apt-get install -y librospack-dev libclass-loader-dev libroslz4-dev
+sudo apt-get install -y librospack-dev libclass-loader-dev libroslz4-dev libactionlib-dev libxmlrpcpp-dev librosconsole-dev
 source ~/.bashrc
 source /opt/ros/neotic/setup.bash
