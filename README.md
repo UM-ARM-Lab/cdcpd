@@ -25,6 +25,14 @@ Requirements
 Installation
 ------------
 
+#### Obtain installing scripts
+Run the following command under any directory.
+```
+git clone https://github.com/UM-ARM-Lab/cdcpd.git
+cd cdcpd
+git checkout CDCPD2
+```
+
 #### Installing ROS (ignore it if you already have one)
 
 Run `sudo install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo install_scripts/install_ros_neotic.sh` if you use Ubuntu 20.04
