@@ -33,5 +33,5 @@ cmake -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} ..
 # cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} -DWITH_OPENMP=ON
 make -j `nproc` -l `nproc`
 make test
-sudo make install
+make install
 
