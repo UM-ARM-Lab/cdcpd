@@ -1,9 +1,0 @@
-package victor_hardware_interface;
-
-struct cartesian_impedance_parameters
-{
-    victor_hardware_interface.cartesian_value_quantity cartesian_stiffness;
-    double nullspace_stiffness;
-    victor_hardware_interface.cartesian_value_quantity cartesian_damping;
-    double nullspace_damping;
-}

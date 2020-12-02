@@ -1,9 +1,0 @@
-package victor_hardware_interface;
-
-struct robotiq_3finger_actuator_status
-{
-    double timestamp;
-    double position_request;
-    double position;
-    double current;
-}
