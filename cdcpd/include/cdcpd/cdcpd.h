@@ -146,8 +146,7 @@ public:
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
                       const bool is_prediction = true,
-					  const int pred_choice = 0,
-                      const std::vector<FixedPoint>& fixed_points = {});
+					            const int pred_choice = 0);
 
 
     Output operator()(const cv::Mat& rgb, // RGB image
@@ -157,15 +156,15 @@ public:
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
                       const smmap::AllGrippersSinglePoseDelta& q_dot,
                       const smmap::AllGrippersSinglePose& q_config,
-					  const std::vector<bool> is_grasped,
-				  	  std::shared_ptr<ros::NodeHandle> nh,
-				  	  const double translation_dir_deformability,
-				  	  const double translation_dis_deformability,
-				      const double rotation_deformability,
+                      const std::vector<bool> is_grasped,
+                      std::shared_ptr<ros::NodeHandle> nh,
+                      const double translation_dir_deformability,
+                      const double translation_dis_deformability,
+                      const double rotation_deformability,
                       const bool self_intersection = true,
                       const bool interation_constrain = true,
                       const bool is_prediction = true,
-					  const int pred_choice = 0,
+					            const int pred_choice = 0,
                       const std::vector<FixedPoint>& fixed_points = {});
 
 	Output operator()(const cv::Mat& rgb, // RGB image
