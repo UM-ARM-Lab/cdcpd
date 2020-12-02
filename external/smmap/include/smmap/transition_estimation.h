@@ -3,7 +3,7 @@
 
 #include <arc_utilities/maybe.hpp>
 #include <smmap_utilities/visualization_tools.h>
-#include "smmap/trajectory.hpp"
+#include <smmap_utilities/trajectory.hpp>
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
 #include "smmap/classifier.h"

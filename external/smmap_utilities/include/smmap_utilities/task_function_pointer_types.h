@@ -2,8 +2,10 @@
 #define TASK_FUNCTION_POINTER_TYPES_H
 
 #include <functional>
+#include <vector>
+#include <deformable_manipulation_msgs/messages.h>
 
-#include "smmap/trajectory.hpp"
+#include <smmap_utilities/trajectory.hpp>
 
 namespace smmap
 {

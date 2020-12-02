@@ -6,7 +6,7 @@
 #include <deformable_manipulation_experiment_params/xyzgrid.h>
 #include <smmap_utilities/visualization_tools.h>
 #include <smmap_utilities/grippers.h>
-#include "smmap/trajectory.hpp"
+#include <smmap_utilities/trajectory.hpp>
 
 namespace smmap
 {

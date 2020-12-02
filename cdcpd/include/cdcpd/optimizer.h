@@ -1,7 +1,6 @@
 #ifndef OPTIMIZER_H
 #define OPTIMIZER_H
 
-#define CGAL_PMP_USE_CERES_SOLVER
 #define CGAL_USE_BASIC_VIEWER
 
 #include <algorithm>

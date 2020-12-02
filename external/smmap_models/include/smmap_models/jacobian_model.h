@@ -1,7 +1,7 @@
 #ifndef JACOBIAN_MODEL_H
 #define JACOBIAN_MODEL_H
 
-#include "smmap/deformable_model.h"
+#include <smmap_models/deformable_model.h>
 
 namespace smmap
 {

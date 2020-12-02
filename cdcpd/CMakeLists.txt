@@ -1,29 +1,26 @@
 cmake_minimum_required(VERSION 3.9)
-#project(cdcpd VERSION 0.1.0
-#    DESCRIPTION "Constrained Deformable Coherent Point Drift implementation"
-#    LANGUAGES CXX
-
 project(cdcpd)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CATKIN_PACKAGES
-    smmap
-	sdf_tools
-)
+        smmap_models
+        smmap_utilities
+        sdf_tools
+        )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/
 set(default_build_type "Release")
 #set(default_build_type "RelWithDebInfo")
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(WARNING "Setting build type to '${default_build_type}' as none was specified.")
     set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-        STRING "Choose the type of build." FORCE)
+            STRING "Choose the type of build." FORCE)
     # Set the possible values of build type for cmake-gui
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-        "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
-endif()
+            "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif ()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
@@ -34,7 +31,6 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
 find_package(Fgt REQUIRED)
-find_package(Ceres REQUIRED)
 find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
@@ -43,62 +39,43 @@ find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization feature
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 catkin_package(
-    INCLUDE_DIRS    include
-    LIBRARIES       cdcpd
-    CATKIN_DEPENDS  ${CATKIN_PACKAGES} 
-    DEPENDS
+        INCLUDE_DIRS include
+        LIBRARIES cdcpd
+        CATKIN_DEPENDS ${CATKIN_PACKAGES}
+        DEPENDS
 )
 
-include_directories(include PUBLIC 
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>)
-include_directories(include SYSTEM PUBLIC 
-    ${PCL_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS})
-include_directories(include SYSTEM PRIVATE 
-    ${catkin_INCLUDE_DIRS}
-    ${GUROBI_INCLUDE_DIRS}
-    ${FAISS_INCLUDE_DIRS}
-    ${CERES_INCLUDE_DIRS})
+include_directories(include PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>)
+include_directories(include SYSTEM PUBLIC
+        ${PCL_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS})
+include_directories(include SYSTEM PRIVATE
+        ${catkin_INCLUDE_DIRS}
+        ${GUROBI_INCLUDE_DIRS}
+        ${FAISS_INCLUDE_DIRS})
 
 ### The library itself
 add_library(cdcpd SHARED
-    src/cdcpd.cpp
-    src/optimizer.cpp
-	src/obs_util.cpp
-    src/past_template_matcher.cpp
-)
-
-# qt5_use_modules(cdcpd Xml Script OpenGL Svg)
-
-#target_include_directories(cdcpd PUBLIC 
-#    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-#    $<INSTALL_INTERFACE:include>)
-#target_include_directories(cdcpd SYSTEM PUBLIC 
-#    ${PCL_INCLUDE_DIRS}
-#    ${OpenCV_INCLUDE_DIRS})
-#target_include_directories(cdcpd SYSTEM PRIVATE 
-#    ${GUROBI_INCLUDE_DIRS}
-#    ${FAISS_INCLUDE_DIRS}
-#    ${smmap_INCLUDE_DIRS})
-
-#add_custom_target(cdcpd_headers SOURCES
-#    include/cdcpd/*.h
-#)
+        src/cdcpd.cpp
+        src/optimizer.cpp
+        src/obs_util.cpp
+        src/past_template_matcher.cpp
+        )
 
 target_link_libraries(cdcpd PUBLIC
-    ${PCL_LIBRARIES}
-    ${OpenCV_LIBS}
-    Eigen3::Eigen)
+        ${PCL_LIBRARIES}
+        ${OpenCV_LIBS}
+        Eigen3::Eigen)
 target_link_libraries(cdcpd PRIVATE
-    ${catkin_LIBRARIES}
-    ${GUROBI_LIBRARIES}
-    ${FAISS_LIBRARY}
-    ${CERES_LIBRARIES}
-    Fgt::Library-C++
-	CGAL::CGAL
-	CGAL::CGAL_Qt5
-	Qt5::Gui)
+        ${catkin_LIBRARIES}
+        ${GUROBI_LIBRARIES}
+        ${FAISS_LIBRARY}
+        Fgt::Library-C++
+        CGAL::CGAL
+        CGAL::CGAL_Qt5
+        Qt5::Gui)
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
 target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -g)
@@ -116,12 +93,12 @@ add_library(cdcpd::cdcpd ALIAS cdcpd)
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES
-	include/cdcpd/cdcpd.h 
-	include/cdcpd/optimizer.h
-	include/cdcpd/obs_util.h 
-	include/cdcpd/past_template_matcher.h 
-	DESTINATION 
-	include/cdcpd)
+        include/cdcpd/cdcpd.h
+        include/cdcpd/optimizer.h
+        include/cdcpd/obs_util.h
+        include/cdcpd/past_template_matcher.h
+        DESTINATION
+        include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 
 ### install(TARGETS cdcpd 
@@ -146,9 +123,9 @@ install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
 
 ### Testing
 
-if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include(CTest)
-endif()
+endif ()
 
 ### if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
 ###    add_subdirectory(tests)

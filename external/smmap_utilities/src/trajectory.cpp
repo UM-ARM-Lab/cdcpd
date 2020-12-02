@@ -1,8 +1,8 @@
-#include "smmap/trajectory.hpp"
+#include <smmap_utilities/trajectory.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/serialization_eigen.hpp>
-#include "smmap/ros_communication_helpers.h"
+#include <smmap_utilities/ros_communication_helpers.h>
 
 namespace smmap
 {

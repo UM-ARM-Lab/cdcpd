@@ -11,7 +11,7 @@
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <smmap_utilities/grippers.h>
 
-#include "smmap/task_function_pointer_types.h"
+#include <smmap_utilities/task_function_pointer_types.h>
 
 namespace smmap
 {

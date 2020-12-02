@@ -2,7 +2,7 @@
 #define DEFORMABLE_CONTROLLER_HPP
 
 #include <smmap_utilities/visualization_tools.h>
-#include "smmap/deformable_model.h"
+#include <smmap_models/deformable_model.h>
 #include "smmap/robot_interface.h"
 
 namespace smmap

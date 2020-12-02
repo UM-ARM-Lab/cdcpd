@@ -1,4 +1,4 @@
-#include "smmap/diminishing_rigidity_model.h"
+#include <smmap_models/diminishing_rigidity_model.h>
 
 #include <cmath>
 #include <arc_utilities/eigen_helpers.hpp>

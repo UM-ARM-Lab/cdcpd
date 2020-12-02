@@ -1,4 +1,4 @@
-#include "smmap/adaptive_jacobian_model.h"
+#include <smmap_models/adaptive_jacobian_model.h>
 
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers.hpp>

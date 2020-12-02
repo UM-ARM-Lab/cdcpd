@@ -3,7 +3,7 @@
 
 #include <sdf_tools/sdf.hpp>
 
-#include "smmap/deformable_model.h"
+#include <smmap_models/deformable_model.h>
 
 namespace smmap
 {

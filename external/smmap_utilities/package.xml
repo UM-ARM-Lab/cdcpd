@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<package>
+<package format="2">
   <name>smmap_utilities</name>
   <version>0.0.1</version>
   <description>Utilities pulled from the SMMAP package.</description>
@@ -9,21 +9,10 @@
 
   <buildtool_depend>catkin</buildtool_depend>
 
-  <build_depend>arc_utilities</build_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>kinematics_toolbox</build_depend>
-  <build_depend>deformable_manipulation_experiment_params</build_depend>
-  <build_depend>deformable_manipulation_msgs</build_depend>
-
-  <run_depend>arc_utilities</run_depend>
-  <run_depend>geometry_msgs</run_depend>
-  <run_depend>kinematics_toolbox</run_depend>
-  <run_depend>deformable_manipulation_experiment_params</run_depend>
-  <run_depend>deformable_manipulation_msgs</run_depend>
- 
-  <!-- The export tag contains other, unspecified, tags -->
-  <export>
-    <!-- Other tools can request additional information be placed here -->
-
-  </export>
+  <depend>arc_utilities</depend>
+  <depend>deformable_manipulation_experiment_params</depend>
+  <depend>deformable_manipulation_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>kinematics_toolbox</depend>
+  <depend>sdf_tools</depend>
 </package>

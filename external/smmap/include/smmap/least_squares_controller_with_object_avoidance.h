@@ -2,7 +2,7 @@
 #define LEAST_SQUARES_CONTROLLER_WITH_OBJECT_AVOIDANCE_H
 
 #include "smmap/deformable_controller.h"
-#include "smmap/jacobian_model.h"
+#include <smmap_models/jacobian_model.h>
 
 namespace smmap
 {

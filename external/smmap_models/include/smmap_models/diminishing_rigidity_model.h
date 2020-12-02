@@ -1,7 +1,7 @@
 #ifndef DIMINISHING_RIGIDITY_MODEL_H
 #define DIMINISHING_RIGIDITY_MODEL_H
 
-#include "smmap/jacobian_model.h"
+#include <smmap_models/jacobian_model.h>
 
 namespace smmap
 {

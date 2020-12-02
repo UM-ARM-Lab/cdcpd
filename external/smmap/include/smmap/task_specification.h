@@ -12,8 +12,8 @@
 #include <deformable_manipulation_experiment_params/xyzgrid.h>
 #include <smmap_utilities/visualization_tools.h>
 
-#include "smmap/ros_communication_helpers.h"
-#include "smmap/task_function_pointer_types.h"
+#include <smmap_utilities/ros_communication_helpers.h>
+#include <smmap_utilities/task_function_pointer_types.h>
 
 
 namespace smmap

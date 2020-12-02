@@ -1,4 +1,4 @@
-#include "smmap/constraint_jacobian_model.h"
+#include <smmap_models/constraint_jacobian_model.h>
 
 #include <chrono>
 #include <cmath>

@@ -1,4 +1,4 @@
-#include "smmap/least_squares_jacobian_model.h"
+#include <smmap_models/least_squares_jacobian_model.h>
 
 #include <arc_utilities/eigen_helpers.hpp>
 #include <ros/ros.h>

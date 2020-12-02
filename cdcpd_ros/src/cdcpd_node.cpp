@@ -131,7 +131,9 @@ int main(int argc, char* argv[]) {
 
     // Perform and record the update
     auto hsv_mask = ropeHsvMask(rgb);
-    auto out = cdcpd(rgb, depth, hsv_mask, cam, template_cloud, true, false, fixed_points);
+    const smmap::AllGrippersSinglePoseDelta q_dot;
+    const smmap::AllGrippersSinglePose q_config;
+    auto out = cdcpd.operator()(rgb, depth, hsv_mask, cam, template_cloud, q_dot, q_config, true, true, false);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids

@@ -1,4 +1,4 @@
-#include "smmap/deformable_model.h"
+#include <smmap_models/deformable_model.h>
 
 #include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/timing.hpp>

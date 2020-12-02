@@ -15,7 +15,6 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
 
-#include <smmap/ros_communication_helpers.h>
 #include <sdf_tools/collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
@@ -366,7 +365,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 
   // TODO: how to configure nh so that the it can get correct sdf
   // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
-  // const auto sdf = smmap::GetEnvironmentSDF(*nh);
 
   const double res = 1.0;
   const double size = 10.0;
@@ -484,7 +482,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
 
   // TODO: how to configure nh so that the it can get correct sdf
   // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
-  // const auto sdf = smmap::GetEnvironmentSDF(*nh);
 
   const double res = 1.0;
   const double size = 10.0;

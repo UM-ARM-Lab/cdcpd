@@ -9,9 +9,9 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 
-#include "smmap/ros_communication_helpers.h"
+#include <smmap_utilities/ros_communication_helpers.h>
 #include "smmap/quinlan_rubber_band.h"
-#include "smmap/trajectory.hpp"
+#include <smmap_utilities/trajectory.hpp>
 
 #define ENABLE_BAND_LOAD_SAVE 0
 //#define ENABLE_BAND_LOAD_SAVE 1

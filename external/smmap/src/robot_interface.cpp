@@ -6,7 +6,7 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 #include <tf2_eigen/tf2_eigen.h>
-#include "smmap/ros_communication_helpers.h"
+#include <smmap_utilities/ros_communication_helpers.h>
 
 using namespace Eigen;
 using namespace EigenHelpers;

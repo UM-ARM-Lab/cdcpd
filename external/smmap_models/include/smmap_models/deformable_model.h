@@ -5,7 +5,7 @@
 #include <arc_utilities/log.hpp>
 #include <smmap_utilities/grippers.h>
 
-#include "smmap/task_function_pointer_types.h"
+#include <smmap_utilities/task_function_pointer_types.h>
 
 namespace smmap
 {

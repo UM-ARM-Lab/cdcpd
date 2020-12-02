@@ -8,8 +8,8 @@
 
 #include <arc_utilities/ros_helpers.hpp>
 
-#include <smmap/constraint_jacobian_model.h>
-#include <smmap/diminishing_rigidity_model.h>
+#include <smmap_models/constraint_jacobian_model.h>
+#include <smmap_models/diminishing_rigidity_model.h>
 #include <smmap_utilities/grippers.h>
 
 #include "cdcpd/past_template_matcher.h"

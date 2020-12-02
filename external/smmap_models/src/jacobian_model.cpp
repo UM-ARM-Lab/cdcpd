@@ -1,4 +1,4 @@
-#include "smmap/jacobian_model.h"
+#include <smmap_models/jacobian_model.h>
 #include <arc_utilities/eigen_helpers.hpp>
 
 using namespace smmap;

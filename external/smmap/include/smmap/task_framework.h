@@ -5,10 +5,10 @@
 #include <smmap_utilities/multiarm_bandits.h>
 #include <smmap_utilities/visualization_tools.h>
 
-#include "smmap/task_function_pointer_types.h"
-#include "smmap/task_specification.h"
+#include <smmap_utilities/task_function_pointer_types.h>
+#include <smmap/task_specification.h>
 #include "smmap/robot_interface.h"
-#include "smmap/deformable_model.h"
+#include <smmap_models/deformable_model.h>
 #include "smmap/deformable_controller.h"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/band_rrt.h"

@@ -7,7 +7,7 @@
 #include <omp.h>
 
 #include "smmap/stretching_constraint_controller.h"
-#include "smmap/ros_communication_helpers.h"
+#include <smmap_utilities/ros_communication_helpers.h>
 
 // Needed due to rounding problems
 #define GRIPPER_COLLISION_REPULSION_MARGIN 0.000001

@@ -1,4 +1,4 @@
-#include "smmap/ros_communication_helpers.h"
+#include <smmap_utilities/ros_communication_helpers.h>
 
 #include <mutex>
 
