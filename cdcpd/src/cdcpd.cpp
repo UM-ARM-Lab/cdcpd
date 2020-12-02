@@ -1544,15 +1544,13 @@ CDCPD::Output CDCPD::operator()(
         const bool self_intersection,
         const bool interation_constrain,
         const bool is_prediction,
-		const int pred_choice,
-        const std::vector<CDCPD::FixedPoint>& fixed_points)
+		    const int pred_choice)
 {
     // rgb: CV_8U3C rgb image
     // depth: CV_16U depth image
     // mask: CV_8U mask for segmentation
     // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
     // template_edges: (2, K) matrix corresponding to E in the paper
-    // fixed_points: fixed points during the tracking
 
     assert(rgb.type() == CV_8UC3);
     if (is_sim) {
@@ -1635,7 +1633,7 @@ CDCPD::Output CDCPD::operator()(
     }
     Matrix3Xf TY, TY_pred;
     if (is_prediction) {
-        // start = std::chrono::system_clock::now(); 
+        // start = std::chrono::system_clock::now();
         TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>(); // end = std::chrono::system_clock::now(); std::cout << "predict: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
         // TY_pred = Y;
         // for (int col = 0; col < gripper_idx.cols(); ++col)
