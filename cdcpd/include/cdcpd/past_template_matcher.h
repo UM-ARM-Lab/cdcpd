@@ -9,27 +9,29 @@
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 
-class PastTemplateMatcher {
-public:
-    PastTemplateMatcher(size_t _sample_size);
+class PastTemplateMatcher
+{
+ public:
+  PastTemplateMatcher(size_t _sample_size);
 
-    size_t size();
+  size_t size();
 
-    // TODO returning vectors of big matrices is very inefficient. Perhaps return pointers, or something, instead.
-    std::vector<Eigen::Matrix3Xf> query_template(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points, int k=8);
+  // TODO returning vectors of big matrices is very inefficient. Perhaps return pointers, or something, instead.
+  std::vector<Eigen::Matrix3Xf> query_template(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points, int k = 8);
 
-    void add_template(pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_points, Eigen::Matrix3Xf tracking_result);
+  void add_template(pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_points, Eigen::Matrix3Xf tracking_result);
 
-private:
-    cv::Mat downsampled_feature(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
-    cv::Mat vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
+ private:
+  cv::Mat downsampled_feature(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
 
-    cv::FlannBasedMatcher matcher;
-    std::vector<Eigen::Matrix3Xf> recovery_templates;
-    std::vector<cv::Mat> recovery_features;
-    std::random_device rd;
-    std::mt19937 gen;
-    std::uniform_int_distribution<> index_generator;
-    size_t sample_size;
+  cv::Mat vfh(pcl::PointCloud<pcl::PointXYZ>::ConstPtr filtered_points);
+
+  cv::FlannBasedMatcher matcher;
+  std::vector<Eigen::Matrix3Xf> recovery_templates;
+  std::vector<cv::Mat> recovery_features;
+  std::random_device rd;
+  std::mt19937 gen;
+  std::uniform_int_distribution<> index_generator;
+  size_t sample_size;
 };
 
