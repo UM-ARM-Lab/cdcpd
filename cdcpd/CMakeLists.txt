@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CATKIN_PACKAGES
     smmap
+	sdf_tools
 )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/

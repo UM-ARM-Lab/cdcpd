@@ -58,7 +58,7 @@
 // #define SHAPE_COMP
 // #endif
 
-typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;  
+typedef CGAL::Exact_predicates_inexact_constructions_kernel             K;
 typedef K::FT                                                           FT;
 typedef K::Point_3                                                      Point_3;
 typedef K::Ray_3                                                        Ray_3;
@@ -100,7 +100,7 @@ public:
         Eigen::Vector3f position;
        int template_index;
     };
-	
+
 	CDCPD();
 
     CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
@@ -121,7 +121,7 @@ public:
 		  const float zeta = 10.0,
 		  const std::vector<float> cylinder_data = {},
 		  const bool is_sim = false);
-	
+
 	CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
           const Eigen::Matrix2Xi& _template_edges,
           #ifdef SHAPE_COMP
@@ -167,7 +167,7 @@ public:
                       const bool is_prediction = true,
 					  const int pred_choice = 0,
                       const std::vector<FixedPoint>& fixed_points = {});
-    
+
 	Output operator()(const cv::Mat& rgb, // RGB image
                       const cv::Mat& depth, // Depth image
                       const cv::Mat& mask,
@@ -220,13 +220,13 @@ private:
                          const cv::Mat& depth,
                          const cv::Mat& mask,
 						 const Eigen::Matrix3f& intr);
- 
+
     Eigen::Matrix3Xf cheng_cpd(const Eigen::Matrix3Xf& X,
                          	   const Eigen::Matrix3Xf& Y,
                          	   const cv::Mat& depth,
                          	   const cv::Mat& mask,
 						 	   const Eigen::Matrix3f& intr);
- 
+
     Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd& P,
                              const smmap::AllGrippersSinglePoseDelta& q_dot,
                              const smmap::AllGrippersSinglePose& q_config,
@@ -272,4 +272,3 @@ private:
 };
 
 #endif
-
