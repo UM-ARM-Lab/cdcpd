@@ -1,4 +1,0 @@
-victor_hardware_interface/CartesianValueQuantity max_velocity
-victor_hardware_interface/CartesianValueQuantity max_acceleration
-float64 max_nullspace_velocity
-float64 max_nullspace_acceleration
