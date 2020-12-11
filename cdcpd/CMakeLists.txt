@@ -15,11 +15,10 @@ find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
-find_package(Fgt REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
 
-# horrid hack to remove the space at the beginning of the list 
+# horrid hack to remove the space at the beginning of the list
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 catkin_package(
@@ -32,10 +31,10 @@ catkin_package(
 include_directories(include PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
-include_directories(include SYSTEM PUBLIC 
+include_directories(include SYSTEM PUBLIC
     ${PCL_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS})
-include_directories(include SYSTEM PRIVATE 
+include_directories(include SYSTEM PRIVATE
     ${catkin_INCLUDE_DIRS}
     ${GUROBI_INCLUDE_DIRS}
     ${FAISS_INCLUDE_DIRS}
@@ -57,7 +56,6 @@ target_link_libraries(cdcpd PRIVATE
     ${GUROBI_LIBRARIES}
     ${FAISS_LIBRARY}
     ${CERES_LIBRARIES}
-    Fgt::Library-C++
 	)
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
@@ -76,10 +74,10 @@ add_library(cdcpd::cdcpd ALIAS cdcpd)
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES
-	include/cdcpd/cdcpd.h 
+	include/cdcpd/cdcpd.h
 	include/cdcpd/optimizer.h
 	include/cdcpd/past_template_matcher.h
-	DESTINATION 
+	DESTINATION
 	include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 
