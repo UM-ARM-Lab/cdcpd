@@ -11,8 +11,11 @@
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
+<<<<<<< HEAD
   <build_depend>rosconsole</build_depend>
   <build_depend>pybind11_catkin</build_depend>
+=======
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
   <build_depend>sensor_msgs</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>eigen</build_depend>

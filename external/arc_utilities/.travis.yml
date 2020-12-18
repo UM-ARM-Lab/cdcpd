@@ -5,11 +5,19 @@ services:
 
 env:
   matrix:
+<<<<<<< HEAD
   - ROS_VERSION=melodic BUILD_TYPE=Debug
   - ROS_VERSION=melodic BUILD_TYPE=Release
   - ROS_VERSION=noetic BUILD_TYPE=Debug
   - ROS_VERSION=noetic BUILD_TYPE=Release
 
+=======
+  - ROS_VERSION=kinetic BUILD_TYPE=Debug
+  - ROS_VERSION=kinetic BUILD_TYPE=Release
+  - ROS_VERSION=melodic BUILD_TYPE=Debug
+  - ROS_VERSION=melodic BUILD_TYPE=Release
+    
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
 before_install:
   - docker build -t ubuntu --build-arg ROS_VERSION=$ROS_VERSION ./docker
   - docker run --name "ubuntu-test" -d -v $(pwd):/root/catkin_ws/src/arc_utilities -w /root/catkin_ws ubuntu tail -f /dev/null

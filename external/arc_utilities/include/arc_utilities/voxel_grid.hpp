@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -11,18 +12,40 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+=======
+#include <stdlib.h>
+#include <stdio.h>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <iostream>
+#include <algorithm>
+#include <Eigen/Geometry>
+#include <stdexcept>
+#include <arc_utilities/arc_helpers.hpp>
+#include <arc_utilities/serialization_eigen.hpp>
+#include <arc_utilities/eigen_typedefs.hpp>
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
 
 #ifndef VOXEL_GRID_HPP
 #define VOXEL_GRID_HPP
 
+<<<<<<< HEAD
 namespace VoxelGrid {
 struct GRID_INDEX {
+=======
+namespace VoxelGrid
+{
+struct GRID_INDEX
+{
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
   int64_t x;
   int64_t y;
   int64_t z;
 
   GRID_INDEX() : x(-1), y(-1), z(-1) {}
 
+<<<<<<< HEAD
   GRID_INDEX(const int64_t in_x, const int64_t in_y, const int64_t in_z) : x(in_x), y(in_y), z(in_z) {}
 
   bool operator==(const GRID_INDEX& other) const { return (x == other.x && y == other.y && z == other.z); }
@@ -31,6 +54,22 @@ struct GRID_INDEX {
 template <typename T, typename BackingStore = std::vector<T>>
 class VoxelGrid {
  protected:
+=======
+  GRID_INDEX(const int64_t in_x, const int64_t in_y, const int64_t in_z)
+    : x(in_x), y(in_y), z(in_z) {}
+
+  bool operator==(const GRID_INDEX& other) const
+  {
+    return (x == other.x && y == other.y && z == other.z);
+  }
+};
+
+template<typename T, typename BackingStore=std::vector<T>>
+class VoxelGrid
+{
+protected:
+
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
   Eigen::Isometry3d origin_transform_;
   Eigen::Isometry3d inverse_origin_transform_;
   T default_value_;
@@ -52,6 +91,7 @@ class VoxelGrid {
   int64_t num_z_cells_;
   bool initialized_;
 
+<<<<<<< HEAD
   inline int64_t GetDataIndex(const int64_t x_index, const int64_t y_index, const int64_t z_index) const {
     return (x_index * stride1_) + (y_index * stride2_) + z_index;
   }
@@ -64,23 +104,62 @@ class VoxelGrid {
     if ((data_index >= 0) && (data_index < (int64_t)data_.size())) {
       return data_[data_index];
     } else {
+=======
+  inline int64_t GetDataIndex(const int64_t x_index,
+                              const int64_t y_index,
+                              const int64_t z_index) const
+  {
+    return (x_index * stride1_) + (y_index * stride2_) + z_index;
+  }
+
+  inline int64_t GetDataIndex(const GRID_INDEX& index) const
+  {
+    return (index.x * stride1_) + (index.y * stride2_) + index.z;
+  }
+
+  inline T& AccessIndex(const int64_t& data_index)
+  {
+    if ((data_index >= 0) && (data_index < (int64_t)data_.size()))
+    {
+      return data_[data_index];
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       throw std::out_of_range("data_index out of range");
     }
   }
 
+<<<<<<< HEAD
   inline const T& AccessIndex(const int64_t& data_index) const {
     if ((data_index >= 0) && (data_index < (int64_t)data_.size())) {
       return data_[data_index];
     } else {
+=======
+  inline const T& AccessIndex(const int64_t& data_index) const
+  {
+    if ((data_index >= 0) && (data_index < (int64_t)data_.size()))
+    {
+      return data_[data_index];
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       throw std::out_of_range("data_index out of range");
     }
   }
 
+<<<<<<< HEAD
   inline void SetContents(const T& value) {
+=======
+  inline void SetContents(const T& value)
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     data_.clear();
     data_.resize(num_x_cells_ * num_y_cells_ * num_z_cells_, value);
   }
 
+<<<<<<< HEAD
   inline void SafetyCheckSizes(const double cell_x_size, const double cell_y_size, const double cell_z_size,
                                const double x_size, const double y_size, const double z_size) const {
     if (cell_x_size <= 0.0) {
@@ -135,10 +214,90 @@ class VoxelGrid {
       throw std::invalid_argument("y_size must not be INF");
     }
     if (std::isinf(z_size) != 0) {
+=======
+  inline void SafetyCheckSizes(const double cell_x_size,
+                               const double cell_y_size,
+                               const double cell_z_size,
+                               const double x_size,
+                               const double y_size,
+                               const double z_size) const
+  {
+    if (cell_x_size <= 0.0)
+    {
+      throw std::invalid_argument("cell_x_size must be positive and non-zero");
+    }
+    if (std::isnan(cell_x_size))
+    {
+      throw std::invalid_argument("cell_x_size must not be NaN");
+    }
+    if (std::isinf(cell_x_size) != 0)
+    {
+      throw std::invalid_argument("cell_x_size must not be INF");
+    }
+    if (cell_y_size <= 0.0)
+    {
+      throw std::invalid_argument("cell_y_size must be positive and non-zero");
+    }
+    if (std::isnan(cell_y_size))
+    {
+      throw std::invalid_argument("cell_y_size must not be NaN");
+    }
+    if (std::isinf(cell_y_size) != 0)
+    {
+      throw std::invalid_argument("cell_y_size must not be INF");
+    }
+    if (cell_z_size <= 0.0)
+    {
+      throw std::invalid_argument("cell_z_size must be positive and non-zero");
+    }
+    if (std::isnan(cell_z_size))
+    {
+        throw std::invalid_argument("cell_z_size must not be NaN");
+    }
+    if (std::isinf(cell_z_size) != 0)
+    {
+      throw std::invalid_argument("cell_z_size must not be INF");
+    }
+    if (x_size <= 0.0)
+    {
+      throw std::invalid_argument("x_size must be positive and non-zero");
+    }
+    if (y_size <= 0.0)
+    {
+      throw std::invalid_argument("y_size must be positive and non-zero");
+    }
+    if (z_size <= 0.0)
+    {
+      throw std::invalid_argument("z_size must be positive and non-zero");
+    }
+    if (std::isnan(x_size))
+    {
+      throw std::invalid_argument("x_size must not be NaN");
+    }
+    if (std::isnan(y_size))
+    {
+      throw std::invalid_argument("y_size must not be NaN");
+    }
+    if (std::isnan(z_size))
+    {
+      throw std::invalid_argument("z_size must not be NaN");
+    }
+    if (std::isinf(x_size) != 0)
+    {
+      throw std::invalid_argument("x_size must not be INF");
+    }
+    if (std::isinf(y_size) != 0)
+    {
+      throw std::invalid_argument("y_size must not be INF");
+    }
+    if (std::isinf(z_size) != 0)
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       throw std::invalid_argument("z_size must not be INF");
     }
   }
 
+<<<<<<< HEAD
   inline void SafetyCheckSizes(const double cell_x_size, const double cell_y_size, const double cell_z_size,
                                const int64_t num_x_cells, const int64_t num_y_cells, const int64_t num_z_cells) const {
     if (cell_x_size <= 0.0) {
@@ -175,14 +334,83 @@ class VoxelGrid {
       throw std::invalid_argument("num_y_cells must be positive and non-zero");
     }
     if (num_z_cells <= 0) {
+=======
+  inline void SafetyCheckSizes(const double cell_x_size,
+                               const double cell_y_size,
+                               const double cell_z_size,
+                               const int64_t num_x_cells,
+                               const int64_t num_y_cells,
+                               const int64_t num_z_cells) const
+  {
+    if (cell_x_size <= 0.0)
+    {
+      throw std::invalid_argument("cell_x_size must be positive and non-zero");
+    }
+    if (std::isnan(cell_x_size))
+    {
+      throw std::invalid_argument("cell_x_size must not be NaN");
+    }
+    if (std::isinf(cell_x_size) != 0)
+    {
+      throw std::invalid_argument("cell_x_size must not be INF");
+    }
+    if (cell_y_size <= 0.0)
+    {
+      throw std::invalid_argument("cell_y_size must be positive and non-zero");
+    }
+    if (std::isnan(cell_y_size))
+    {
+      throw std::invalid_argument("cell_y_size must not be NaN");
+    }
+    if (std::isinf(cell_y_size) != 0)
+    {
+      throw std::invalid_argument("cell_y_size must not be INF");
+    }
+    if (cell_z_size <= 0.0)
+    {
+      throw std::invalid_argument("cell_z_size must be positive and non-zero");
+    }
+    if (std::isnan(cell_z_size))
+    {
+      throw std::invalid_argument("cell_z_size must not be NaN");
+    }
+    if (std::isinf(cell_z_size) != 0)
+    {
+      throw std::invalid_argument("cell_z_size must not be INF");
+    }
+    if (num_x_cells <= 0)
+    {
+      throw std::invalid_argument("num_x_cells must be positive and non-zero");
+    }
+    if (num_y_cells <= 0)
+    {
+      throw std::invalid_argument("num_y_cells must be positive and non-zero");
+    }
+    if (num_z_cells <= 0)
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       throw std::invalid_argument("num_z_cells must be positive and non-zero");
     }
   }
 
+<<<<<<< HEAD
   inline void CoreInitialize(const double cell_x_size, const double cell_y_size, const double cell_z_size,
                              const int64_t num_x_cells, const int64_t num_y_cells, const int64_t num_z_cells,
                              const T& default_value, const T& oob_value) {
     SafetyCheckSizes(cell_x_size, cell_y_size, cell_z_size, num_x_cells, num_y_cells, num_z_cells);
+=======
+  inline void CoreInitialize(const double cell_x_size,
+                             const double cell_y_size,
+                             const double cell_z_size,
+                             const int64_t num_x_cells,
+                             const int64_t num_y_cells,
+                             const int64_t num_z_cells,
+                             const T& default_value,
+                             const T& oob_value)
+  {
+    SafetyCheckSizes(cell_x_size, cell_y_size, cell_z_size,
+                     num_x_cells, num_y_cells, num_z_cells);
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     cell_x_size_ = std::abs(cell_x_size);
     cell_y_size_ = std::abs(cell_y_size);
     cell_z_size_ = std::abs(cell_z_size);
@@ -202,16 +430,29 @@ class VoxelGrid {
     SetContents(default_value_);
   }
 
+<<<<<<< HEAD
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   inline static uint64_t Serialize(const VoxelGrid<T, BackingStore>& grid, std::vector<uint8_t>& buffer,
                                    const std::function<uint64_t(const T&, std::vector<uint8_t>&)>& value_serializer) {
+=======
+public:
+
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+  inline static uint64_t Serialize(
+      const VoxelGrid<T, BackingStore>& grid, std::vector<uint8_t>& buffer,
+      const std::function<uint64_t(
+        const T&, std::vector<uint8_t>&)>& value_serializer)
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     return grid.SerializeSelf(buffer, value_serializer);
   }
 
   inline static std::pair<VoxelGrid<T, BackingStore>, uint64_t> Deserialize(
       const std::vector<uint8_t>& buffer, const uint64_t current,
+<<<<<<< HEAD
       const std::function<std::pair<T, uint64_t>(const std::vector<uint8_t>&, const uint64_t)>& value_deserializer) {
     VoxelGrid<T, BackingStore> temp_grid;
     const uint64_t bytes_read = temp_grid.DeserializeSelf(buffer, current, value_deserializer);
@@ -310,6 +551,218 @@ class VoxelGrid {
   }
 
   VoxelGrid() {
+=======
+      const std::function<std::pair<T, uint64_t>(
+        const std::vector<uint8_t>&, const uint64_t)>& value_deserializer)
+  {
+    VoxelGrid<T, BackingStore> temp_grid;
+    const uint64_t bytes_read
+        = temp_grid.DeserializeSelf(buffer, current, value_deserializer);
+    return std::make_pair(temp_grid, bytes_read);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_size,
+            const double x_size,
+            const double y_size,
+            double const z_size,
+            const T& default_value)
+  {
+    Initialize(origin_transform, cell_size, cell_size, cell_size,
+               x_size, y_size, z_size, default_value, default_value);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_size,
+            const double x_size,
+            const double y_size,
+            const double z_size,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(origin_transform, cell_size, cell_size, cell_size,
+               x_size, y_size, z_size, default_value, oob_value);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const double x_size,
+            const double y_size,
+            double const z_size,
+            const T& default_value)
+  {
+    Initialize(origin_transform, cell_x_size, cell_y_size, cell_z_size,
+               x_size, y_size, z_size, default_value, default_value);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const double x_size,
+            const double y_size,
+            const double z_size,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(origin_transform, cell_x_size, cell_y_size, cell_z_size,
+               x_size, y_size, z_size, default_value, oob_value);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value)
+  {
+    Initialize(origin_transform, cell_size, cell_size, cell_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, default_value);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(origin_transform, cell_size, cell_size, cell_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, oob_value);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value)
+  {
+    Initialize(origin_transform, cell_x_size, cell_y_size, cell_z_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, default_value);
+  }
+
+  VoxelGrid(const Eigen::Isometry3d& origin_transform,
+            const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(origin_transform, cell_x_size, cell_y_size, cell_z_size,
+               num_x_cells, num_y_cells, num_z_cells, default_value, oob_value);
+  }
+
+  VoxelGrid(const double cell_size,
+            const double x_size,
+            const double y_size,
+            const double z_size,
+            const T& default_value)
+  {
+    Initialize(cell_size, cell_size, cell_size,
+               x_size, y_size, z_size, default_value, default_value);
+  }
+
+  VoxelGrid(const double cell_size,
+            const double x_size,
+            const double y_size,
+            const double z_size,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(cell_size, cell_size, cell_size,
+               x_size, y_size, z_size, default_value, oob_value);
+  }
+
+  VoxelGrid(const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const double x_size,
+            const double y_size,
+            const double z_size,
+            const T& default_value)
+  {
+    Initialize(cell_x_size, cell_y_size, cell_z_size,
+               x_size, y_size, z_size, default_value, default_value);
+  }
+
+  VoxelGrid(const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const double x_size,
+            const double y_size,
+            const double z_size,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(cell_x_size, cell_y_size, cell_z_size,
+               x_size, y_size, z_size, default_value, oob_value);
+  }
+
+  VoxelGrid(const double cell_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value)
+  {
+    Initialize(cell_size, cell_size, cell_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, default_value);
+  }
+
+  VoxelGrid(const double cell_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(cell_size, cell_size, cell_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, oob_value);
+  }
+
+  VoxelGrid(const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value)
+  {
+    Initialize(cell_x_size, cell_y_size, cell_z_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, default_value);
+  }
+
+  VoxelGrid(const double cell_x_size,
+            const double cell_y_size,
+            const double cell_z_size,
+            const int64_t num_x_cells,
+            const int64_t num_y_cells,
+            const int64_t num_z_cells,
+            const T& default_value,
+            const T& oob_value)
+  {
+    Initialize(cell_x_size, cell_y_size, cell_z_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, oob_value);
+  }
+
+  VoxelGrid()
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     origin_transform_ = Eigen::Isometry3d::Identity();
     inverse_origin_transform_ = origin_transform_.inverse();
     arc_helpers::RequireAlignment(origin_transform_, 16u);
@@ -334,6 +787,7 @@ class VoxelGrid {
 
   virtual ~VoxelGrid() {}
 
+<<<<<<< HEAD
   virtual VoxelGrid<T, BackingStore>* Clone() const {
     return new VoxelGrid<T, BackingStore>(static_cast<const VoxelGrid<T, BackingStore>&>(*this));
   }
@@ -355,6 +809,51 @@ class VoxelGrid {
     SafetyCheckSizes(cell_x_size, cell_y_size, cell_z_size, num_x_cells, num_y_cells, num_z_cells);
     CoreInitialize(cell_x_size, cell_y_size, cell_z_size, num_x_cells, num_y_cells, num_z_cells, default_value,
                    oob_value);
+=======
+  virtual VoxelGrid<T, BackingStore>* Clone() const
+  {
+    return new VoxelGrid<T, BackingStore>(
+          static_cast<const VoxelGrid<T, BackingStore>&>(*this));
+  }
+
+  inline void Initialize(const Eigen::Isometry3d& origin_transform,
+                         const double cell_x_size,
+                         const double cell_y_size,
+                         const double cell_z_size,
+                         const double x_size,
+                         const double y_size,
+                         double const z_size,
+                         const T& default_value,
+                         const T& oob_value)
+  {
+    SafetyCheckSizes(cell_x_size, cell_y_size, cell_z_size,
+                     x_size, y_size, z_size);
+    const int64_t num_x_cells
+        = (int64_t)(ceil(std::abs(x_size) / std::abs(cell_x_size)));
+    const int64_t num_y_cells
+        = (int64_t)(ceil(std::abs(y_size) / std::abs(cell_y_size)));
+    const int64_t num_z_cells
+        = (int64_t)(ceil(std::abs(z_size) / std::abs(cell_z_size)));
+    Initialize(origin_transform, cell_x_size, cell_y_size, cell_z_size,
+               num_x_cells, num_y_cells, num_z_cells, default_value, oob_value);
+  }
+
+  inline void Initialize(const Eigen::Isometry3d& origin_transform,
+                         const double cell_x_size,
+                         const double cell_y_size,
+                         const double cell_z_size,
+                         const int64_t num_x_cells,
+                         const int64_t num_y_cells,
+                         const int64_t num_z_cells,
+                         const T& default_value,
+                         const T& oob_value)
+  {
+    SafetyCheckSizes(cell_x_size, cell_y_size, cell_z_size,
+                     num_x_cells, num_y_cells, num_z_cells);
+    CoreInitialize(cell_x_size, cell_y_size, cell_z_size,
+                   num_x_cells, num_y_cells, num_z_cells,
+                   default_value, oob_value);
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     origin_transform_ = origin_transform;
     inverse_origin_transform_ = origin_transform_.inverse();
     arc_helpers::RequireAlignment(origin_transform_, 16u);
@@ -362,6 +861,7 @@ class VoxelGrid {
     initialized_ = true;
   }
 
+<<<<<<< HEAD
   inline void Initialize(const double cell_x_size, const double cell_y_size, const double cell_z_size,
                          const double x_size, const double y_size, double const z_size, const T& default_value,
                          const T& oob_value) {
@@ -380,6 +880,48 @@ class VoxelGrid {
                    oob_value);
     const Eigen::Translation3d origin_translation(-x_size_ * 0.5, -y_size_ * 0.5, -z_size_ * 0.5);
     const Eigen::Isometry3d origin_transform = origin_translation * Eigen::Quaterniond::Identity();
+=======
+  inline void Initialize(const double cell_x_size,
+                         const double cell_y_size,
+                         const double cell_z_size,
+                         const double x_size,
+                         const double y_size,
+                         double const z_size,
+                         const T& default_value,
+                         const T& oob_value)
+  {
+    SafetyCheckSizes(cell_x_size, cell_y_size, cell_z_size,
+                     x_size, y_size, z_size);
+    const int64_t num_x_cells
+        = (int64_t)(ceil(std::abs(x_size) / std::abs(cell_x_size)));
+    const int64_t num_y_cells
+        = (int64_t)(ceil(std::abs(y_size) / std::abs(cell_y_size)));
+    const int64_t num_z_cells
+        = (int64_t)(ceil(std::abs(z_size) / std::abs(cell_z_size)));
+    Initialize(cell_x_size, cell_y_size, cell_z_size,
+               num_x_cells, num_y_cells, num_z_cells,
+               default_value, oob_value);
+  }
+
+  inline void Initialize(const double cell_x_size,
+                         const double cell_y_size,
+                         const double cell_z_size,
+                         const int64_t num_x_cells,
+                         const int64_t num_y_cells,
+                         const int64_t num_z_cells,
+                         const T& default_value,
+                         const T& oob_value)
+  {
+    SafetyCheckSizes(cell_x_size, cell_y_size, cell_z_size,
+                     num_x_cells, num_y_cells, num_z_cells);
+    CoreInitialize(cell_x_size, cell_y_size, cell_z_size,
+                   num_x_cells, num_y_cells, num_z_cells,
+                   default_value, oob_value);
+    const Eigen::Translation3d origin_translation(
+          -x_size_ * 0.5, -y_size_ * 0.5, -z_size_ * 0.5);
+    const Eigen::Isometry3d origin_transform
+        = origin_translation * Eigen::Quaterniond::Identity();
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     origin_transform_ = origin_transform;
     inverse_origin_transform_ = origin_transform_.inverse();
     arc_helpers::RequireAlignment(origin_transform_, 16u);
@@ -389,15 +931,29 @@ class VoxelGrid {
 
   virtual uint64_t SerializeSelf(
       std::vector<uint8_t>& buffer,
+<<<<<<< HEAD
       const std::function<uint64_t(const T&, std::vector<uint8_t>&)>& value_serializer) const {
+=======
+      const std::function<uint64_t(
+        const T&, std::vector<uint8_t>&)>& value_serializer) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const uint64_t start_buffer_size = buffer.size();
     // Serialize the initialized
     arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
     // Serialize the transforms
     arc_utilities::SerializeEigen<Eigen::Isometry3d>(origin_transform_, buffer);
+<<<<<<< HEAD
     arc_utilities::SerializeEigen<Eigen::Isometry3d>(inverse_origin_transform_, buffer);
     // Serialize the data
     arc_utilities::SerializeVectorLike<T, BackingStore>(data_, buffer, value_serializer);
+=======
+    arc_utilities::SerializeEigen<Eigen::Isometry3d>(inverse_origin_transform_,
+                                               buffer);
+    // Serialize the data
+    arc_utilities::SerializeVectorLike<T, BackingStore>(
+          data_, buffer, value_serializer);
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     // Serialize the cell sizes
     arc_utilities::SerializeFixedSizePOD<double>(cell_x_size_, buffer);
     arc_utilities::SerializeFixedSizePOD<double>(cell_y_size_, buffer);
@@ -427,6 +983,7 @@ class VoxelGrid {
 
   virtual uint64_t DeserializeSelf(
       const std::vector<uint8_t>& buffer, const uint64_t current,
+<<<<<<< HEAD
       const std::function<std::pair<T, uint64_t>(const std::vector<uint8_t>&, const uint64_t)>& value_deserializer) {
     uint64_t current_position = current;
     // Deserialize the initialized
@@ -513,6 +1070,117 @@ class VoxelGrid {
     current_position += default_value_deserialized.second;
     // Deserialize the OOB value
     const std::pair<T, uint64_t> oob_value_deserialized = value_deserializer(buffer, current_position);
+=======
+      const std::function<std::pair<T, uint64_t>(
+        const std::vector<uint8_t>&, const uint64_t)>& value_deserializer)
+  {
+    uint64_t current_position = current;
+    // Deserialize the initialized
+    const std::pair<uint8_t, uint64_t> initialized_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer,
+                                                          current_position);
+    initialized_ = (bool)initialized_deserialized.first;
+    current_position += initialized_deserialized.second;
+    // Deserialize the transforms
+    const std::pair<Eigen::Isometry3d, uint64_t> origin_transform_deserialized
+        = arc_utilities::DeserializeEigen<Eigen::Isometry3d>(buffer,
+                                                             current_position);
+    origin_transform_ = origin_transform_deserialized.first;
+    current_position += origin_transform_deserialized.second;
+    const std::pair<Eigen::Isometry3d, uint64_t>
+        inverse_origin_transform_deserialized
+        = arc_utilities::DeserializeEigen<Eigen::Isometry3d>(buffer,
+                                                             current_position);
+    inverse_origin_transform_ = inverse_origin_transform_deserialized.first;
+    current_position += inverse_origin_transform_deserialized.second;
+    // Deserialize the data
+    const std::pair<BackingStore, uint64_t> data_deserialized
+        = arc_utilities::DeserializeVectorLike<T, BackingStore>(
+          buffer, current_position, value_deserializer);
+    data_ = data_deserialized.first;
+    current_position += data_deserialized.second;
+    // Deserialize the cell sizes
+    const std::pair<double, uint64_t> cell_x_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    cell_x_size_ = cell_x_size_deserialized.first;
+    current_position += cell_x_size_deserialized.second;
+    const std::pair<double, uint64_t> cell_y_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    cell_y_size_ = cell_y_size_deserialized.first;
+    current_position += cell_y_size_deserialized.second;
+    const std::pair<double, uint64_t> cell_z_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    cell_z_size_ = cell_z_size_deserialized.first;
+    current_position += cell_z_size_deserialized.second;
+    const std::pair<double, uint64_t> inv_cell_x_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    inv_cell_x_size_ = inv_cell_x_size_deserialized.first;
+    current_position += inv_cell_x_size_deserialized.second;
+    const std::pair<double, uint64_t> inv_cell_y_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    inv_cell_y_size_ = inv_cell_y_size_deserialized.first;
+    current_position += inv_cell_y_size_deserialized.second;
+    const std::pair<double, uint64_t> inv_cell_z_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    inv_cell_z_size_ = inv_cell_z_size_deserialized.first;
+    current_position += inv_cell_z_size_deserialized.second;
+    // Deserialize the grid sizes
+    const std::pair<double, uint64_t> x_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    x_size_ = x_size_deserialized.first;
+    current_position += x_size_deserialized.second;
+    const std::pair<double, uint64_t> y_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    y_size_ = y_size_deserialized.first;
+    current_position += y_size_deserialized.second;
+    const std::pair<double, uint64_t> z_size_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<double>(buffer,
+                                                         current_position);
+    z_size_ = z_size_deserialized.first;
+    current_position += z_size_deserialized.second;
+    // Deserialize the control/bounds values
+    const std::pair<int64_t, uint64_t> stride1_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer,
+                                                          current_position);
+    stride1_ = stride1_deserialized.first;
+    current_position += stride1_deserialized.second;
+    const std::pair<int64_t, uint64_t> stride2_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer,
+                                                          current_position);
+    stride2_ = stride2_deserialized.first;
+    current_position += stride2_deserialized.second;
+    const std::pair<int64_t, uint64_t> num_x_cells_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer,
+                                                          current_position);
+    num_x_cells_ = num_x_cells_deserialized.first;
+    current_position += num_x_cells_deserialized.second;
+    const std::pair<int64_t, uint64_t> num_y_cells_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer,
+                                                          current_position);
+    num_y_cells_ = num_y_cells_deserialized.first;
+    current_position += num_y_cells_deserialized.second;
+    const std::pair<int64_t, uint64_t> num_z_cells_deserialized
+        = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer,
+                                                          current_position);
+    num_z_cells_ = num_z_cells_deserialized.first;
+    current_position += num_z_cells_deserialized.second;
+    // Deserialize the default value
+    const std::pair<T, uint64_t> default_value_deserialized
+        = value_deserializer(buffer, current_position);
+    default_value_ = default_value_deserialized.first;
+    current_position += default_value_deserialized.second;
+    // Deserialize the OOB value
+    const std::pair<T, uint64_t> oob_value_deserialized
+        = value_deserializer(buffer, current_position);
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     oob_value_ = oob_value_deserialized.first;
     current_position += oob_value_deserialized.second;
     // Figure out how many bytes were read
@@ -520,6 +1188,7 @@ class VoxelGrid {
     return bytes_read;
   }
 
+<<<<<<< HEAD
   inline bool IsInitialized() const { return initialized_; }
 
   inline void ResetWithDefault() { SetContents(default_value_); }
@@ -527,204 +1196,501 @@ class VoxelGrid {
   inline void ResetWithNewValue(const T& new_value) { SetContents(new_value); }
 
   inline void ResetWithNewDefault(const T& new_default) {
+=======
+  inline bool IsInitialized() const
+  {
+    return initialized_;
+  }
+
+  inline void ResetWithDefault()
+  {
+    SetContents(default_value_);
+  }
+
+  inline void ResetWithNewValue(const T& new_value)
+  {
+    SetContents(new_value);
+  }
+
+  inline void ResetWithNewDefault(const T& new_default)
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     default_value_ = new_default;
     SetContents(default_value_);
   }
 
+<<<<<<< HEAD
   inline bool IndexInBounds(const int64_t x_index, const int64_t y_index, const int64_t z_index) const {
     if (x_index >= 0 && y_index >= 0 && z_index >= 0 && x_index < num_x_cells_ && y_index < num_y_cells_ &&
         z_index < num_z_cells_) {
       return true;
     } else {
+=======
+  inline bool IndexInBounds(const int64_t x_index,
+                            const int64_t y_index,
+                            const int64_t z_index) const
+  {
+    if (x_index >= 0 && y_index >= 0 && z_index >= 0 && x_index < num_x_cells_
+        && y_index < num_y_cells_ && z_index < num_z_cells_)
+    {
+      return true;
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   inline bool IndexInBounds(const GRID_INDEX& index) const {
     if (index.x >= 0 && index.y >= 0 && index.z >= 0 && index.x < num_x_cells_ && index.y < num_y_cells_ &&
         index.z < num_z_cells_) {
       return true;
     } else {
+=======
+  inline bool IndexInBounds(const GRID_INDEX& index) const
+  {
+    if (index.x >= 0 && index.y >= 0 && index.z >= 0 && index.x < num_x_cells_
+        && index.y < num_y_cells_ && index.z < num_z_cells_)
+    {
+      return true;
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   inline bool LocationInBounds(const double x, const double y, const double z) const {
+=======
+  inline bool LocationInBounds(const double x,
+                               const double y,
+                               const double z) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const GRID_INDEX index = LocationToGridIndex(x, y, z);
     return IndexInBounds(index);
   }
 
+<<<<<<< HEAD
   inline bool LocationInBounds3d(const Eigen::Vector3d& location) const {
+=======
+  inline bool LocationInBounds3d(const Eigen::Vector3d& location) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const GRID_INDEX index = LocationToGridIndex3d(location);
     return IndexInBounds(index);
   }
 
+<<<<<<< HEAD
   inline bool LocationInBounds4d(const Eigen::Vector4d& location) const {
+=======
+  inline bool LocationInBounds4d(const Eigen::Vector4d& location) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const GRID_INDEX index = LocationToGridIndex4d(location);
     return IndexInBounds(index);
   }
 
+<<<<<<< HEAD
   inline std::pair<const T&, bool> GetImmutable3d(const Eigen::Vector3d& location) const {
     const GRID_INDEX index = LocationToGridIndex3d(location);
     if (IndexInBounds(index)) {
       return GetImmutable(index);
     } else {
+=======
+  inline std::pair<const T&, bool> GetImmutable3d(
+      const Eigen::Vector3d& location) const
+  {
+    const GRID_INDEX index = LocationToGridIndex3d(location);
+    if (IndexInBounds(index))
+    {
+      return GetImmutable(index);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<const T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   inline std::pair<const T&, bool> GetImmutable4d(const Eigen::Vector4d& location) const {
     const GRID_INDEX index = LocationToGridIndex4d(location);
     if (IndexInBounds(index)) {
       return GetImmutable(index);
     } else {
+=======
+  inline std::pair<const T&, bool> GetImmutable4d(
+      const Eigen::Vector4d& location) const
+  {
+    const GRID_INDEX index = LocationToGridIndex4d(location);
+    if (IndexInBounds(index))
+    {
+      return GetImmutable(index);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<const T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   inline std::pair<const T&, bool> GetImmutable(const double x, const double y, const double z) const {
+=======
+  inline std::pair<const T&, bool> GetImmutable(const double x,
+                                                const double y,
+                                                const double z) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const Eigen::Vector4d location(x, y, z, 1.0);
     return GetImmutable4d(location);
   }
 
+<<<<<<< HEAD
   inline std::pair<const T&, bool> GetImmutable(const GRID_INDEX& index) const {
     if (IndexInBounds(index)) {
       return std::pair<const T&, bool>(AccessIndex(GetDataIndex(index)), true);
     } else {
+=======
+  inline std::pair<const T&, bool> GetImmutable(const GRID_INDEX& index) const
+  {
+    if (IndexInBounds(index))
+    {
+      return std::pair<const T&, bool>(AccessIndex(GetDataIndex(index)), true);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<const T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   inline std::pair<const T&, bool> GetImmutable(const int64_t x_index, const int64_t y_index,
                                                 const int64_t z_index) const {
     if (IndexInBounds(x_index, y_index, z_index)) {
       return std::pair<const T&, bool>(AccessIndex(GetDataIndex(x_index, y_index, z_index)), true);
     } else {
+=======
+  inline std::pair<const T&, bool> GetImmutable(const int64_t x_index,
+                                                const int64_t y_index,
+                                                const int64_t z_index) const
+  {
+    if (IndexInBounds(x_index, y_index, z_index))
+    {
+      return std::pair<const T&, bool>(
+            AccessIndex(GetDataIndex(x_index, y_index, z_index)), true);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<const T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   virtual std::pair<T&, bool> GetMutable3d(const Eigen::Vector3d& location) {
     const GRID_INDEX index = LocationToGridIndex3d(location);
     if (IndexInBounds(index)) {
       return GetMutable(index);
     } else {
+=======
+  virtual std::pair<T&, bool> GetMutable3d(const Eigen::Vector3d& location)
+  {
+    const GRID_INDEX index = LocationToGridIndex3d(location);
+    if (IndexInBounds(index))
+    {
+      return GetMutable(index);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   virtual std::pair<T&, bool> GetMutable4d(const Eigen::Vector4d& location) {
     const GRID_INDEX index = LocationToGridIndex4d(location);
     if (IndexInBounds(index)) {
       return GetMutable(index);
     } else {
+=======
+  virtual std::pair<T&, bool> GetMutable4d(const Eigen::Vector4d& location)
+  {
+    const GRID_INDEX index = LocationToGridIndex4d(location);
+    if (IndexInBounds(index))
+    {
+      return GetMutable(index);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   virtual std::pair<T&, bool> GetMutable(const double x, const double y, const double z) {
+=======
+  virtual std::pair<T&, bool> GetMutable(const double x,
+                                        const double y,
+                                        const double z)
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const Eigen::Vector4d location(x, y, z, 1.0);
     return GetMutable4d(location);
   }
 
+<<<<<<< HEAD
   virtual std::pair<T&, bool> GetMutable(const GRID_INDEX& index) {
     if (IndexInBounds(index)) {
       return std::pair<T&, bool>(AccessIndex(GetDataIndex(index)), true);
     } else {
+=======
+  virtual std::pair<T&, bool> GetMutable(const GRID_INDEX& index)
+  {
+    if (IndexInBounds(index))
+    {
+      return std::pair<T&, bool>(AccessIndex(GetDataIndex(index)), true);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   virtual std::pair<T&, bool> GetMutable(const int64_t x_index, const int64_t y_index, const int64_t z_index) {
     if (IndexInBounds(x_index, y_index, z_index)) {
       return std::pair<T&, bool>(AccessIndex(GetDataIndex(x_index, y_index, z_index)), true);
     } else {
+=======
+  virtual std::pair<T&, bool> GetMutable(const int64_t x_index,
+                                        const int64_t y_index,
+                                        const int64_t z_index)
+  {
+    if (IndexInBounds(x_index, y_index, z_index))
+    {
+      return std::pair<T&, bool>(
+            AccessIndex(GetDataIndex(x_index, y_index, z_index)), true);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return std::pair<T&, bool>(oob_value_, false);
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue3d(const Eigen::Vector3d& location, const T& value) {
     const GRID_INDEX index = LocationToGridIndex3d(location);
     if (IndexInBounds(index)) {
       return SetValue(index, value);
     } else {
+=======
+  virtual bool SetValue3d(const Eigen::Vector3d& location,
+                          const T& value)
+  {
+    const GRID_INDEX index = LocationToGridIndex3d(location);
+    if (IndexInBounds(index))
+    {
+      return SetValue(index, value);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue4d(const Eigen::Vector4d& location, const T& value) {
     const GRID_INDEX index = LocationToGridIndex4d(location);
     if (IndexInBounds(index)) {
       return SetValue(index, value);
     } else {
+=======
+  virtual bool SetValue4d(const Eigen::Vector4d& location,
+                          const T& value)
+  {
+    const GRID_INDEX index = LocationToGridIndex4d(location);
+    if (IndexInBounds(index))
+    {
+      return SetValue(index, value);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue(const double x, const double y, const double z, const T& value) {
+=======
+  virtual bool SetValue(const double x,
+                        const double y,
+                        const double z,
+                        const T& value)
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const Eigen::Vector4d location(x, y, z, 1.0);
     return SetValue4d(location, value);
   }
 
+<<<<<<< HEAD
   virtual bool SetValue(const GRID_INDEX& index, const T& value) {
     if (IndexInBounds(index)) {
       AccessIndex(GetDataIndex(index)) = value;
       return true;
     } else {
+=======
+  virtual bool SetValue(const GRID_INDEX& index, const T& value)
+  {
+    if (IndexInBounds(index))
+    {
+      AccessIndex(GetDataIndex(index)) = value;
+      return true;
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue(const int64_t x_index, const int64_t y_index, const int64_t z_index, const T& value) {
     if (IndexInBounds(x_index, y_index, z_index)) {
       AccessIndex(GetDataIndex(x_index, y_index, z_index)) = value;
       return true;
     } else {
+=======
+  virtual bool SetValue(const int64_t x_index,
+                        const int64_t y_index,
+                        const int64_t z_index,
+                        const T& value)
+  {
+    if (IndexInBounds(x_index, y_index, z_index))
+    {
+      AccessIndex(GetDataIndex(x_index, y_index, z_index)) = value;
+      return true;
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue3d(const Eigen::Vector3d& location, T&& value) {
     const GRID_INDEX index = LocationToGridIndex3d(location);
     if (IndexInBounds(index)) {
       return SetValue(index, value);
     } else {
+=======
+  virtual bool SetValue3d(const Eigen::Vector3d& location, T&& value)
+  {
+    const GRID_INDEX index = LocationToGridIndex3d(location);
+    if (IndexInBounds(index))
+    {
+      return SetValue(index, value);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue4d(const Eigen::Vector4d& location, T&& value) {
     const GRID_INDEX index = LocationToGridIndex4d(location);
     if (IndexInBounds(index)) {
       return SetValue(index, value);
     } else {
+=======
+  virtual bool SetValue4d(const Eigen::Vector4d& location, T&& value)
+  {
+    const GRID_INDEX index = LocationToGridIndex4d(location);
+    if (IndexInBounds(index))
+    {
+      return SetValue(index, value);
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue(const double x, const double y, const double z, T&& value) {
+=======
+  virtual bool SetValue(const double x,
+                        const double y,
+                        const double z,
+                        T&& value)
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const Eigen::Vector4d location(x, y, z, 1.0);
     return SetValue4d(location, value);
   }
 
+<<<<<<< HEAD
   virtual bool SetValue(const GRID_INDEX& index, T&& value) {
     if (IndexInBounds(index)) {
       AccessIndex(GetDataIndex(index)) = value;
       return true;
     } else {
+=======
+  virtual bool SetValue(const GRID_INDEX& index, T&& value)
+  {
+    if (IndexInBounds(index))
+    {
+      AccessIndex(GetDataIndex(index)) = value;
+      return true;
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   virtual bool SetValue(const int64_t x_index, const int64_t y_index, const int64_t z_index, T&& value) {
     if (IndexInBounds(x_index, y_index, z_index)) {
       AccessIndex(GetDataIndex(x_index, y_index, z_index)) = value;
       return true;
     } else {
+=======
+  virtual bool SetValue(const int64_t x_index,
+                        const int64_t y_index,
+                        const int64_t z_index,
+                        T&& value)
+  {
+    if (IndexInBounds(x_index, y_index, z_index))
+    {
+      AccessIndex(GetDataIndex(x_index, y_index, z_index)) = value;
+      return true;
+    }
+    else
+    {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   inline double GetXSize() const { return x_size_; }
 
   inline double GetYSize() const { return y_size_; }
@@ -752,36 +1718,132 @@ class VoxelGrid {
   inline const Eigen::Isometry3d& GetInverseOriginTransform() const { return inverse_origin_transform_; }
 
   inline void UpdateOriginTransform(const Eigen::Isometry3d& origin_transform) {
+=======
+  inline double GetXSize() const
+  {
+    return x_size_;
+  }
+
+  inline double GetYSize() const
+  {
+    return y_size_;
+  }
+
+  inline double GetZSize() const
+  {
+    return z_size_;
+  }
+
+  inline Eigen::Vector3d GetCellSizes() const
+  {
+    return Eigen::Vector3d(cell_x_size_, cell_y_size_, cell_z_size_);
+  }
+
+  inline T GetDefaultValue() const
+  {
+    return default_value_;
+  }
+
+  inline T GetOOBValue() const
+  {
+    return oob_value_;
+  }
+
+  inline void SetDefaultValue(const T& default_value)
+  {
+    default_value_ = default_value;
+  }
+
+  inline void SetOOBValue(const T& oob_value)
+  {
+    oob_value_ = oob_value;
+  }
+
+  inline int64_t GetNumXCells() const
+  {
+    return num_x_cells_;
+  }
+
+  inline int64_t GetNumYCells() const
+  {
+    return num_y_cells_;
+  }
+
+  inline int64_t GetNumZCells() const
+  {
+    return num_z_cells_;
+  }
+
+  inline const Eigen::Isometry3d& GetOriginTransform() const
+  {
+    return origin_transform_;
+  }
+
+  inline const Eigen::Isometry3d& GetInverseOriginTransform() const
+  {
+    return inverse_origin_transform_;
+  }
+
+  inline void UpdateOriginTransform(const Eigen::Isometry3d& origin_transform)
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     origin_transform_ = origin_transform;
     inverse_origin_transform_ = origin_transform_.inverse();
   }
 
+<<<<<<< HEAD
   inline GRID_INDEX PointInFrameToGridIndex(const double x, const double y, const double z) const {
+=======
+  inline GRID_INDEX PointInFrameToGridIndex(const double x,
+                                            const double y,
+                                            const double z) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const int64_t x_cell = (int64_t)(x * inv_cell_x_size_);
     const int64_t y_cell = (int64_t)(y * inv_cell_y_size_);
     const int64_t z_cell = (int64_t)(z * inv_cell_z_size_);
     return GRID_INDEX(x_cell, y_cell, z_cell);
   }
 
+<<<<<<< HEAD
   inline GRID_INDEX PointInFrameToGridIndex3d(const Eigen::Vector3d& point_in_grid_frame) const {
+=======
+  inline GRID_INDEX PointInFrameToGridIndex3d(
+          const Eigen::Vector3d& point_in_grid_frame) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const int64_t x_cell = (int64_t)(point_in_grid_frame(0) * inv_cell_x_size_);
     const int64_t y_cell = (int64_t)(point_in_grid_frame(1) * inv_cell_y_size_);
     const int64_t z_cell = (int64_t)(point_in_grid_frame(2) * inv_cell_z_size_);
     return GRID_INDEX(x_cell, y_cell, z_cell);
   }
 
+<<<<<<< HEAD
   inline GRID_INDEX PointInFrameToGridIndex4d(const Eigen::Vector4d& point_in_grid_frame) const {
+=======
+  inline GRID_INDEX PointInFrameToGridIndex4d(
+          const Eigen::Vector4d& point_in_grid_frame) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const int64_t x_cell = (int64_t)(point_in_grid_frame(0) * inv_cell_x_size_);
     const int64_t y_cell = (int64_t)(point_in_grid_frame(1) * inv_cell_y_size_);
     const int64_t z_cell = (int64_t)(point_in_grid_frame(2) * inv_cell_z_size_);
     return GRID_INDEX(x_cell, y_cell, z_cell);
   }
 
+<<<<<<< HEAD
   inline GRID_INDEX LocationToGridIndex(const double x, const double y, const double z) const {
+=======
+  inline GRID_INDEX LocationToGridIndex(const double x,
+                                        const double y,
+                                        const double z) const
+  {
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const Eigen::Vector4d point(x, y, z, 1.0);
     return LocationToGridIndex4d(point);
   }
 
+<<<<<<< HEAD
   inline GRID_INDEX LocationToGridIndex3d(const Eigen::Vector3d& location) const {
     const Eigen::Vector3d point_in_grid_frame = inverse_origin_transform_ * location;
     return PointInFrameToGridIndex(point_in_grid_frame.x(), point_in_grid_frame.y(), point_in_grid_frame.z());
@@ -796,19 +1858,59 @@ class VoxelGrid {
     const Eigen::Vector4d point_in_grid_frame(cell_x_size_ * ((double)index.x + 0.5),
                                               cell_y_size_ * ((double)index.y + 0.5),
                                               cell_z_size_ * ((double)index.z + 0.5), 1.0);
+=======
+  inline GRID_INDEX LocationToGridIndex3d(const Eigen::Vector3d& location) const
+  {
+    const Eigen::Vector3d point_in_grid_frame
+        = inverse_origin_transform_ * location;
+    return PointInFrameToGridIndex(point_in_grid_frame.x(),
+                                   point_in_grid_frame.y(),
+                                   point_in_grid_frame.z());
+  }
+
+  inline GRID_INDEX LocationToGridIndex4d(const Eigen::Vector4d& location) const
+  {
+    const Eigen::Vector4d point_in_grid_frame
+        = inverse_origin_transform_ * location;
+    return PointInFrameToGridIndex(point_in_grid_frame(0),
+                                   point_in_grid_frame(1),
+                                   point_in_grid_frame(2));
+  }
+
+  inline Eigen::Vector4d GridIndexToLocation(const GRID_INDEX& index) const
+  {
+    const Eigen::Vector4d point_in_grid_frame(
+          cell_x_size_ * ((double)index.x + 0.5),
+          cell_y_size_ * ((double)index.y + 0.5),
+          cell_z_size_ * ((double)index.z + 0.5),
+          1.0);
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const Eigen::Vector4d point = origin_transform_ * point_in_grid_frame;
     return point;
   }
 
+<<<<<<< HEAD
   inline Eigen::Vector4d GridIndexToLocation(const int64_t x_index, const int64_t y_index,
                                              const int64_t z_index) const {
     const Eigen::Vector4d point_in_grid_frame(cell_x_size_ * ((double)x_index + 0.5),
                                               cell_y_size_ * ((double)y_index + 0.5),
                                               cell_z_size_ * ((double)z_index + 0.5), 1.0);
+=======
+  inline Eigen::Vector4d GridIndexToLocation(const int64_t x_index,
+                                             const int64_t y_index,
+                                             const int64_t z_index) const
+  {
+    const Eigen::Vector4d point_in_grid_frame(
+          cell_x_size_ * ((double)x_index + 0.5),
+          cell_y_size_ * ((double)y_index + 0.5),
+          cell_z_size_ * ((double)z_index + 0.5),
+          1.0);
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     const Eigen::Vector4d point = origin_transform_ * point_in_grid_frame;
     return point;
   }
 
+<<<<<<< HEAD
   inline Eigen::Vector4d GridIndexToLocationGridFrame(const GRID_INDEX& index) const {
     const Eigen::Vector4d point_in_grid_frame(cell_x_size_ * ((double)index.x + 0.5),
                                               cell_y_size_ * ((double)index.y + 0.5),
@@ -835,10 +1937,58 @@ class VoxelGrid {
       return true;
     } else {
       std::cerr << "Failed to load internal data - expected " << expected_length << " got " << data.size() << std::endl;
+=======
+  inline Eigen::Vector4d GridIndexToLocationGridFrame(
+      const GRID_INDEX& index) const
+  {
+    const Eigen::Vector4d point_in_grid_frame(
+          cell_x_size_ * ((double)index.x + 0.5),
+          cell_y_size_ * ((double)index.y + 0.5),
+          cell_z_size_ * ((double)index.z + 0.5),
+          1.0);
+    return point_in_grid_frame;
+  }
+
+  inline Eigen::Vector4d GridIndexToLocationGridFrame(
+      const int64_t x_index, const int64_t y_index, const int64_t z_index) const
+  {
+    const Eigen::Vector4d point_in_grid_frame(
+          cell_x_size_ * ((double)x_index + 0.5),
+          cell_y_size_ * ((double)y_index + 0.5),
+          cell_z_size_ * ((double)z_index + 0.5),
+          1.0);
+    return point_in_grid_frame;
+  }
+
+  inline BackingStore& GetMutableRawData()
+  {
+    return data_;
+  }
+
+  inline const BackingStore& GetImmutableRawData() const
+  {
+    return data_;
+  }
+
+  inline bool SetRawData(const BackingStore& data)
+  {
+    const int64_t expected_length
+        = num_x_cells_ * num_y_cells_ * num_z_cells_;
+    if ((int64_t)data.size() == expected_length)
+    {
+      data_ = data;
+      return true;
+    }
+    else
+    {
+      std::cerr << "Failed to load internal data - expected "
+                << expected_length << " got " << data.size() << std::endl;
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
       return false;
     }
   }
 
+<<<<<<< HEAD
   inline uint64_t HashDataIndex(const int64_t x_index, const int64_t y_index, const int64_t z_index) const {
     return (x_index * stride1_) + (y_index * stride2_) + z_index;
   }
@@ -858,8 +2008,42 @@ struct hash<VoxelGrid::GRID_INDEX> {
 }  // namespace std
 
 inline std::ostream& operator<<(std::ostream& strm, const VoxelGrid::GRID_INDEX& index) {
+=======
+  inline uint64_t HashDataIndex(const int64_t x_index,
+                                const int64_t y_index,
+                                const int64_t z_index) const
+  {
+    return (x_index * stride1_) + (y_index * stride2_) + z_index;
+  }
+};
+}
+
+namespace std
+{
+template <>
+struct hash<VoxelGrid::GRID_INDEX>
+{
+  std::size_t operator()(const VoxelGrid::GRID_INDEX& index) const
+  {
+    using std::size_t;
+    using std::hash;
+    return ((std::hash<int64_t>()(index.x)
+            ^ (std::hash<int64_t>()(index.y) << 1) >> 1)
+            ^ (std::hash<int64_t>()(index.z) << 1));
+  }
+};
+}
+
+inline std::ostream& operator<<(std::ostream& strm,
+                                const VoxelGrid::GRID_INDEX& index)
+{
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
   strm << "GRID_INDEX: (" << index.x << "," << index.y << "," << index.z << ")";
   return strm;
 }
 
+<<<<<<< HEAD
 #endif  // VOXEL_GRID_HPP
+=======
+#endif // VOXEL_GRID_HPP
+>>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
