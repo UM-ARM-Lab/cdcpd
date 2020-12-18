@@ -7,6 +7,10 @@ by Cheng Chi and Dmitry Berenson.
 CDCPD2 is an implementation of *Tracking Partially-Occluded Deformable Objects while Enforcing Geometric Constraints* 
 by Yixuan Wang, Dale McConachie and Dmitry Berenson.
 
+Quick Demo
+------------
+ You could try out virtual machine linked [here](https://drive.google.com/file/d/1N_l3ZRWVAIY1Mwr8b5D8uyWY96DrnUMm/view?usp=sharing). Password is `123456`. You could run demos under `~/catkin_ws/src/cdcpd/cdcpd_ros/scripts`. Note that not all data is downloaded. Now only `rope_edge_cover_2.bag` is downloaded under `~/catkin_ws/src/cdcpd/cdcpd_ros/dataset`. If you would like to see more demoes, please download [here](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing).
+
 Requirements
 ------------
   * Environment:
