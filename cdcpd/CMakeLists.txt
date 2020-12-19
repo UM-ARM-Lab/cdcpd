@@ -30,7 +30,6 @@ find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
-find_package(Fgt REQUIRED)
 find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
@@ -72,7 +71,6 @@ target_link_libraries(cdcpd PRIVATE
         ${catkin_LIBRARIES}
         ${GUROBI_LIBRARIES}
         ${FAISS_LIBRARY}
-        Fgt::Library-C++
         CGAL::CGAL
         CGAL::CGAL_Qt5
         Qt5::Gui)

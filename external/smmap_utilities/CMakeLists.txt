@@ -54,8 +54,6 @@ include_directories(include
         SYSTEM
         ${catkin_INCLUDE_DIRS}
         ${EIGEN3_INCLUDE_DIRS}
-        ${GUROBI_INCLUDE_DIRS}
-        ${NOMAD_INCLUDE_DIRS}
         )
 
 set(CMAKE_CXX_STANDARD 17)
@@ -79,10 +77,12 @@ if (NOMAD_FOUND)
     add_library(${PROJECT_NAME}_nomad_solvers src/nomad_solvers.cpp)
     target_link_libraries(${PROJECT_NAME}_nomad_solvers ${catkin_LIBRARIES} ${NOMAD_LIBRARIES})
     add_dependencies(${PROJECT_NAME}_nomad_solvers ${catkin_EXPORTED_TARGETS})
+    target_include_directories(${PROJECT_NAME}_nomad_solvers PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS} ${NOMAD_INCLUDE_DIRS})
 endif ()
 
 if (GUROBI_FOUND)
     add_library(${PROJECT_NAME}_gurobi_solvers src/gurobi_solvers.cpp)
     target_link_libraries(${PROJECT_NAME}_gurobi_solvers ${catkin_LIBRARIES} ${GUROBI_LIBRARIES})
     add_dependencies(${PROJECT_NAME}_gurobi_solvers ${catkin_EXPORTED_TARGETS})
+    target_include_directories(${PROJECT_NAME}_gurobi_solvers PUBLIC ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS} ${GUROBI_INCLUDE_DIRS})
 endif ()
