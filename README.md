@@ -14,30 +14,33 @@ Quick Demo
 Requirements
 ------------
   * Environment:
-    * Ubuntu 18.04
-    * ROS Melodic
-  * OpenCV-3.4
-  * [Gurobi](https://www.gurobi.com/)
-  * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
-  * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
-  * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
+    * Ubuntu 18 or 20
+    * ROS Melodic or Noetic
+  * non-source dependencies
+    * [Gurobi](https://www.gurobi.com/)
+    * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
+    * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
+  * source dependencies
+    * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
+    * [kka_iiwa_interface](https://github.com/UM-ARM-Lab/kuka_iiwa_interface)
+      * [robotiq](https://github.com/UM-ARM-Lab/robotiq) (needed by kuka_iiwa_interface)
+    * [arc_utilities](https://github.com/UM-ARM-Lab/arc_utilities)
+
+
 
 Installation
 ------------
 
-#### Obtain installing scripts
-Run the following command under any directory.
+Some of the dependencies are available on apt:
 ```
-git clone https://github.com/UM-ARM-Lab/cdcpd.git
-cd cdcpd
-git checkout CDCPD2
+sudo apt install libeigen3-dev libgcgal-qt5-dev libopencv-dev
 ```
 
-#### Installing ROS (ignore it if you already have one)
+#### Installing ROS (ignore it if you already have it)
 
 Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo -u USER_NAME install_scripts/install_ros_noetic.sh` if you use Ubuntu 20.04
 
-#### Installing third-party library
+We assume you have created a catkin workspace. Now clone this repo to that worksace. See `install_scripts/setup_ws.sh` or the ROS wiki on how to setup a catkin workspace.
 
 Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME ./install_dep.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
 
@@ -49,62 +52,19 @@ export PATH=~/.local/bin:${PATH}
 export CMAKE_PREFIX_PATH=~/.local:$CMAKE_PREFIX_PATH
 ```
 Rememeber to run `source ~/.bashrc` after modifying it.
+=======
 
-* Gurobi: follow instructions here `https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html`
-* Eigen: `sudo apt install libeigen3-dev`
-* faiss-1.6.3: specify your installing directory and run `sudo install_scripts/install_faiss.sh`
-* fgt-0.4.6: specify your installing directory and run `sudo install_scripts/install_fgt.sh`
-* CGAL-5.0.3: specify your installing directory and run `sudo install_scripts/install_cgal.sh`
-* NOMAD-3.8.1:
-  * Click 'Download' in [https://www.gerad.ca/nomad/](https://www.gerad.ca/nomad/) and download 3.8.
-  * Extract the zip file and put under `/opt`
-  * Run `sudo /opt/nomad.3.8.1/install/install.sh`.
-  * Add the following to `~/.bashrc`
-```bash
-export NOMAD_HOME="/opt/nomad.3.8.1"
-export PATH=$NOMAD_HOME/bin:$PATH
 ```
-  * Verify the success of installation by running `nomad`. You should see the following
-```bash
-Run NOMAD      : nomad parameters_file
-Info           : nomad -i
-Help           : nomad -h keyword(s) (or 'all')
-Developer help : nomad -d keyword(s) (or 'all')
-Version        : nomad -v
-Usage          : nomad -u
-```
-* libsvm: specify your installing directory and run `sudo install_scripts/install_svm.sh`
-* PyTorch: specify your installing directory and run `sudo install_scripts/install_torch.sh`
-* Ceres Solver: specify your installing directory and run `sudo install_scripts/install_ceres.sh`
--->
-#### Create catkin workspace (ignore it if you already have a catkin workspace)
-
-Change workspace name in `create_ws_ROSVERSION.sh` and run it. NOTE: move `source ~/YOUR_WORKSPACE/devel/setup.bash` in `~/.bashrc` before `export CMAKE_PREFIX_PATH=~/.local:$CMAKE_PREFIX_PATH` as it will overwrite `CMAKE_PREFIX_PATH`.
-
-#### Build from source
-
-Run the following command under the directory `$WS_PATH/src`
-```
+# in the src directory
 git clone https://github.com/UM-ARM-Lab/cdcpd.git
-cd cdcpd
-git checkout CDCPD2
-catkin build
 ```
+
+
+* Gurobi: follow instructions here https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html
 
 #### Gurobi Licence
 
 Gurobi is a proprietary optimization package that we use. Please obtain a [free academic license](https://www.gurobi.com/academia/academic-program-and-licenses).
-
-#### Conflicting LZ4 declaration
-The combination of the operating system and ROS may lead to a specific declaration confliction for `LZ4_stream_t` and `LZ4_streamDecode_t`. The solution is described in [https://github.com/ethz-asl/lidar\_align/issues/16](https://github.com/ethz-asl/lidar_align/issues/16). Please just run the following commands in the terminal.
-
-```bash
-sudo mv /usr/include/flann/ext/lz4.h /usr/include/flann/ext/lz4.h.bak
-sudo mv /usr/include/flann/ext/lz4hc.h /usr/include/flann/ext/lz4.h.bak
-
-sudo ln -s /usr/include/lz4.h /usr/include/flann/ext/lz4.h
-sudo ln -s /usr/include/lz4hc.h /usr/include/flann/ext/lz4hc.h
-```
 
 Demo
 ------------
