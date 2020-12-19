@@ -22,7 +22,7 @@ Requirements
     * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
   * source dependencies
     * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
-    * [kka_iiwa_interface](https://github.com/UM-ARM-Lab/kuka_iiwa_interface)
+    * [kuka_iiwa_interface](https://github.com/UM-ARM-Lab/kuka_iiwa_interface)
       * [robotiq](https://github.com/UM-ARM-Lab/robotiq) (needed by kuka_iiwa_interface)
     * [arc_utilities](https://github.com/UM-ARM-Lab/arc_utilities)
 
