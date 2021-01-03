@@ -7,4 +7,4 @@ sudo apt install -y ros-noetic-desktop-full
 echo "source /opt/ros/neotic/setup.bash" >> ~/.bashrc
 sudo apt-get install -y librospack-dev libclass-loader-dev libroslz4-dev libactionlib-dev libxmlrpcpp-dev librosconsole-dev
 source ~/.bashrc
-source /opt/ros/neotic/setup.bash
+source /opt/ros/noetic/setup.bash
