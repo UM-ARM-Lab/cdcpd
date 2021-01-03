@@ -6,9 +6,8 @@ sudo apt update
 sudo apt install -y ros-melodic-desktop-full
 echo "source /opt/ros/melodic/setup.bash" >> ~/.bashrc
 source ~/.bashrc
-source /opt/ros/melodic/setup.bash
 sudo apt install -y python-rosdep python-rosinstall python-rosinstall-generator python-wstool build-essential python-rosdep
-sudo apt-get install -y librospack-dev libclass-loader-dev libroslz4-dev libactionlib-dev libxmlrpcpp-dev librosconsole-dev
+sudo apt-get install -y python-catkin-tools librospack-dev libclass-loader-dev libroslz4-dev libactionlib-dev libxmlrpcpp-dev librosconsole-dev
 sudo rosdep init
 rosdep update
 
