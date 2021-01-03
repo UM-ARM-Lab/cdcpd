@@ -51,6 +51,7 @@ export PKG_CONFIG_PATH=~/local/lib/pkgconfig:$PKG_CONFIG_PATH
 export PATH=~/local/bin:${PATH}
 export CMAKE_PREFIX_PATH=~/local:$CMAKE_PREFIX_PATH
 ```
+Rememeber to run `source ~/.bashrc` after modifying it.
 
 * Gurobi: follow instructions here `https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html`
 * Eigen: `sudo apt install libeigen3-dev`
