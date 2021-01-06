@@ -1,6 +1,6 @@
 #!/bin/bash
 
-INSTALL_DIR=~/local
+INSTALL_DIR=~/.local
 SRC_REPO_DIR=$INSTALL_DIR/src
 
 sudo add-apt-repository "deb http://security.ubuntu.com/ubuntu xenial-security main"
