@@ -39,7 +39,7 @@ git checkout CDCPD2
 
 #### Installing ROS (ignore it if you already have one)
 
-Run `sudo install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo install_scripts/install_ros_neotic.sh` if you use Ubuntu 20.04
+Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo -u USER_NAME install_scripts/install_ros_neotic.sh` if you use Ubuntu 20.04
 
 #### Installing third-party library
 
