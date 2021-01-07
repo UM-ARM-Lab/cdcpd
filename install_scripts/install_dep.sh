@@ -10,6 +10,7 @@ echo 'export PATH=~/.local/bin:${PATH}' >> ~/.bashrc
 echo 'export CMAKE_PREFIX_PATH=~/.local:$CMAKE_PREFIX_PATH' >> ~/.bashrc
 
 sudo -u root apt install libeigen3-dev
+sudo -u $USR_NAME ./install_opencv.sh
 sudo -u $USR_NAME ./install_gurobi.sh
 sudo -u $USR_NAME ./install_faiss.sh
 sudo -u $USR_NAME ./install_fgt.sh

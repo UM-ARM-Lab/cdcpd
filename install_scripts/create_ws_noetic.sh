@@ -7,5 +7,6 @@ mkdir -p $WS_PATH/src
 cd $WS_PATH
 catkin_init_workspace
 catkin build
-source devel/setup.bash
+echo "source $WS_PATH/devel/setup.bash" >> ~/.bashrc
+source ~/.bashrc
 
