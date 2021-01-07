@@ -7,6 +7,6 @@ sudo -u root apt install -y ros-noetic-desktop-full
 echo 'source /opt/ros/noetic/setup.bash' >> ~/.bashrc
 source ~/.bashrc
 sudo -u root apt-get install -y python3-catkin-tools librospack-dev libclass-loader-dev libroslz4-dev libactionlib-dev libxmlrpcpp-dev librosconsole-dev
-sudo -u root apt install python3-pip
+sudo -u root apt install -y python3-pip
 pip3 install --user git+https://github.com/catkin/catkin_tools.git
 

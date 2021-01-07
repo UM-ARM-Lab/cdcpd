@@ -2,7 +2,7 @@
 
 INSTALL_DIR=~/.local
 SRC_REPO_DIR=$INSTALL_DIR/src
-USR_NAME=yixuan
+USR_NAME=deformtrack
 
 echo 'export LD_LIBRARY_PATH=~/.local/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
 echo 'export PKG_CONFIG_PATH=~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' >> ~/.bashrc

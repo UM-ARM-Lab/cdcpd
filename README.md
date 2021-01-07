@@ -16,6 +16,7 @@ Requirements
   * Environment:
     * Ubuntu 18.04
     * ROS Melodic
+  * OpenCV-3.4
   * [Gurobi](https://www.gurobi.com/)
   * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
   * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
@@ -39,11 +40,13 @@ git checkout CDCPD2
 
 #### Installing ROS (ignore it if you already have one)
 
-Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo -u USER_NAME install_scripts/install_ros_neotic.sh` if you use Ubuntu 20.04
+Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo -u USER_NAME install_scripts/install_ros_noetic.sh` if you use Ubuntu 20.04
 
 #### Installing third-party library
 
-Recommended organization of third party library: place the source code under `~/local/src` and install under `~/local`. If you do so, you can link to those libraries easily by adding below to `~/.bashrc`.
+Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME install_scripts/install_dep.sh`. It will install all dependency listed above in `~/.local`.
+
+<!--- Recommended organization of third party library: place the source code under `~/local/src` and install under `~/local`. If you do so, you can link to those libraries easily by adding below to `~/.bashrc`.
 
 ```bash
 export LD_LIBRARY_PATH=~/local/lib:$LD_LIBRARY_PATH
@@ -79,7 +82,7 @@ Usage          : nomad -u
 * libsvm: specify your installing directory and run `sudo install_scripts/install_svm.sh`
 * PyTorch: specify your installing directory and run `sudo install_scripts/install_torch.sh`
 * Ceres Solver: specify your installing directory and run `sudo install_scripts/install_ceres.sh`
-
+-->
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
 
 Specify workspace name and run `create_ws.sh` and add `source ~/YOUR_WORKSPACE/devel/setup.bash` to `~/.bashrc`
