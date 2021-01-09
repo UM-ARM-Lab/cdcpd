@@ -44,7 +44,7 @@ Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu
 
 #### Installing third-party library
 
-Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME install_scripts/install_dep.sh`. It will install all dependency listed above in `~/.local`.
+Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME ./install_dep.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
 
 <!--- Recommended organization of third party library: place the source code under `~/local/src` and install under `~/local`. If you do so, you can link to those libraries easily by adding below to `~/.bashrc`.
 
