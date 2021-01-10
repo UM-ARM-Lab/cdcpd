@@ -13,7 +13,7 @@ from arc_utilities.filesystem_utils import directory_size
 def main():
     colorama.init(autoreset=True)
     parser = argparse.ArgumentParser("finds directories smaller than a given size, asks for confirmation, then deletes")
-    parser.add_argument('root', type=pathlib.Path, help="root directory")
+    parser.add_argument('root', type=pathlib.Path, help="root directory", nargs='+')
     parser.add_argument('size', type=str, help="size, like 10k, 20mb, etc. ")
 
     args = parser.parse_args()
@@ -21,11 +21,12 @@ def main():
     size_threshold_bytes = parse_file_size(args.size)
 
     directories_to_remove = []
-    for d in args.root.iterdir():
-        if d.is_dir():
-            size_bytes = directory_size(d)
-            if size_bytes < size_threshold_bytes:
-                directories_to_remove.append(d)
+    for root in args.root:
+        for d in root.iterdir():
+            if d.is_dir():
+                size_bytes = directory_size(d)
+                if size_bytes < size_threshold_bytes:
+                    directories_to_remove.append(d)
 
     print("Ok to delete these directories?")
     for d in directories_to_remove:

@@ -4,7 +4,8 @@ project(arc_utilities)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs sensor_msgs geometry_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs sensor_msgs geometry_msgs 
+	OPTIONAL_COMPONENTS pybind11_catkin rosconsole)
 
 ## System dependencies are found with CMake's conventions
 find_package(cmake_modules REQUIRED)
@@ -55,63 +56,80 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wconversion -Werror -Wshadow")
 
 add_custom_target(${PROJECT_NAME}_headers SOURCES
-    include/${PROJECT_NAME}/log.hpp
-    include/${PROJECT_NAME}/maybe.hpp
-    include/${PROJECT_NAME}/ros_helpers.hpp
-    include/${PROJECT_NAME}/abb_irb1600_145_fk_fast.hpp
-    include/${PROJECT_NAME}/iiwa_7_fk_fast.hpp
-    include/${PROJECT_NAME}/iiwa_14_fk_fast.hpp
-    include/${PROJECT_NAME}/ur_10_fk_fast.hpp
-    include/${PROJECT_NAME}/arc_exceptions.hpp
-    include/${PROJECT_NAME}/arc_helpers.hpp
-    include/${PROJECT_NAME}/pretty_print.hpp
-    include/${PROJECT_NAME}/zlib_helpers.hpp
-    include/${PROJECT_NAME}/base64_helpers.hpp
-    include/${PROJECT_NAME}/voxel_grid.hpp
-    include/${PROJECT_NAME}/dynamic_spatial_hashed_voxel_grid.hpp
-    include/${PROJECT_NAME}/aligned_eigen_types.hpp
-    include/${PROJECT_NAME}/eigen_typedefs.hpp
-    include/${PROJECT_NAME}/eigen_helpers.hpp
-    include/${PROJECT_NAME}/eigen_helpers_conversions.hpp
-    include/${PROJECT_NAME}/simple_rrt_planner.hpp
-    include/${PROJECT_NAME}/simple_astar_planner.hpp
-    include/${PROJECT_NAME}/simple_prm_planner.hpp
-    include/${PROJECT_NAME}/simple_kmeans_clustering.hpp
-    include/${PROJECT_NAME}/simple_hierarchical_clustering.hpp
-    include/${PROJECT_NAME}/simple_hausdorff_distance.hpp
-    include/${PROJECT_NAME}/simple_dtw.hpp
-    include/${PROJECT_NAME}/timing.hpp
-    include/${PROJECT_NAME}/dijkstras.hpp
-    include/${PROJECT_NAME}/path_utils.hpp
-    include/${PROJECT_NAME}/first_order_deformation.h
-    include/${PROJECT_NAME}/get_neighbours.hpp
-    include/${PROJECT_NAME}/serialization.hpp
-    include/${PROJECT_NAME}/serialization_eigen.hpp
-    include/${PROJECT_NAME}/serialization_ros.hpp
-    include/${PROJECT_NAME}/filesystem.hpp
-    include/${PROJECT_NAME}/simple_se2_robot_model.hpp
-    include/${PROJECT_NAME}/simple_se3_robot_model.hpp
-    include/${PROJECT_NAME}/simple_linked_robot_model.hpp
-    include/${PROJECT_NAME}/simple_robot_models.hpp
-    include/${PROJECT_NAME}/simple_robot_model_interface.hpp
-    include/${PROJECT_NAME}/time_optimal_trajectory_parametrization.hpp
-    include/${PROJECT_NAME}/thin_plate_spline.hpp
-    include/${PROJECT_NAME}/math_helpers.hpp
-    include/${PROJECT_NAME}/vector_math.hpp
-    include/${PROJECT_NAME}/hash.hpp
-    include/${PROJECT_NAME}/geometry_msgs_builders.hpp
-    )
+        include/${PROJECT_NAME}/abb_irb1600_145_fk_fast.hpp
+        include/${PROJECT_NAME}/aligned_eigen_types.hpp
+        include/${PROJECT_NAME}/arc_exceptions.hpp
+        include/${PROJECT_NAME}/arc_helpers.hpp
+        include/${PROJECT_NAME}/base64_helpers.hpp
+        include/${PROJECT_NAME}/dijkstras.hpp
+        include/${PROJECT_NAME}/dynamic_spatial_hashed_voxel_grid.hpp
+        include/${PROJECT_NAME}/eigen_helpers_conversions.hpp
+        include/${PROJECT_NAME}/eigen_helpers.hpp
+        include/${PROJECT_NAME}/eigen_ros_conversions.hpp
+        include/${PROJECT_NAME}/eigen_std_conversions.hpp
+        include/${PROJECT_NAME}/eigen_transforms.hpp
+        include/${PROJECT_NAME}/eigen_typedefs.hpp
+        include/${PROJECT_NAME}/enumerate.h
+        include/${PROJECT_NAME}/filesystem.hpp
+        include/${PROJECT_NAME}/first_order_deformation.h
+        include/${PROJECT_NAME}/geometry_msgs_builders.hpp
+        include/${PROJECT_NAME}/get_neighbours.hpp
+        include/${PROJECT_NAME}/graph.hpp
+        include/${PROJECT_NAME}/hash.hpp
+        include/${PROJECT_NAME}/iiwa_14_fk_fast.hpp
+        include/${PROJECT_NAME}/iiwa_7_fk_fast.hpp
+        include/${PROJECT_NAME}/listener.hpp
+        include/${PROJECT_NAME}/log.hpp
+        include/${PROJECT_NAME}/math_helpers.hpp
+        include/${PROJECT_NAME}/maybe.hpp
+        include/${PROJECT_NAME}/moveit_ostream_operators.hpp
+        include/${PROJECT_NAME}/moveit_pose_type.hpp
+        include/${PROJECT_NAME}/ostream_operators.hpp
+        include/${PROJECT_NAME}/path_utils.hpp
+        include/${PROJECT_NAME}/pretty_print.hpp
+        include/${PROJECT_NAME}/ros_helpers.hpp
+        include/${PROJECT_NAME}/serialization_eigen.hpp
+        include/${PROJECT_NAME}/serialization.hpp
+        include/${PROJECT_NAME}/serialization_ros.hpp
+        include/${PROJECT_NAME}/simple_astar_planner.hpp
+        include/${PROJECT_NAME}/simple_dtw.hpp
+        include/${PROJECT_NAME}/simple_hausdorff_distance.hpp
+        include/${PROJECT_NAME}/simple_hierarchical_clustering.hpp
+        include/${PROJECT_NAME}/simple_kmeans_clustering.hpp
+        include/${PROJECT_NAME}/simple_linked_robot_model.hpp
+        include/${PROJECT_NAME}/simple_prm_planner.hpp
+        include/${PROJECT_NAME}/simple_robot_model_interface.hpp
+        include/${PROJECT_NAME}/simple_robot_models.hpp
+        include/${PROJECT_NAME}/simple_rrt_planner.hpp
+        include/${PROJECT_NAME}/simple_se2_robot_model.hpp
+        include/${PROJECT_NAME}/simple_se3_robot_model.hpp
+        include/${PROJECT_NAME}/stl_wrappers.hpp
+        include/${PROJECT_NAME}/thin_plate_spline.hpp
+        include/${PROJECT_NAME}/time_optimal_trajectory_parametrization.hpp
+        include/${PROJECT_NAME}/timing.hpp
+        include/${PROJECT_NAME}/trajectory_utils.h
+        include/${PROJECT_NAME}/ur_10_fk_fast.hpp
+        include/${PROJECT_NAME}/vector_math.hpp
+        include/${PROJECT_NAME}/voxel_grid.hpp
+        include/${PROJECT_NAME}/zlib_helpers.hpp
+        )
 
 # Utility library
 add_library(${PROJECT_NAME}
-    src/${PROJECT_NAME}/zlib_helpers.cpp
-    src/${PROJECT_NAME}/base64_helpers.cpp
-    src/${PROJECT_NAME}/timing.cpp
-    src/${PROJECT_NAME}/first_order_deformation.cpp
-    src/${PROJECT_NAME}/time_optimal_trajectory_parametrization.cpp
-    )
+        src/${PROJECT_NAME}/zlib_helpers.cpp
+        src/${PROJECT_NAME}/base64_helpers.cpp
+        src/${PROJECT_NAME}/timing.cpp
+        src/${PROJECT_NAME}/first_order_deformation.cpp
+        src/${PROJECT_NAME}/time_optimal_trajectory_parametrization.cpp
+        )
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} z)
+
+if (pybind11_catkin_FOUND)
+  pybind_add_module(roscpp_initializer src/roscpp_initializer.cpp)
+  target_include_directories(roscpp_initializer SYSTEM PUBLIC ${catkin_INCLUDE_DIRS})
+  target_link_libraries(roscpp_initializer PUBLIC ${catkin_LIBRARIES})
+endif ()
 
 ###########
 ## Tests ##
@@ -183,12 +201,12 @@ endif ()
 
 ## Mark library for installation
 install(TARGETS ${PROJECT_NAME}
-    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-    )
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+        )
 ## Mark cpp header files for installation
 install(DIRECTORY include/${PROJECT_NAME}/
-    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-    PATTERN ".svn" EXCLUDE
-    )
+        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+        PATTERN ".svn" EXCLUDE
+        )

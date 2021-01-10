@@ -1,0 +1,13 @@
+# editor temporary files
+*.swp
+*~
+*.autosave
+
+# Vim Ctags file
+tags
+
+# Compiled python files
+*.pyc
+
+*.idea
+cmake-build-*

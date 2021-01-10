@@ -19,73 +19,58 @@
  * Note that both getter functions assert that a valid value is containted!
  *
  */
-namespace Maybe
-{
-    template <typename T>
-    class Maybe
-    {
-    protected:
+namespace Maybe {
+template <typename T>
+class Maybe {
+ protected:
+  bool maybe_;
+  T value_;
 
-        bool maybe_;
-        T value_;
+ public:
+  Maybe() : maybe_(false) {}
 
-    public:
+  Maybe(const T& value) : maybe_(true), value_(value) {}
 
-        Maybe() : maybe_(false) {}
+  Maybe(T&& value) : maybe_(true), value_(value) {}
 
-        Maybe(const T& value) : maybe_(true), value_(value) {}
+  bool Valid() const { return maybe_; }
 
-        Maybe(T&& value) : maybe_(true), value_(value) {}
+  T& Get() {
+    if (!maybe_) {
+      throw_arc_exception(std::invalid_argument, "Maybe has not been initialized");
+    }
+    return value_;
+  }
 
-        bool Valid() const
-        {
-            return maybe_;
-        }
+  const T& GetImmutable() const {
+    if (!maybe_) {
+      throw_arc_exception(std::invalid_argument, "Maybe has not been initialized");
+    }
+    return value_;
+  }
 
-        T& Get()
-        {
-            if (!maybe_)
-            {
-                throw_arc_exception(std::invalid_argument, "Maybe has not been initialized");
-            }
-            return value_;
-        }
+  void Set(const T& value) {
+    maybe_ = true;
+    value_ = value;
+  }
 
-        const T& GetImmutable() const
-        {
-            if (!maybe_)
-            {
-                throw_arc_exception(std::invalid_argument, "Maybe has not been initialized");
-            }
-            return value_;
-        }
+  void Set(T&& value) {
+    maybe_ = true;
+    value_ = value;
+  }
 
-        void Set(const T& value)
-        {
-            maybe_ = true;
-            value_ = value;
-        }
+  Maybe& operator=(const T& value) {
+    maybe_ = true;
+    value_ = value;
+    return *this;
+  }
 
-        void Set(T&& value)
-        {
-            maybe_ = true;
-            value_ = value;
-        }
+  Maybe& operator=(T&& value) {
+    maybe_ = true;
+    value_ = value;
+    return *this;
+  }
+};
+}  // namespace Maybe
 
-        Maybe& operator=(const T& value)
-        {
-            maybe_ = true;
-            value_ = value;
-            return *this;
-        }
-
-        Maybe& operator=(T&& value)
-        {
-            maybe_ = true;
-            value_ = value;
-            return *this;
-        }
-    };
-}
-
-#endif // MAYBE_HPP
+#endif  // MAYBE_HPP
