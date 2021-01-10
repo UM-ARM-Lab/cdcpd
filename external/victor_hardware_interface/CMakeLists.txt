@@ -39,7 +39,6 @@ generate_messages(DEPENDENCIES
     std_msgs)
 
 catkin_package(
-    LIBRARIES       ${PROJECT_NAME}
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
                     message_runtime)
 

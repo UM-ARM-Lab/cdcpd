@@ -78,6 +78,7 @@
   <exec_depend>message_runtime</exec_depend>
   <depend>cdcpd</depend>
   <depend>arc_utilities</depend>
+  <depend>victor_hardware_interface</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

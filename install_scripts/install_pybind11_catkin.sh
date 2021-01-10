@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 INSTALL_DIR=~/.local
-SRC_REPO_DIR=$INSTALL_DIR/src
+SRC_REPO_DIR=$INSTALL_DIR/share
 
 mkdir -p $SRC_REPO_DIR; cd $SRC_REPO_DIR
 git clone https://github.com/ipab-slmc/pybind11_catkin.git
