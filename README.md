@@ -85,7 +85,7 @@ Usage          : nomad -u
 -->
 #### Create catkin workspace (ignore it if you already have a catkin workspace)
 
-Specify workspace name and run `create_ws.sh` and add `source ~/YOUR_WORKSPACE/devel/setup.bash` to `~/.bashrc`
+Change workspace name in `create_ws_ROSVERSION.sh` and run it. NOTE: move `source ~/YOUR_WORKSPACE/devel/setup.bash` in `~/.bashrc` before `export CMAKE_PREFIX_PATH=~/.local:$CMAKE_PREFIX_PATH` as it will overwrite `CMAKE_PREFIX_PATH`.
 
 #### Build from source
 

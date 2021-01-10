@@ -18,7 +18,7 @@ sudo -u $USR_NAME ./install_nomad.sh
 sudo -u $USR_NAME ./install_svm.sh
 sudo -u $USR_NAME ./install_torch.sh
 sudo -u $USR_NAME ./install_ceres.sh
-sudo -u $USR_NAME ./install_pybind11_catkin.sh
+./install_pybind11_catkin.sh
 
 source ~/.bashrc
 
