@@ -9,6 +9,8 @@ echo 'export PKG_CONFIG_PATH=~/.local/lib/pkgconfig:$PKG_CONFIG_PATH' >> ~/.bash
 echo 'export PATH=~/.local/bin:${PATH}' >> ~/.bashrc
 echo 'export CMAKE_PREFIX_PATH=~/.local:$CMAKE_PREFIX_PATH' >> ~/.bashrc
 
+source ~/.bashrc
+
 sudo -u root apt install libeigen3-dev
 sudo -u $USR_NAME ./install_opencv.sh
 sudo -u $USR_NAME ./install_gurobi.sh
