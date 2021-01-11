@@ -11,6 +11,10 @@ echo 'export CMAKE_PREFIX_PATH=~/.local:$CMAKE_PREFIX_PATH' >> ~/.bashrc
 
 source ~/.bashrc
 
+sudo add-apt-repository "deb http://us.archive.ubuntu.com/ubuntu focal universe"
+sudo apt update
+sudo apt install libcgal-qt5-dev libcgal-dev libcgal-demo
+
 sudo -u root apt install libeigen3-dev
 sudo -u $USR_NAME ./install_opencv.sh
 sudo -u $USR_NAME ./install_gurobi.sh
