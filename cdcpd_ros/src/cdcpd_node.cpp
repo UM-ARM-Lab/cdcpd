@@ -42,7 +42,14 @@ PointCloud::Ptr makeCloud(Eigen::Matrix3Xf const& points) {
   return cloud;
 }
 
-cv::Mat ropeHsvMask(cv::Mat rgb) {
+cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
+  auto const hue_min = ROSHelpers::GetParamDebugLog<double>(ph, "hue_min", 340.0);
+  auto const sat_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.4);
+  auto const val_min = ROSHelpers::GetParamDebugLog<double>(ph, "value_min", 0.4);
+  auto const hue_max = ROSHelpers::GetParamDebugLog<double>(ph, "hue_max", 20.0);
+  auto const sat_max = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_max", 1.0);
+  auto const val_max = ROSHelpers::GetParamDebugLog<double>(ph, "value_max", 1.0);
+
   cv::Mat rgb_f;
   rgb.convertTo(rgb_f, CV_32FC3);
   rgb_f /= 255.0;  // get RGB 0.0-1.0
@@ -52,8 +59,15 @@ cv::Mat ropeHsvMask(cv::Mat rgb) {
   cv::Mat mask1;
   cv::Mat mask2;
   cv::Mat hsv_mask;
-  cv::inRange(color_hsv, cv::Scalar(0, 0.2, 0.2), cv::Scalar(20, 1.0, 1.0), mask1);
-  cv::inRange(color_hsv, cv::Scalar(340, 0.2, 0.2), cv::Scalar(360, 1.0, 1.0), mask2);
+  auto hue_min1 = hue_min;
+  auto hue_max2 = hue_max;
+  if (hue_min > hue_max)
+  {
+    hue_max2 = 360;
+    hue_min1 = 0;
+  }
+  cv::inRange(color_hsv, cv::Scalar(hue_min, sat_min, val_min), cv::Scalar(hue_max2, sat_max, val_max), mask1);
+  cv::inRange(color_hsv, cv::Scalar(hue_min1, sat_min, val_min), cv::Scalar(hue_max, sat_max, val_max), mask2);
   bitwise_or(mask1, mask2, hsv_mask);
 
   return hsv_mask;
@@ -130,7 +144,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Perform and record the update
-    auto hsv_mask = ropeHsvMask(rgb);
+    auto const hsv_mask = getHsvMask(ph, rgb);
     const smmap::AllGrippersSinglePoseDelta q_dot;
     const smmap::AllGrippersSinglePose q_config;
     auto out = cdcpd.operator()(rgb, depth, hsv_mask, cam, template_cloud, q_dot, q_config, true, true, false);
@@ -186,10 +200,11 @@ int main(int argc, char* argv[]) {
         order.header.frame_id = kinect_tf_name;
         order.header.stamp = ros::Time();
         order.ns = ns;
+        order.type = visualization_msgs::Marker::LINE_STRIP;
         order.action = visualization_msgs::Marker::ADD;
         order.pose.orientation.w = 1.0;
         order.id = 1;
-        order.scale.x = 0.002;
+        order.scale.x = 0.01;
         order.color.r = 1.0;
         order.color.a = 1.0;
 

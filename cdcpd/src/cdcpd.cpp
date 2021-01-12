@@ -1619,7 +1619,7 @@ CDCPD::Output CDCPD::operator()(
   cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
   Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
-  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
+  Eigen::Vector3f const bounding_box_extend = Vector3f(0.5, 0.5, 0.5);
 
   // entire_cloud: pointer to the entire point cloud
   // cloud: pointer to the point clouds selected

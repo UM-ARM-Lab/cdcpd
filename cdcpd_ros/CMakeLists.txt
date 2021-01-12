@@ -73,15 +73,13 @@ include_directories(
 )
 
 # Node for live data
-add_executable(${PROJECT_NAME}
+add_executable(cdcpd_node
         src/${PROJECT_NAME}/kinect_sub.cpp
         src/cdcpd_node.cpp
         )
-add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${catkin_LIBRARIES}
-        )
-target_compile_options(${PROJECT_NAME} PRIVATE -O3 -Wall -Wextra -Wconversion -Wshadow)
+add_dependencies(cdcpd_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(cdcpd_node PRIVATE ${catkin_LIBRARIES} )
+target_compile_options(cdcpd_node PRIVATE -O3 -Wall -Wextra -Wconversion -Wshadow)
 
 # Node for bagged data
 #add_executable(${PROJECT_NAME}_bagfile
