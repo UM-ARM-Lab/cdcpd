@@ -19,7 +19,7 @@ sudo -u $USR_NAME ./install_opencv.sh
 sudo -u $USR_NAME ./install_gurobi.sh
 sudo -u $USR_NAME ./install_faiss.sh
 # sudo -u $USR_NAME ./install_fgt.sh
-sudo -u $USR_NAME ./install_nomad.sh
+# sudo -u $USR_NAME ./install_nomad.sh
 # sudo -u $USR_NAME ./install_svm.sh
 # sudo -u $USR_NAME ./install_torch.sh
 # sudo -u $USR_NAME ./install_ceres.sh

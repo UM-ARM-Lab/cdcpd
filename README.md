@@ -25,7 +25,6 @@ Requirements
     * [kuka_iiwa_interface](https://github.com/UM-ARM-Lab/kuka_iiwa_interface)
       * [robotiq](https://github.com/UM-ARM-Lab/robotiq) (needed by kuka_iiwa_interface)
     * [arc_utilities](https://github.com/UM-ARM-Lab/arc_utilities)
-    * [NOMAD-3.8.1](gerad.ca/nomad)
 
 
 Installation
