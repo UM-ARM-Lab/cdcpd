@@ -31,36 +31,25 @@ Requirements
 Installation
 ------------
 
-Some of the dependencies are available on apt:
-```
-sudo apt install libeigen3-dev libgcgal-qt5-dev libopencv-dev
-```
-
 #### Installing ROS (ignore it if you already have it)
 
 Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo -u USER_NAME install_scripts/install_ros_noetic.sh` if you use Ubuntu 20.04
 
+#### Installing dependency
 
-* Gurobi: follow instructions here https://www.gurobi.com/documentation/9.0/quickstart_linux/software_installation_guid.html
+Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME ./install_dep.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
+
+NOTE: `source ~/.bashrc` inside `install_dep.sh` might not run successfully according to the platform. If you encounter the problem like `catkinonfig.cmake` not found, please run `source ~/.bashrc` and run `./install_pybind11_catkin.sh`.
+
+#### Create catkin workspace
+
+We assume you have created a catkin workspace. Now clone this repo to that worksace. See `install_scripts/create_ws_ROS_Version.sh` or the ROS wiki on how to setup a catkin workspace.
 
 #### Gurobi Licence
 
 Gurobi is a proprietary optimization package that we use. Please obtain a [free academic license](https://www.gurobi.com/academia/academic-program-and-licenses).
 
-
-We assume you have created a catkin workspace. Now clone this repo to that worksace. See `install_scripts/setup_ws.sh` or the ROS wiki on how to setup a catkin workspace.
-
-Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME ./install_dep.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
-
-
-```bash
-export LD_LIBRARY_PATH=~/.local/lib:$LD_LIBRARY_PATH
-export PKG_CONFIG_PATH=~/.local/lib/pkgconfig:$PKG_CONFIG_PATH
-export PATH=~/.local/bin:${PATH}
-export CMAKE_PREFIX_PATH=~/.local:$CMAKE_PREFIX_PATH
-```
-Rememeber to run `source ~/.bashrc` after modifying it.
-=======
+#### Building
 
 ```
 # in the src directory
