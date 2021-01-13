@@ -55,7 +55,7 @@ Gurobi is a proprietary optimization package that we use. Please obtain a [free 
 git clone https://github.com/UM-ARM-Lab/cdcpd.git
 ```
 
-Once you've cloned, it might be a good idea to `rosdep instll -r --from-paths cdcpd -y` to get any ROS packages you might be depending on.
+Once you've cloned, it might be a good idea to `rosdep install -r --from-paths cdcpd -y` to get any ROS packages you might be depending on.
 
 
 Demo
