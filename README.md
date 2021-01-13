@@ -17,15 +17,15 @@ Requirements
     * Ubuntu 18 or 20
     * ROS Melodic or Noetic
   * non-source dependencies
-    * [Gurobi](https://www.gurobi.com/)
     * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
     * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
   * source dependencies
+    * [Gurobi](https://www.gurobi.com/)
     * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
     * [kuka_iiwa_interface](https://github.com/UM-ARM-Lab/kuka_iiwa_interface)
       * [robotiq](https://github.com/UM-ARM-Lab/robotiq) (needed by kuka_iiwa_interface)
     * [arc_utilities](https://github.com/UM-ARM-Lab/arc_utilities)
-
+    * [NOMAD-3.8.1](gerad.ca/nomad)
 
 
 Installation
