@@ -4,19 +4,12 @@
 Useful functions for dealing with paths
 Unless otherwise noted, paths are a list of waypoints. Often it is useful to store these in a numpy array
 """
-<<<<<<< HEAD
-=======
-from more_itertools import pairwise
->>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
 import pathlib
 import sys
 from copy import deepcopy
 
 import numpy as np
-<<<<<<< HEAD
 from more_itertools import pairwise
-=======
->>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
 
 import rospy
 from trajectory_msgs.msg import JointTrajectory
@@ -52,19 +45,11 @@ def closest_point_to_line_segment(line, point):
 def closest_point(path, query_point):
     """
     Computes the closest point on the path to the query point
-<<<<<<< HEAD
 
     Returns:
     point, ind, alpha
     point: closest point on path to query point
     ind: index of the preceding point of the path to point
-=======
-    
-    Returns:
-    point, ind, alpha
-    point: closest point on path to query point
-    ind: index of the preceeding point of the path to point
->>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     alpha: The fraction from path[ind] to path[ind+1] where path is
     """
     d_close = dist(path[0], query_point)
@@ -88,11 +73,7 @@ def closest_point(path, query_point):
 
 def densify_line(start_point, end_point, max_dist):
     """
-<<<<<<< HEAD
     Returns a linear path from start point (exclusive) to end point (inclusive)
-=======
-    Returns a linear path from start point (exclusive) to end point (inclusive) 
->>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     with a distance of most max_dist between points
     """
     num_points = int(np.ceil(dist(start_point, end_point) / max_dist))
@@ -125,11 +106,7 @@ def travel_along(path, distance, starting_point=None):
     distance: total euclidean distance to travel. Negative follows backwards
     starting_point: path traversal starts at the closest point on the path to this point
 
-<<<<<<< HEAD
     Returns:
-=======
-    Returns: 
->>>>>>> 327be82... bring back local copy of arc_utilities, but IGNORE it by default
     new_path: subpath which lies completely on original path while following inputs as best as possible
     """
     if starting_point is None:
