@@ -16,10 +16,10 @@ Requirements
   * Environment:
     * Ubuntu 18 or 20
     * ROS Melodic or Noetic
-  * non-source dependencies
+  * apt dependencies
     * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
     * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
-  * source dependencies
+  * other dependencies
     * [Gurobi](https://www.gurobi.com/)
     * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
     * [kuka_iiwa_interface](https://github.com/UM-ARM-Lab/kuka_iiwa_interface)
