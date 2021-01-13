@@ -29,10 +29,10 @@ find_package(NOMAD)
 ###################################
 set(CATKIN_EXPORT_LIBRARIES ${PROJECT_NAME})
 if (GUROBI_FOUND)
-    list(APPEND CATKIN_EXPORT_LIBRARIES ${PROJECT_NAME}_gurobi_solvers ${PROJECT_NAME}_nomad_solvers)
+    list(APPEND CATKIN_EXPORT_LIBRARIES ${PROJECT_NAME}_gurobi_solvers)
 endif ()
 if (NOMAD_FOUND)
-    list(APPEND CATKIN_EXPORT_LIBRARIES ${PROJECT_NAME}_gurobi_solvers ${PROJECT_NAME}_nomad_solvers)
+    list(APPEND CATKIN_EXPORT_LIBRARIES ${PROJECT_NAME}_nomad_solvers)
 endif ()
 
 catkin_package(
