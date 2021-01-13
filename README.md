@@ -66,5 +66,6 @@ My own running result is [here](https://drive.google.com/drive/folders/1MZTR-hEa
 
 # FAQ & Misc Notes
 
-Q: It runs without error but doesn't seem to be processing images, help!
-A: We use a time synchronizer with "exact" time policy (the deafult). Therefore if your depth, color, and camera_info messages do not have exactly the same time stamps, the synchronizer will ignore it and nothing will happen.
+**Q:** It runs without error but doesn't seem to be processing images, help!
+
+**A:** We use a time synchronizer with "exact" time policy (the deafult). Therefore if your depth, color, and camera_info messages do not have exactly the same time stamps, the synchronizer will ignore it and nothing will happen.
