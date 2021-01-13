@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
 
   auto cdcpd = CDCPD(template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
   // TODO: Make these const references? Does this matter for CV types?
-  auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d cam) {
+  auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
     std::vector<CDCPD::FixedPoint> fixed_points;
     // Left Gripper
     try {
@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
     auto const hsv_mask = getHsvMask(ph, rgb);
     const smmap::AllGrippersSinglePoseDelta q_dot;
     const smmap::AllGrippersSinglePose q_config;
-    auto out = cdcpd.operator()(rgb, depth, hsv_mask, cam, template_cloud, q_dot, q_config, true, true, false);
+    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, q_dot, q_config, true, true, false);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids
