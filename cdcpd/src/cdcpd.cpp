@@ -1760,7 +1760,7 @@ CDCPD::Output CDCPD::operator()(
     const bool self_intersection,
     const bool interation_constrain,
     const bool is_prediction,
-    const int pred_choice,
+    const int pred_choice
     )
 {
   // rgb: CV_8U3C rgb image

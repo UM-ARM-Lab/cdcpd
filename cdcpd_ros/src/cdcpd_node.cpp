@@ -61,8 +61,7 @@ cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
   cv::Mat hsv_mask;
   auto hue_min1 = hue_min;
   auto hue_max2 = hue_max;
-  if (hue_min > hue_max)
-  {
+  if (hue_min > hue_max) {
     hue_max2 = 360;
     hue_min1 = 0;
   }
@@ -115,18 +114,18 @@ int main(int argc, char* argv[]) {
   auto const kinect_tf_name = kinect_name + "_rgb_optical_frame";
   auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "cdcpd_ros/left_gripper_prior");
   auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "cdcpd_ros/right_gripper_prior");
-  auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
-  auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
+  //  auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
+  //  auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
 
   auto cdcpd = CDCPD(template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
   // TODO: Make these const references? Does this matter for CV types?
   auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
-    std::vector<CDCPD::FixedPoint> fixed_points;
+    smmap::AllGrippersSinglePose q_config;
     // Left Gripper
     try {
       auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
-      auto const pos = ehc::GeometryVector3ToEigenVector3d(gripper.transform.translation);
-      fixed_points.push_back({pos.cast<float>(), left_node_idx});
+      auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
+      q_config.push_back(config);
 
     } catch (tf2::TransformException const& ex) {
       ROS_WARN_STREAM_THROTTLE(
@@ -135,8 +134,8 @@ int main(int argc, char* argv[]) {
     // Right Gripper
     try {
       auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
-      auto const pos = ehc::GeometryVector3ToEigenVector3d(gripper.transform.translation);
-      fixed_points.push_back({pos.cast<float>(), right_node_idx});
+      auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
+      q_config.push_back(config);
 
     } catch (tf2::TransformException const& ex) {
       ROS_WARN_STREAM_THROTTLE(
@@ -145,8 +144,8 @@ int main(int argc, char* argv[]) {
 
     // Perform and record the update
     auto const hsv_mask = getHsvMask(ph, rgb);
-    const smmap::AllGrippersSinglePoseDelta q_dot;
-    const smmap::AllGrippersSinglePose q_config;
+    auto const n_grippers = q_config.size();
+    const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
     auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, q_dot, q_config, true, true, false);
     template_cloud = out.gurobi_output;
 
