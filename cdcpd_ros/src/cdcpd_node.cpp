@@ -112,8 +112,8 @@ int main(int argc, char* argv[]) {
 
   // For use with TF and "fixed points" for the constrain step
   auto const kinect_tf_name = kinect_name + "_rgb_optical_frame";
-  auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "cdcpd_ros/left_gripper_prior");
-  auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "cdcpd_ros/right_gripper_prior");
+  auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
+  auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
   //  auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
   //  auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
 
@@ -122,24 +122,30 @@ int main(int argc, char* argv[]) {
   auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
     smmap::AllGrippersSinglePose q_config;
     // Left Gripper
-    try {
-      auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
-      auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
-      q_config.push_back(config);
+    if (not left_tf_name.empty()) {
+      try {
+        auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
+        auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
+        ROS_DEBUG_STREAM("left gripper: " << config.translation());
+        q_config.push_back(config);
 
-    } catch (tf2::TransformException const& ex) {
-      ROS_WARN_STREAM_THROTTLE(
-          10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << left_tf_name << ": " << ex.what());
+      } catch (tf2::TransformException const& ex) {
+        ROS_WARN_STREAM_THROTTLE(
+            10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << left_tf_name << ": " << ex.what());
+      }
     }
     // Right Gripper
-    try {
-      auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
-      auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
-      q_config.push_back(config);
+    if (not right_tf_name.empty()) {
+      try {
+        auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
+        auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
+        ROS_DEBUG_STREAM("right gripper: " << config.translation());
+        q_config.push_back(config);
 
-    } catch (tf2::TransformException const& ex) {
-      ROS_WARN_STREAM_THROTTLE(
-          10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << right_tf_name << ": " << ex.what());
+      } catch (tf2::TransformException const& ex) {
+        ROS_WARN_STREAM_THROTTLE(
+            10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << right_tf_name << ": " << ex.what());
+      }
     }
 
     // Perform and record the update
