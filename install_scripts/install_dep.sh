@@ -15,7 +15,7 @@ sudo -u root add-apt-repository "deb http://us.archive.ubuntu.com/ubuntu focal u
 sudo -u root apt update
 sudo -u root apt install -y libcgal-qt5-dev libcgal-dev libcgal-demo libeigen3-dev
 
-sudo -u $USR_NAME ./install_opencv.sh
+# sudo -u $USR_NAME ./install_opencv.sh
 sudo -u $USR_NAME ./install_gurobi.sh
 sudo -u $USR_NAME ./install_faiss.sh
 # sudo -u $USR_NAME ./install_fgt.sh

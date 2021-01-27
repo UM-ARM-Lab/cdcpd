@@ -24,7 +24,7 @@ struct COLLISION_CELL
 
   COLLISION_CELL() : occupancy(0.0), component(0) {}
 
-  COLLISION_CELL(const float in_occupancy)
+  explicit COLLISION_CELL(const float in_occupancy)
     : occupancy(in_occupancy), component(0) {}
 
   COLLISION_CELL(const float in_occupancy, const uint32_t in_component)
@@ -644,8 +644,6 @@ public:
 
   uint32_t UpdateConnectedComponents();
 
-  std::vector<std::vector<GRID_INDEX>> ExtractConnectedComponents();
-
   enum COMPONENT_TYPES : uint8_t { FILLED_COMPONENTS=0x01,
                                    EMPTY_COMPONENTS=0x02,
                                    UNKNOWN_COMPONENTS=0x04 };
@@ -735,6 +733,9 @@ public:
 
   visualization_msgs::Marker ExportConnectedComponentsForDisplay(
       const bool color_unknown_components) const;
+
+  std::vector<std::vector<GRID_INDEX>> ExtractConnectedComponents();
+
 };
 }
 

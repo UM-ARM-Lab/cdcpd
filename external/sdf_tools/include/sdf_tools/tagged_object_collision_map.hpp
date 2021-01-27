@@ -878,8 +878,6 @@ public:
       const bool add_virtual_border) const
   {
     std::map<uint32_t, sdf_tools::SignedDistanceField> per_object_sdfs;
-    const auto omp_threads = std::max(1, arc_helpers::GetNumOMPThreads() / 4);
-    #pragma omp parallel for num_threads(omp_threads)
     for (size_t idx = 0; idx < object_ids.size(); idx++)
     {
       const uint32_t object_id = object_ids[idx];
@@ -902,8 +900,9 @@ public:
       {
         for (int64_t z_index = 0; z_index < GetNumZCells(); z_index++)
         {
-          const auto& cell = GetImmutable(x_index, y_index, z_index).first;
-          const auto cell_object_id = cell.object_id;
+          const TAGGED_OBJECT_COLLISION_CELL& cell
+              = GetImmutable(x_index, y_index, z_index).first;
+          const uint32_t cell_object_id = cell.object_id;
           if (cell_object_id > 0)
           {
             object_id_map[cell_object_id] = 1u;
