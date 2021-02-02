@@ -82,12 +82,12 @@ int main(int argc, char* argv[]) {
 #endif
 
   // Publsihers for the data, some visualizations, others consumed by other nodes
-  auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 1);
-  auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 1);
-  auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 1);
-  auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 1);
-  auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 1);
-  auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
+  auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 1, true);
+  auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 1, true);
+  auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 1, true);
+  auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 1, true);
+  auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 1, true);
+  auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10, true);
 
   // TF objects for getting gripper positions
   auto tf_buffer = tf2_ros::Buffer();
@@ -114,10 +114,12 @@ int main(int argc, char* argv[]) {
   auto const kinect_tf_name = kinect_name + "_rgb_optical_frame";
   auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
   auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
-  //  auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
-  //  auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
+  auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
+  auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
 
-  auto cdcpd = CDCPD(template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
+  Eigen::MatrixXi gripper_idx(1,2);
+  gripper_idx << left_node_idx, right_node_idx;
+  auto cdcpd = CDCPD(template_cloud, template_edges, gripper_idx, use_recovery, alpha, beta, lambda, k_spring);
   // TODO: Make these const references? Does this matter for CV types?
   auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
     smmap::AllGrippersSinglePose q_config;
