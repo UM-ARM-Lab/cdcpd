@@ -54,6 +54,9 @@
 // #define CYL_CLOTH4
 // #endif
 
+typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
+typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
+
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::FT FT;
 typedef K::Point_3 Point_3;
@@ -100,75 +103,73 @@ class CDCPD
     int template_index;
   };
 
-  CDCPD();
-
-  CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+  CDCPD(PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
         std::shared_ptr<ros::NodeHandle> nh,
-        const double translation_dir_deformability,
-        const double translation_dis_deformability,
-        const double rotation_deformability,
+        double translation_dir_deformability,
+        double translation_dis_deformability,
+        double rotation_deformability,
         const Eigen::MatrixXi &gripper_idx,
         const obsParam &obs_param,
-        const bool _use_recovery = true,
-        const double alpha = 0.5,
-        const double beta = 1.0,
-        const double lambda = 1.0,
-        const double k = 100.0,
-        const float zeta = 10.0,
-        const bool is_sim = false);
+        bool _use_recovery = true,
+        double alpha = 0.5,
+        double beta = 1.0,
+        double lambda = 1.0,
+        double k = 100.0,
+        float zeta = 10.0,
+        bool is_sim = false);
 
   CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
-        const obsParam &obs_param,
         const Eigen::MatrixXi &gripper_idx,
-        const bool _use_recovery = true,
-        const double alpha = 0.5,
-        const double beta = 1.0,
-        const double lambda = 1.0,
-        const double k = 100.0,
-        const float zeta = 10.0,
-        const bool is_sim = false);
+        const obsParam &obs_param,
+        bool _use_recovery = true,
+        double alpha = 0.5,
+        double beta = 1.0,
+        double lambda = 1.0,
+        double k = 100.0,
+        float zeta = 10.0,
+        bool is_sim = false);
 
   Output operator()(const cv::Mat &rgb, // RGB image
                     const cv::Mat &depth, // Depth image
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
-                    const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
                     const smmap::AllGrippersSinglePoseDelta &q_dot,
                     const smmap::AllGrippersSinglePose &q_config,
-                    const bool self_intersection = true,
-                    const bool interation_constrain = true,
-                    const bool is_prediction = true,
-                    const int pred_choice = 0);
+                    bool self_intersection = true,
+                    bool interation_constrain = true,
+                    bool is_prediction = true,
+                    int pred_choice = 0);
 
 
   Output operator()(const cv::Mat &rgb, // RGB image
                     const cv::Mat &depth, // Depth image
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
-                    const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
                     const smmap::AllGrippersSinglePoseDelta &q_dot,
                     const smmap::AllGrippersSinglePose &q_config,
-                    const std::vector<bool> is_grasped,
+                    std::vector<bool> is_grasped,
                     std::shared_ptr<ros::NodeHandle> nh,
-                    const double translation_dir_deformability,
-                    const double translation_dis_deformability,
-                    const double rotation_deformability,
-                    const bool self_intersection = true,
-                    const bool interation_constrain = true,
-                    const bool is_prediction = true,
-                    const int pred_choice = 0);
+                    double translation_dir_deformability,
+                    double translation_dis_deformability,
+                    double rotation_deformability,
+                    bool self_intersection = true,
+                    bool interation_constrain = true,
+                    bool is_prediction = true,
+                    int pred_choice = 0);
 
   Output operator()(const cv::Mat &rgb, // RGB image
                     const cv::Mat &depth, // Depth image
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
-                    const pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    const bool self_intersection = true,
-                    const bool interation_constrain = true,
-                    const bool is_prediction = true,
-                    const int pred_choice = 0,
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    bool self_intersection = true,
+                    bool interation_constrain = true,
+                    bool is_prediction = true,
+                    int pred_choice = 0,
                     const std::vector<FixedPoint> &fixed_points = {});
 
 
@@ -177,7 +178,7 @@ class CDCPD
                                    const cv::Mat &depth,
                                    const cv::Mat &mask,
                                    const Eigen::Matrix3f &intrinsics,
-                                   const float kvis);
+                                   float kvis);
 
 #ifdef NOUSE
   Eigen::VectorXi is_occluded(const Eigen::Matrix3Xf& vertices,
@@ -193,10 +194,10 @@ class CDCPD
 
   // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
   // and not have to pass around intr in here
-  Eigen::MatrixXf calcP(const int N,
-                        const int M,
-                        const int D,
-                        const double sigma2,
+  Eigen::MatrixXf calcP(int N,
+                        int M,
+                        int D,
+                        double sigma2,
                         const Eigen::Matrix3Xf &X,
                         const Eigen::Matrix3Xf &TY,
                         const Eigen::Matrix3Xf &Y_emit_prior);
@@ -223,7 +224,7 @@ class CDCPD
   Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P,
                            const smmap::AllGrippersSinglePoseDelta &q_dot,
                            const smmap::AllGrippersSinglePose &q_config,
-                           const int pred_choice);
+                           int pred_choice);
 
   std::shared_ptr<smmap::ConstraintJacobianModel> model;
   std::shared_ptr<smmap::DiminishingRigidityModel> deformModel;

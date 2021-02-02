@@ -56,9 +56,6 @@ using smmap::AllGrippersSinglePoseDelta;
 using std::cout;
 using std::endl;
 
-typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
-typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
-
 static double abs_derivative(double x)
 {
   return x;
@@ -115,7 +112,7 @@ static double calculate_prob_reg(const Matrix3Xf &X,
   float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
   float w = 0.1;
   c *= w / (1 - w);
-  c *= static_cast<double>(M) / N;
+  c *= static_cast<float>(M) / N;
 
   P = (-P / (2 * sigma2)).array().exp().matrix();
   P.array().colwise() *= Y_emit_prior.array();
@@ -249,8 +246,8 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
     // G: C in Eq [f]
     MatrixXf G = C * C.transpose();
     // ???: why += R for G
-    float R = reg;
-    float tr = G.trace();
+    auto R = reg;
+    auto const tr = G.trace();
     if (tr > 0)
     {
       R *= tr;
@@ -301,19 +298,13 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
 //     }
 // }
 
-// CDCPD::CDCPD():
-// 	template_matcher(1500){}
-
-CDCPD::CDCPD()
-{}
-
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
              std::shared_ptr<ros::NodeHandle> nh,
              const double translation_dir_deformability,
              const double translation_dis_deformability,
              const double rotation_deformability,
-             const Eigen::MatrixXi &grippers,
+             const Eigen::MatrixXi &gripper_idx,
              const obsParam &_obs_param,
              const bool _use_recovery,
              const double _alpha,
@@ -322,66 +313,30 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _k,
              const float _zeta,
              const bool _is_sim) :
-// template_matcher(1500), // TODO make configurable?
-    original_template(template_cloud->getMatrixXfMap().topRows(3)),
-    template_edges(_template_edges),
-    last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
-    last_upper_bounding_box(original_template.rowwise().maxCoeff()), // TODO make configurable?
-    lle_neighbors(8), // TODO make configurable?
-    // ENHANCE & ???: 1e-3 seems to be unnecessary
-    m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
-    tolerance(1e-4), // TODO make configurable?
-    alpha(_alpha), // TODO make configurable?
-    beta(_beta), // TODO make configurable?
-    w(0.1), // TODO make configurable?
-    initial_sigma_scale(1.0 / 8), // TODO make configurable?
-    start_lambda(_lambda), // TODO make configurable?
-    annealing_factor(0.6), // TODO make configurable?
-    k(_k),
-    max_iterations(100), // TODO make configurable?
-    kvis(1e3),
-    zeta(_zeta),
-    use_recovery(_use_recovery),
-    gripper_idx(grippers),
-    obs_param(_obs_param),
-    mesh(initObstacle(_obs_param)),
-    is_sim(_is_sim)
+    CDCPD(template_cloud,
+          _template_edges,
+          gripper_idx,
+          _obs_param,
+          _use_recovery,
+          _alpha,
+          _beta,
+          _lambda,
+          _k,
+          _zeta,
+          _is_sim)
 {
-  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
-  last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
-  last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
-
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-  kdtree.setInputCloud(template_cloud);
-  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-  L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
-  // Qconstructor(template_edges, Q, original_template.cols());
-
-  // TODO: how to configure nh so that the it can get correct sdf
-  // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
-
-  const double res = 1.0;
-  const double size = 10.0;
-  const Eigen::Isometry3d origin_transform
-      = Eigen::Translation3d(0.0, 0.0, 0.0) * Eigen::Quaterniond(
-          Eigen::AngleAxisd(M_PI_4, Eigen::Vector3d::UnitZ()));
-  auto map = sdf_tools::CollisionMapGrid(origin_transform, "world", res, size, size, 1.0,
-                                         sdf_tools::COLLISION_CELL(0.0));
-  const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
-  sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(sdf);
-
-  // initializa gripper data
+  // initialize gripper data
   std::vector<smmap::GripperData> grippers_data;
 
   // format grippers_data
   std::cout << "gripper data when constructing CDCPD" << std::endl;
-  std::cout << grippers << std::endl << std::endl;
-  for (int g_idx = 0; g_idx < grippers.cols(); g_idx++)
+  std::cout << gripper_idx << std::endl << std::endl;
+  for (int g_idx = 0; g_idx < gripper_idx.cols(); g_idx++)
   {
     std::vector<long> grip_node_idx;
-    for (int node_idx = 0; node_idx < grippers.rows(); node_idx++)
+    for (int node_idx = 0; node_idx < gripper_idx.rows(); node_idx++)
     {
-      grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
+      grip_node_idx.push_back(long(gripper_idx(node_idx, g_idx)));
     }
     std::string gripper_name;
     gripper_name = "gripper" + std::to_string(g_idx);
@@ -411,21 +366,13 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
       nh,
       translation_dir_deformability,
       rotation_deformability);
-  fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
-  vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
-  CGAL::Polygon_mesh_processing::compute_normals(mesh,
-                                                 vnormals,
-                                                 fnormals,
-                                                 CGAL::Polygon_mesh_processing::parameters::vertex_point_map(
-                                                     mesh.points()).
-                                                     geom_traits(K()));
 }
 
 // This is for the case where the gripper indices are unknown (in real experiment)
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
-             const obsParam &_obs_param,
              const Eigen::MatrixXi &gripper_idx,
+             const obsParam &_obs_param,
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
@@ -433,13 +380,11 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _k,
              const float _zeta,
              const bool _is_sim) :
-// template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
     last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
     last_upper_bounding_box(original_template.rowwise().maxCoeff()), // TODO make configurable?
     lle_neighbors(8), // TODO make configurable?
-    // ENHANCE & ???: 1e-3 seems to be unnecessary
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
     alpha(_alpha), // TODO make configurable?
@@ -2149,3 +2094,4 @@ CDCPD::Output CDCPD::operator()(
       cdcpd_out
   };
 }
+
