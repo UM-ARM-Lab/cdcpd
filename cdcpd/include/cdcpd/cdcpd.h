@@ -54,10 +54,6 @@
 // #define CYL_CLOTH4
 // #endif
 
-// #ifndef SHAPE_COMP
-// #define SHAPE_COMP
-// #endif
-
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::FT FT;
 typedef K::Point_3 Point_3;
@@ -113,23 +109,18 @@ class CDCPD
         const double translation_dis_deformability,
         const double rotation_deformability,
         const Eigen::MatrixXi &gripper_idx,
-#ifdef SHAPE_COMP
-      const obsParam& obs_param,
-#endif
+        const obsParam &obs_param,
         const bool _use_recovery = true,
         const double alpha = 0.5,
         const double beta = 1.0,
         const double lambda = 1.0,
         const double k = 100.0,
         const float zeta = 10.0,
-        const std::vector<float> cylinder_data = {},
         const bool is_sim = false);
 
   CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
-#ifdef SHAPE_COMP
-      const obsParam& obs_param,
-#endif
+        const obsParam &obs_param,
         const Eigen::MatrixXi &gripper_idx,
         const bool _use_recovery = true,
         const double alpha = 0.5,
@@ -137,7 +128,6 @@ class CDCPD
         const double lambda = 1.0,
         const double k = 100.0,
         const float zeta = 10.0,
-        const std::vector<float> cylinder_data = {},
         const bool is_sim = false);
 
   Output operator()(const cv::Mat &rgb, // RGB image
@@ -264,13 +254,10 @@ class CDCPD
   Eigen::MatrixXi gripper_idx;
   std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
   std::vector<bool> last_grasp_status;
-#ifdef SHAPE_COMP
   obsParam obs_param;
   Mesh mesh;
-  Mesh::Property_map<face_descriptor, Vector> fnormals;
-    Mesh::Property_map<vertex_descriptor, Vector> vnormals;
-#endif
-  std::vector<float> cylinder_data;
+  Mesh::Property_map <face_descriptor, Vector> fnormals;
+  Mesh::Property_map <vertex_descriptor, Vector> vnormals;
   bool is_sim;
 };
 

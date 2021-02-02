@@ -314,16 +314,13 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double translation_dis_deformability,
              const double rotation_deformability,
              const Eigen::MatrixXi &grippers,
-#ifdef SHAPE_COMP
-    const obsParam& _obs_param,
-#endif
+             const obsParam &_obs_param,
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
              const double _lambda,
              const double _k,
              const float _zeta,
-             const std::vector<float> _cylinder_data,
              const bool _is_sim) :
 // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
@@ -345,12 +342,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     kvis(1e3),
     zeta(_zeta),
     use_recovery(_use_recovery),
-    gripper_idx(grippers)
-#ifdef SHAPE_COMP
-    , obs_param(_obs_param),
-    mesh(initObstacle(_obs_param))
-#endif
-    , cylinder_data(_cylinder_data),
+    gripper_idx(grippers),
+    obs_param(_obs_param),
+    mesh(initObstacle(_obs_param)),
     is_sim(_is_sim)
 {
   Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
@@ -417,23 +411,20 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
       nh,
       translation_dir_deformability,
       rotation_deformability);
-#ifdef SHAPE_COMP
   fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
-    vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
+  vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
   CGAL::Polygon_mesh_processing::compute_normals(mesh,
-                               vnormals,
-                               fnormals,
-                               CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
-                               geom_traits(K()));
-#endif
+                                                 vnormals,
+                                                 fnormals,
+                                                 CGAL::Polygon_mesh_processing::parameters::vertex_point_map(
+                                                     mesh.points()).
+                                                     geom_traits(K()));
 }
 
 // This is for the case where the gripper indices are unknown (in real experiment)
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
-#ifdef SHAPE_COMP
-    const obsParam& _obs_param,
-#endif
+             const obsParam &_obs_param,
              const Eigen::MatrixXi &gripper_idx,
              const bool _use_recovery,
              const double _alpha,
@@ -441,7 +432,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _lambda,
              const double _k,
              const float _zeta,
-             const std::vector<float> _cylinder_data,
              const bool _is_sim) :
 // template_matcher(1500), // TODO make configurable?
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
@@ -464,12 +454,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
     zeta(_zeta),
     use_recovery(_use_recovery),
     gripper_idx(gripper_idx),
-    last_grasp_status({false, false})
-#ifdef SHAPE_COMP
-    , obs_param(_obs_param),
-    mesh(initObstacle(_obs_param))
-#endif
-    , cylinder_data(_cylinder_data),
+    last_grasp_status({false, false}),
+    obs_param(_obs_param),
+    mesh(initObstacle(_obs_param)),
     is_sim(_is_sim)
 {
   Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
@@ -495,15 +482,14 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
   const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
   sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(sdf);
 
-#ifdef SHAPE_COMP
   fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
-    vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
+  vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
   CGAL::Polygon_mesh_processing::compute_normals(mesh,
-                               vnormals,
-                               fnormals,
-                               CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).
-                               geom_traits(K()));
-#endif
+                                                 vnormals,
+                                                 fnormals,
+                                                 CGAL::Polygon_mesh_processing::parameters::vertex_point_map(
+                                                     mesh.points()).
+                                                     geom_traits(K()));
 }
 
 /*
@@ -1720,11 +1706,7 @@ CDCPD::Output CDCPD::operator()(
 
 
   // Next step: optimization.
-#ifdef SHAPE_COMP
   Optimizer opt(original_template, Y, 1.1, obs_param);
-#else
-  Optimizer opt(original_template, Y, 1.1, cylinder_data);
-#endif
 
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
   // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
@@ -1766,7 +1748,7 @@ CDCPD::Output CDCPD::operator()(
     const bool interation_constrain,
     const bool is_prediction,
     const int pred_choice
-    )
+)
 {
   // rgb: CV_8U3C rgb image
   // depth: CV_16U depth image
@@ -1995,11 +1977,7 @@ CDCPD::Output CDCPD::operator()(
 
   // Next step: optimization.
   // ???: most likely not 1.0
-#ifdef SHAPE_COMP
   Optimizer opt(original_template, Y, 1.1, obs_param);
-#else
-  Optimizer opt(original_template, Y, 1.1, cylinder_data);
-#endif
 
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
   // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
@@ -2147,11 +2125,7 @@ CDCPD::Output CDCPD::operator()(
 
   // Next step: optimization.
   // ???: most likely not 1.0
-#ifdef SHAPE_COMP
   Optimizer opt(original_template, Y, 1.1, obs_param);
-#else
-  Optimizer opt(original_template, Y, 1.1, cylinder_data);
-#endif
 
   Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain);
   // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
