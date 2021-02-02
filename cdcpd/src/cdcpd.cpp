@@ -5,33 +5,25 @@
 #include <string>
 
 #include <Eigen/Dense>
-#include <opencv2/imgcodecs.hpp> // TODO remove after not writing images
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/eigen.hpp>
-#include <opencv2/rgbd.hpp>
 #include <opencv2/core/core.hpp>
 
-#include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
 
 #include <sdf_tools/collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
-#include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 #include <fgt.hpp>
 
 #include "cdcpd/obs_util.h"
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/optimizer.h"
-// #include "cdcpd/past_template_matcher.h"
-#include "depth_traits.h"
 
-// TODO rm
 #include <iostream>
 #include <fstream>
 #include <random>
-// end TODO
 
 using cv::Mat;
 using cv::Vec3b;
@@ -298,9 +290,10 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
 //     }
 // }
 
-CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
+CDCPD::CDCPD(ros::NodeHandle nh,
+             ros::NodeHandle ph,
+             PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
-             std::shared_ptr<ros::NodeHandle> nh,
              const double translation_dir_deformability,
              const double translation_dis_deformability,
              const double rotation_deformability,
@@ -313,7 +306,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _k,
              const float _zeta,
              const bool _is_sim) :
-    CDCPD(template_cloud,
+    CDCPD(nh,
+          ph,
+          template_cloud,
           _template_edges,
           gripper_idx,
           _obs_param,
@@ -347,6 +342,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
   model->SetGrippersData(grippers_data);
 
   // set up collision check function
+  // FIXME: yixuan, this seems like a mistake?
   model->SetCallbackFunctions(fake_collision_check);
 
   // set initial point configuration
@@ -354,7 +350,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
   model->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
 
   model = std::make_shared<smmap::ConstraintJacobianModel>(
-      nh,
+      std::make_shared<ros::NodeHandle>(nh),
       translation_dir_deformability,
       translation_dis_deformability,
       rotation_deformability,
@@ -363,13 +359,15 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
   deformModel->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
 
   deformModel = std::make_shared<smmap::DiminishingRigidityModel>(
-      nh,
+      std::make_shared<ros::NodeHandle>(nh),
       translation_dir_deformability,
       rotation_deformability);
 }
 
 // This is for the case where the gripper indices are unknown (in real experiment)
-CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
+CDCPD::CDCPD(ros::NodeHandle nh,
+             ros::NodeHandle ph,
+             PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
              const Eigen::MatrixXi &gripper_idx,
              const obsParam &_obs_param,
@@ -380,6 +378,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,
              const double _k,
              const float _zeta,
              const bool _is_sim) :
+    nh(nh),
+    ph(ph),
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
     last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
@@ -1507,173 +1507,33 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P,
   }
 }
 
+
 CDCPD::Output CDCPD::operator()(
     const Mat &rgb,
     const Mat &depth,
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    const AllGrippersSinglePoseDelta &q_dot,
-    const AllGrippersSinglePose &q_config,
     const bool self_intersection,
-    const bool interation_constrain,
-    const bool is_prediction,
-    const int pred_choice)
+    const bool interaction_constrain)
 {
-  // rgb: CV_8U3C rgb image
-  // depth: CV_16U depth image
-  // mask: CV_8U mask for segmentation
-  // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
-  // template_edges: (2, K) matrix corresponding to E in the paper
-
-  assert(rgb.type() == CV_8UC3);
-  if (is_sim)
-  {
-    assert(depth.type() == CV_32F);
-  } else
-  {
-    assert(depth.type() == CV_16U);
-  }
-  assert(mask.type() == CV_8U);
-  assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
-
-  size_t recovery_knn_k = 12; // TODO configure this?
-  float recovery_cost_threshold = 0.5; // TODO configure this?
-
-  Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-
-  // Useful utility for outputting an Eigen matrix to a file
-  auto to_file = [&np_fmt](const std::string &fname, const MatrixXf &mat)
-  {
-    std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
-  };
-
-  Eigen::Matrix3d intrinsics_eigen_tmp;
-  cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
-  Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
-
-  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
-
-  // entire_cloud: pointer to the entire point cloud
-  // cloud: pointer to the point clouds selected
-#ifdef ENTIRE
-  auto[entire_cloud, cloud]
-#else
-  auto [cloud]
-#endif
-  = point_clouds_from_images(
-      depth,
-      rgb,
-      mask,
-      intrinsics_eigen,
-      last_lower_bounding_box - bounding_box_extend,
-      last_upper_bounding_box + bounding_box_extend,
-      is_sim);
-  std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
-
-  /// VoxelGrid filter downsampling
-  PointCloud::Ptr cloud_downsampled(new PointCloud);
-  const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
-  double sigma2 = 0.002;
-  // TODO: check whether the change is needed here for unit conversion
-  Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
-  // std::cout << "P_vis:" << std::endl;
-  // std::cout << Y_emit_prior << std::endl << std::endl;
-  // sample_X_points(Y, Y_emit_prior, sigma2, cloud);
-
-  pcl::VoxelGrid<pcl::PointXYZ> sor;
-  std::cout << "Points in cloud before leaf: " << cloud->width << std::endl;
-  sor.setInputCloud(cloud);
-  sor.setLeafSize(0.02f, 0.02f, 0.02f);
-  sor.filter(*cloud_downsampled);
-  std::cout << "Points in fully filtered: " << cloud_downsampled->width << std::endl;
-  Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
-  // Add points to X according to the previous template
-
-#ifdef ENTIRE
-  const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
-#endif
-
-  // NOTE: order of P cannot influence delta_P, but influence P+delta_P
-  // std::chrono::time_point<std::chrono::system_clock> start, end;
-  std::vector<FixedPoint> pred_fixed_points;
-  if (q_config.size() != static_cast<unsigned long>(gripper_idx.cols()))
-  {
-    std::cerr << "In the constructor you indicated there " << gripper_idx.cols() << " gripper constraints"
-              << " but the q_config passed has " << q_config.size() << " elements.\n";
-  }
-  for (int col = 0; col < gripper_idx.cols(); ++col)
-  {
-    FixedPoint pt;
-    pt.template_index = gripper_idx(0, col);
-    pt.position(0) = q_config[col](0, 3);
-    pt.position(1) = q_config[col](1, 3);
-    pt.position(2) = q_config[col](2, 3);
-    pred_fixed_points.push_back(pt);
-  }
-  Matrix3Xf TY, TY_pred;
-  if (is_prediction)
-  {
-    // start = std::chrono::system_clock::now();
-    TY_pred = predict(Y.cast<double>(), q_dot, q_config,
-                      pred_choice).cast<float>(); // end = std::chrono::system_clock::now(); std::cout << "predict: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-    // TY_pred = Y;
-    // for (int col = 0; col < gripper_idx.cols(); ++col)
-    // {
-    //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-    //     {
-    //         FixedPoint pt;
-    //         pt.template_index = gripper_idx(row, col);
-    //         pt.position = TY_pred.col(pt.template_index);
-    //         pred_fixed_points.push_back(pt);
-    //     }
-    // }
-    // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
-    // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-    TY = cpd(X, Y, TY_pred, depth, mask,
-             intrinsics_eigen); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-    // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
-  } else
-  {
-    // for (int col = 0; col < gripper_idx.cols(); ++col)
-    // {
-    //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-    //     {
-    //         FixedPoint pt;
-    //         pt.template_index = gripper_idx(row, col);
-    //         pt.position = TY_pred.col(pt.template_index);
-    //         pred_fixed_points.push_back(pt);
-    //     }
-    // }
-    cout << "original cheng is used" << endl;
-    TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
-  }
-
-
-  // Next step: optimization.
-  Optimizer opt(original_template, Y, 1.1, obs_param);
-
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
-  // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-
-  // Set the min and max for the box filter for next time
-  last_lower_bounding_box = Y_opt.rowwise().minCoeff();
-  last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
-
-  PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
-  PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
-  PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
-
-  return CDCPD::Output{
-#ifdef ENTIRE
-      entire_cloud,
-#endif
-      cloud,
-      cloud_downsampled,
-      cdcpd_cpd,
-      cdcpd_pred,
-      cdcpd_out
-  };
+  AllGrippersSinglePoseDelta q_dot;
+  AllGrippersSinglePose q_config;
+  return operator()(rgb,
+                    depth,
+                    mask,
+                    intrinsics,
+                    template_cloud,
+                    self_intersection,
+                    interaction_constrain,
+                    false,
+                    0,
+                    q_dot,
+                    q_config,
+                    {},
+                    0,
+                    0,
+                    0);
 }
 
 CDCPD::Output CDCPD::operator()(
@@ -1684,22 +1544,48 @@ CDCPD::Output CDCPD::operator()(
     const PointCloud::Ptr template_cloud,
     const AllGrippersSinglePoseDelta &q_dot,
     const AllGrippersSinglePose &q_config,
+    const bool self_intersection,
+    const bool interaction_constrain)
+{
+  return operator()(rgb,
+                    depth,
+                    mask,
+                    intrinsics,
+                    template_cloud,
+                    self_intersection,
+                    interaction_constrain,
+                    false,
+                    0,
+                    q_dot,
+                    q_config,
+                    {},
+                    0,
+                    0,
+                    0);
+}
+
+CDCPD::Output CDCPD::operator()(
+    const Mat &rgb,
+    const Mat &depth,
+    const Mat &mask,
+    const cv::Matx33d &intrinsics,
+    const PointCloud::Ptr template_cloud,
+    const bool self_intersection,
+    const bool interaction_constrain,
+    const bool is_prediction,
+    const int pred_choice,
+    const AllGrippersSinglePoseDelta &q_dot,
+    const AllGrippersSinglePose &q_config,
     const std::vector<bool> is_grasped,
-    std::shared_ptr<ros::NodeHandle> nh,
     const double translation_dir_deformability,
     const double translation_dis_deformability,
-    const double rotation_deformability,
-    const bool self_intersection,
-    const bool interation_constrain,
-    const bool is_prediction,
-    const int pred_choice
-)
+    const double rotation_deformability)
 {
-  // rgb: CV_8U3C rgb image
-  // depth: CV_16U depth image
-  // mask: CV_8U mask for segmentation
-  // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
-  // template_edges: (2, K) matrix corresponding to E in the paper
+// rgb: CV_8U3C rgb image
+// depth: CV_16U depth image
+// mask: CV_8U mask for segmentation
+// template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
+// template_edges: (2, K) matrix corresponding to E in the paper
 
   assert(rgb.type() == CV_8UC3);
   if (is_sim)
@@ -1712,26 +1598,23 @@ CDCPD::Output CDCPD::operator()(
   assert(mask.type() == CV_8U);
   assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
-
-  size_t recovery_knn_k = 12; // TODO configure this?
-  float recovery_cost_threshold = 0.5; // TODO configure this?
-
   Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
 
-  // Useful utility for outputting an Eigen matrix to a file
+// Useful utility for outputting an Eigen matrix to a file
   auto to_file = [&np_fmt](const std::string &fname, const MatrixXf &mat)
   {
     std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
   };
 
   Eigen::Matrix3d intrinsics_eigen_tmp;
-  cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
+  cv::cv2eigen(intrinsics, intrinsics_eigen_tmp
+  );
   Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
   Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
 
-  // entire_cloud: pointer to the entire point cloud
-  // cloud: pointer to the point clouds selected
+// entire_cloud: pointer to the entire point cloud
+// cloud: pointer to the point clouds selected
 #ifdef ENTIRE
   auto[entire_cloud, cloud]
 #else
@@ -1747,29 +1630,31 @@ CDCPD::Output CDCPD::operator()(
       is_sim);
   std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
 
-  /// VoxelGrid filter downsampling
+/// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
   double sigma2 = 0.002;
-  // TODO: check whether the change is needed here for unit conversion
+// TODO: check whether the change is needed here for unit conversion
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
-  // std::cout << "P_vis:" << std::endl;
-  // std::cout << Y_emit_prior << std::endl << std::endl;
-  // sample_X_points(Y, Y_emit_prior, sigma2, cloud);
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
-  std::cout << "Points in cloud before leaf: " << cloud->width << std::endl;
-  sor.setInputCloud(cloud);
+  std::cout << "Points in cloud before leaf: " << cloud->width <<
+            std::endl;
+  sor.
+      setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
-  sor.filter(*cloud_downsampled);
-  std::cout << "Points in fully filtered: " << cloud_downsampled->width << std::endl;
+  sor.
+      filter(*cloud_downsampled);
+  std::cout << "Points in fully filtered: " << cloud_downsampled->width <<
+            std::endl;
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
-  // Add points to X according to the previous template
+// Add points to X according to the previous template
 
 #ifdef ENTIRE
   const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
 #endif
 
+/// START OF GRIPPERS SECTION
   AllGrippersSinglePoseDelta q_dot_valid;
   AllGrippersSinglePose q_config_valid;
 
@@ -1786,150 +1671,158 @@ CDCPD::Output CDCPD::operator()(
   }
   int num_gripper = int(std::accumulate(is_grasped.begin(), is_grasped.end(), 0));
 
-  for (int g_idx = 0; g_idx < num_gripper; g_idx++)
+  for (
+      int g_idx = 0;
+      g_idx < num_gripper;
+      g_idx++)
   {
-    q_config_valid.push_back(q_config[idx_map[g_idx]]);
-    q_dot_valid.push_back(q_dot[idx_map[g_idx]]);
+    q_config_valid.
+        push_back(q_config[idx_map[g_idx]]);
+    q_dot_valid.
+        push_back(q_dot[idx_map[g_idx]]);
   }
 
-  // if a model is not created (i.e. no grasping)
+// if a model is not created (i.e. no grasping)
   if (!is_grasped[0] && !is_grasped[1])
   {
-    deformModel = NULL;
-    model = NULL;
+    deformModel = nullptr;
+    model = nullptr;
   } else if (is_grasped != last_grasp_status)
   {
     MatrixXi grippers(1, num_gripper);
 
-    for (int g_idx = 0; g_idx < num_gripper; g_idx++)
+    for (
+        int g_idx = 0;
+        g_idx < num_gripper;
+        g_idx++)
     {
       Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
       MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
       MatrixXf::Index minRow, minCol;
       float min = dist.minCoeff(&minRow, &minCol);
-      cout << "closest point index: " << minCol << endl;
-      grippers(0, g_idx) = int(minCol);
+      cout << "closest point index: " << minCol <<
+           endl;
+      grippers(0, g_idx) =
+          int(minCol);
     }
 
     gripper_idx = grippers;
-    // initializa gripper data
+
+// initialize gripper data
     std::vector<smmap::GripperData> grippers_data;
 
-    // format grippers_data
-    std::cout << "gripper data when constructing CDCPD" << std::endl;
-    std::cout << grippers << std::endl << std::endl;
-    for (int g_idx = 0; g_idx < grippers.cols(); g_idx++)
+// format grippers_data
+    std::cout << "gripper data when constructing CDCPD" <<
+              std::endl;
+    std::cout << grippers << std::endl <<
+              std::endl;
+    for (
+        int g_idx = 0;
+        g_idx < grippers.
+
+            cols();
+
+        g_idx++)
     {
       std::vector<long> grip_node_idx;
-      for (int node_idx = 0; node_idx < grippers.rows(); node_idx++)
+      for (
+          int node_idx = 0;
+          node_idx < grippers.
+
+              rows();
+
+          node_idx++)
       {
-        grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
-        cout << "grasp point: " << grippers(node_idx, g_idx) << endl;
+        grip_node_idx.
+
+            push_back(long(grippers(node_idx, g_idx)
+
+        ));
+        cout << "grasp point: " <<
+             grippers(node_idx, g_idx
+             ) <<
+             endl;
       }
       std::string gripper_name;
       gripper_name = "gripper" + std::to_string(g_idx);
       smmap::GripperData gripper(gripper_name, grip_node_idx);
-      grippers_data.push_back(gripper);
+      grippers_data.
+          push_back(gripper);
     }
 
-    model->SetGrippersData(grippers_data);
-
-    // set up collision check function
-    model->SetCallbackFunctions(fake_collision_check);
-
-    // set initial point configuration
-    Matrix3Xf eigen_template_cloud = template_cloud->getMatrixXfMap().topRows(3);
-    model->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
-
-    model = std::make_shared<smmap::ConstraintJacobianModel>(
-        nh,
-        translation_dir_deformability,
-        translation_dis_deformability,
-        rotation_deformability,
-        sdf_ptr);
-
-    deformModel->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
-
-    deformModel = std::make_shared<smmap::DiminishingRigidityModel>(
-        nh,
-        translation_dir_deformability,
-        rotation_deformability);
-  }
-
-  last_grasp_status = is_grasped;
-
-  // NOTE: order of P cannot influence delta_P, but influence P+delta_P
-  // std::chrono::time_point<std::chrono::system_clock> start, end;
-  std::vector<FixedPoint> pred_fixed_points;
-  // cout << "gripper_idx" << endl;
-  // cout << gripper_idx << endl << endl;
-  if (model != NULL)
-  {
-    for (int col = 0; col < gripper_idx.cols(); ++col)
+    if (model and deformModel)
     {
-      FixedPoint pt;
-      pt.template_index = gripper_idx(0, col);
-      pt.position(0) = q_config_valid[col](0, 3);
-      pt.position(1) = q_config_valid[col](1, 3);
-      pt.position(2) = q_config_valid[col](2, 3);
-      pred_fixed_points.push_back(pt);
-      cout << q_config_valid[col].matrix().block<3, 1>(0, 3) << endl;
+      model->SetGrippersData(grippers_data);
+
+      // set up collision check function
+      model->SetCallbackFunctions(fake_collision_check);
+
+      // set initial point configuration
+      Matrix3Xf eigen_template_cloud = template_cloud->getMatrixXfMap().topRows(3);
+      model->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
+
+      // FIXME: yixuan, here you reset this object after modifying it above, this seems wrong
+      model = std::make_shared<smmap::ConstraintJacobianModel>(
+          std::make_shared<ros::NodeHandle>(nh),
+          translation_dir_deformability,
+          translation_dis_deformability,
+          rotation_deformability,
+          sdf_ptr);
+
+      deformModel->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
+
+      deformModel = std::make_shared<smmap::DiminishingRigidityModel>(
+          std::make_shared<ros::NodeHandle>(nh),
+          translation_dir_deformability,
+          rotation_deformability);
+
     }
   }
+
+// NOTE: order of P cannot influence delta_P, but influence P+delta_P
+  std::vector<FixedPoint> pred_fixed_points;
+  if (q_config.size() != static_cast <unsigned long>(gripper_idx.cols()))
+  {
+    std::cerr << "In the constructor you indicated there " << gripper_idx.cols() << " gripper constraints"
+              << " but the q_config passed has " << q_config.size() << " elements.\n";
+  }
+  for (int col = 0; col < gripper_idx.cols(); ++col)
+  {
+    FixedPoint pt;
+    pt.template_index = gripper_idx(0, col);
+    pt.position(0) = q_config_valid[col](0, 3);
+    pt.position(1) = q_config_valid[col](1, 3);
+    pt.position(2) = q_config_valid[col](2, 3);
+    pred_fixed_points.push_back(pt);
+  }
+  /// END OF GRIPPERS SECTION
+
   Matrix3Xf TY, TY_pred;
   if (is_prediction)
   {
-    // start = std::chrono::system_clock::now();
-    if (model != NULL)
+    if (model != nullptr)
     {
       TY_pred = predict(Y.cast<double>(), q_dot_valid, q_config_valid, pred_choice).cast<float>();
     } else
     {
       TY_pred = Y;
     }
-    // TY_pred = Y;
-    // for (int col = 0; col < gripper_idx.cols(); ++col)
-    // {
-    //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-    //     {
-    //         FixedPoint pt;
-    //         pt.template_index = gripper_idx(row, col);
-    //         pt.position = TY_pred.col(pt.template_index);
-    //         pred_fixed_points.push_back(pt);
-    //     }
-    // }
-    // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
-    // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-    TY = cpd(X, Y, TY_pred, depth, mask,
-             intrinsics_eigen); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-    // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
+    TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen);
   } else
   {
-    // for (int col = 0; col < gripper_idx.cols(); ++col)
-    // {
-    //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-    //     {
-    //         FixedPoint pt;
-    //         pt.template_index = gripper_idx(row, col);
-    //         pt.position = TY_pred.col(pt.template_index);
-    //         pred_fixed_points.push_back(pt);
-    //     }
-    // }
     TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
   }
 
-
-
   // Next step: optimization.
   // ???: most likely not 1.0
+  // NOTE: seems like this should be a function, not a class
   Optimizer opt(original_template, Y, 1.1, obs_param);
+  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interaction_constrain);
 
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interation_constrain);
-  // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-
-  // Set the min and max for the box filter for next time
+  // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();
   last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
+  last_grasp_status = is_grasped;
 
   PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
   PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
@@ -1946,152 +1839,3 @@ CDCPD::Output CDCPD::operator()(
       cdcpd_out
   };
 }
-
-CDCPD::Output CDCPD::operator()(
-    const Mat &rgb,
-    const Mat &depth,
-    const Mat &mask,
-    const cv::Matx33d &intrinsics,
-    const PointCloud::Ptr template_cloud,
-    const bool self_intersection,
-    const bool interation_constrain,
-    const bool is_prediction,
-    const int pred_choice,
-    const std::vector<CDCPD::FixedPoint> &fixed_points)
-{
-  // rgb: CV_8U3C rgb image
-  // depth: CV_16U depth image
-  // mask: CV_8U mask for segmentation
-  // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
-  // template_edges: (2, K) matrix corresponding to E in the paper
-  // fixed_points: fixed points during the tracking
-
-  assert(rgb.type() == CV_8UC3);
-  if (is_sim)
-  {
-    assert(depth.type() == CV_32F);
-  } else
-  {
-    assert(depth.type() == CV_16U);
-  }
-  assert(mask.type() == CV_8U);
-  assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
-
-  Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-
-  // Useful utility for outputting an Eigen matrix to a file
-  auto to_file = [&np_fmt](const std::string &fname, const MatrixXf &mat)
-  {
-    std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
-  };
-
-  Eigen::Matrix3d intrinsics_eigen_tmp;
-  cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
-  Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
-
-  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
-
-  // entire_cloud: pointer to the entire point cloud
-  // cloud: pointer to the point clouds selected
-#ifdef ENTIRE
-  auto[entire_cloud, cloud]
-#else
-  auto [cloud]
-#endif
-  = point_clouds_from_images(
-      depth,
-      rgb,
-      mask,
-      intrinsics_eigen,
-      last_lower_bounding_box - bounding_box_extend,
-      last_upper_bounding_box + bounding_box_extend,
-      is_sim);
-  std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
-
-  /// VoxelGrid filter downsampling
-  PointCloud::Ptr cloud_downsampled(new PointCloud);
-  const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
-  double sigma2 = 0.002;
-  // TODO: check whether the change is needed here for unit conversion
-  Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
-  // std::cout << "P_vis:" << std::endl;
-  // std::cout << Y_emit_prior << std::endl << std::endl;
-  // sample_X_points(Y, Y_emit_prior, sigma2, cloud);
-
-  pcl::VoxelGrid<pcl::PointXYZ> sor;
-  std::cout << "Points in cloud before leaf: " << cloud->width << std::endl;
-  sor.setInputCloud(cloud);
-  sor.setLeafSize(0.02f, 0.02f, 0.02f);
-  sor.filter(*cloud_downsampled);
-  std::cout << "Points in fully filtered: " << cloud_downsampled->width << std::endl;
-  Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
-  // Add points to X according to the previous template
-
-#ifdef ENTIRE
-  const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
-#endif
-
-  Matrix3Xf TY, TY_pred;
-  if (is_prediction)
-  {
-    TY_pred = Y;
-    // TY_pred = Y;
-    // for (int col = 0; col < gripper_idx.cols(); ++col)
-    // {
-    //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-    //     {
-    //         FixedPoint pt;
-    //         pt.template_index = gripper_idx(row, col);
-    //         pt.position = TY_pred.col(pt.template_index);
-    //         pred_fixed_points.push_back(pt);
-    //     }
-    // }
-    // VectorXi occl_idx = is_occluded(TY_pred, depth, mask, intrinsics_eigen);
-    // std::ofstream(workingDir + "/occluded_index.txt", std::ofstream::out) << occl_idx << "\n\n";
-    TY = cpd(X, Y, TY_pred, depth, mask,
-             intrinsics_eigen); // end = std::chrono::system_clock::now(); std::cout << "cpd: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-    // Matrix3Xf TY = blend_result(TY_pred, TY_cpd, occl_idx);
-  } else
-  {
-    // for (int col = 0; col < gripper_idx.cols(); ++col)
-    // {
-    //     for (int row = gripper_idx.rows() - 1; row < gripper_idx.rows(); ++row)
-    //     {
-    //         FixedPoint pt;
-    //         pt.template_index = gripper_idx(row, col);
-    //         pt.position = TY_pred.col(pt.template_index);
-    //         pred_fixed_points.push_back(pt);
-    //     }
-    // }
-    TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
-  }
-
-
-
-  // Next step: optimization.
-  // ???: most likely not 1.0
-  Optimizer opt(original_template, Y, 1.1, obs_param);
-
-  Matrix3Xf Y_opt = opt(TY, template_edges, fixed_points, self_intersection, interation_constrain);
-  // end = std::chrono::system_clock::now(); std::cout << "opt: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
-
-  // Set the min and max for the box filter for next time
-  last_lower_bounding_box = Y_opt.rowwise().minCoeff();
-  last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
-
-  PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
-  PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
-  PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
-
-  return CDCPD::Output{
-#ifdef ENTIRE
-      entire_cloud,
-#endif
-      cloud,
-      cloud_downsampled,
-      cdcpd_cpd,
-      cdcpd_pred,
-      cdcpd_out
-  };
-}
-

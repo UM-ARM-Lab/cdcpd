@@ -117,9 +117,11 @@ int main(int argc, char* argv[]) {
   auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
   auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
 
-  Eigen::MatrixXi gripper_idx(1,2);
+  Eigen::MatrixXi gripper_idx(1, 2);
   gripper_idx << left_node_idx, right_node_idx;
-  auto cdcpd = CDCPD(template_cloud, template_edges, gripper_idx, use_recovery, alpha, beta, lambda, k_spring);
+  obsParam obstacles;
+  auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, gripper_idx, obstacles, use_recovery, alpha, beta, lambda,
+                     k_spring);
   // TODO: Make these const references? Does this matter for CV types?
   auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
     smmap::AllGrippersSinglePose q_config;
@@ -154,7 +156,7 @@ int main(int argc, char* argv[]) {
     auto const hsv_mask = getHsvMask(ph, rgb);
     auto const n_grippers = q_config.size();
     const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
-    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, q_dot, q_config, true, true, false);
+    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, q_dot, q_config);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids
@@ -215,11 +217,11 @@ int main(int argc, char* argv[]) {
         order.color.r = 1.0;
         order.color.a = 1.0;
 
-        for (auto pc_iter = cloud->begin(); pc_iter != cloud->end(); ++pc_iter) {
+        for (auto pc_iter : *cloud) {
           geometry_msgs::Point p;
-          p.x = pc_iter->x;
-          p.y = pc_iter->y;
-          p.z = pc_iter->z;
+          p.x = pc_iter.x;
+          p.y = pc_iter.y;
+          p.z = pc_iter.z;
           order.points.push_back(p);
         }
         return order;

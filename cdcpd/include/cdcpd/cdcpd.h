@@ -72,8 +72,6 @@ namespace PMP = CGAL::Polygon_mesh_processing;
 
 typedef PMP::Face_location<Mesh, FT> Face_location;
 
-// void test_nearest_line();
-
 Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree,
                                             int lle_neighbors,
                                             double reg);
@@ -103,9 +101,10 @@ class CDCPD
     int template_index;
   };
 
-  CDCPD(PointCloud::ConstPtr template_cloud,
+  CDCPD(ros::NodeHandle nh,
+        ros::NodeHandle ph,
+        PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
-        std::shared_ptr<ros::NodeHandle> nh,
         double translation_dir_deformability,
         double translation_dis_deformability,
         double rotation_deformability,
@@ -119,7 +118,9 @@ class CDCPD
         float zeta = 10.0,
         bool is_sim = false);
 
-  CDCPD(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+  CDCPD(ros::NodeHandle nh,
+        ros::NodeHandle ph,
+        PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
         const Eigen::MatrixXi &gripper_idx,
         const obsParam &obs_param,
@@ -131,6 +132,15 @@ class CDCPD
         float zeta = 10.0,
         bool is_sim = false);
 
+
+  Output operator()(const cv::Mat &rgb, // RGB image
+                    const cv::Mat &depth, // Depth image
+                    const cv::Mat &mask,
+                    const cv::Matx33d &intrinsics,
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    bool self_intersection = true,
+                    bool interaction_constrain = true);
+
   Output operator()(const cv::Mat &rgb, // RGB image
                     const cv::Mat &depth, // Depth image
                     const cv::Mat &mask,
@@ -139,9 +149,7 @@ class CDCPD
                     const smmap::AllGrippersSinglePoseDelta &q_dot,
                     const smmap::AllGrippersSinglePose &q_config,
                     bool self_intersection = true,
-                    bool interation_constrain = true,
-                    bool is_prediction = true,
-                    int pred_choice = 0);
+                    bool interaction_constrain = true);
 
 
   Output operator()(const cv::Mat &rgb, // RGB image
@@ -149,29 +157,16 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    bool self_intersection,
+                    bool interaction_constrain,
+                    bool is_prediction,
+                    int pred_choice,
                     const smmap::AllGrippersSinglePoseDelta &q_dot,
                     const smmap::AllGrippersSinglePose &q_config,
                     std::vector<bool> is_grasped,
-                    std::shared_ptr<ros::NodeHandle> nh,
                     double translation_dir_deformability,
                     double translation_dis_deformability,
-                    double rotation_deformability,
-                    bool self_intersection = true,
-                    bool interation_constrain = true,
-                    bool is_prediction = true,
-                    int pred_choice = 0);
-
-  Output operator()(const cv::Mat &rgb, // RGB image
-                    const cv::Mat &depth, // Depth image
-                    const cv::Mat &mask,
-                    const cv::Matx33d &intrinsics,
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    bool self_intersection = true,
-                    bool interation_constrain = true,
-                    bool is_prediction = true,
-                    int pred_choice = 0,
-                    const std::vector<FixedPoint> &fixed_points = {});
-
+                    double rotation_deformability);
 
  private:
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices,
@@ -226,6 +221,9 @@ class CDCPD
                            const smmap::AllGrippersSinglePose &q_config,
                            int pred_choice);
 
+  ros::NodeHandle nh;
+  ros::NodeHandle ph;
+
   std::shared_ptr<smmap::ConstraintJacobianModel> model;
   std::shared_ptr<smmap::DiminishingRigidityModel> deformModel;
 
@@ -250,7 +248,6 @@ class CDCPD
   float kvis;
   float zeta;
   bool use_recovery;
-  // std::vector<Eigen::MatrixXf> Q;
   double last_sigma2;
   Eigen::MatrixXi gripper_idx;
   std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
