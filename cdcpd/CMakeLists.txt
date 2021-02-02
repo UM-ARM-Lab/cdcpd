@@ -76,14 +76,13 @@ target_link_libraries(cdcpd PRIVATE
         Qt5::Gui)
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
-target_compile_options(cdcpd PRIVATE -Wall -Wextra -Wshadow -g)
+target_compile_options(cdcpd PRIVATE -Wall -Wextra)
 
 # Set to private to not force downstream libraries to link against OpenMP
 # https://cliutils.gitlab.io/modern-cmake/chapters/packages/OpenMP.html
 # https://stackoverflow.com/a/51448364
 find_package(OpenMP REQUIRED)
 target_link_libraries(cdcpd PRIVATE OpenMP::OpenMP_CXX)
-
 
 add_library(cdcpd::cdcpd ALIAS cdcpd)
 
@@ -99,34 +98,4 @@ install(FILES
         include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 
-### install(TARGETS cdcpd 
-###     EXPORT cdcpd-targets 
-###     LIBRARY DESTINATION lib/${PROJECT_NAME}
-###     INCLUDES DESTINATION include/${PROJECT_NAME})
-### # install(FILES include/cdcpd/cdcpd.h include/cdcpd/optimizer.h DESTINATION include/cdcpd)
-### # install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
-### include(CMakePackageConfigHelpers)
-### write_basic_package_version_file(
-###     cdcpd-config-version.cmake
-###     VERSION ${PACKAGE_VERSION}
-###     COMPATIBILITY AnyNewerVersion
-###     )
 install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
-### configure_file(cdcpd-config.cmake.in cdcpd-config.cmake @ONLY)
-### install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cdcpd-config.cmake"
-###               "${CMAKE_CURRENT_BINARY_DIR}/cdcpd-config-version.cmake"
-###               DESTINATION lib/cmake/${PROJECT_NAME}
-###         )
-### End installation
-
-### Testing
-
-if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-    include(CTest)
-endif ()
-
-### if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
-###    add_subdirectory(tests)
-### endif()
-
-### End Testing

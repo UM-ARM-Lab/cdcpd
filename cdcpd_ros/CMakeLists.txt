@@ -78,8 +78,7 @@ add_executable(cdcpd_node
         src/cdcpd_node.cpp
         )
 add_dependencies(cdcpd_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(cdcpd_node PRIVATE ${catkin_LIBRARIES} )
-target_compile_options(cdcpd_node PRIVATE -O3 -Wall -Wextra -Wconversion -Wshadow)
+target_link_libraries(cdcpd_node PRIVATE ${catkin_LIBRARIES})
 
 # Node for bagged data
 #add_executable(${PROJECT_NAME}_bagfile

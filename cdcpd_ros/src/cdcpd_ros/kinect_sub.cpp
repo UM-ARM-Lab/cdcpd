@@ -54,7 +54,7 @@ void KinectSub::imageCb(const sm::ImageConstPtr& rgb_msg, const sm::ImageConstPt
   }
 
   if (depth_msg->encoding != sm::image_encodings::TYPE_16UC1) {
-    ROS_INFO_THROTTLE(10, "Depth message is not in %s format. Converting.", sm::image_encodings::TYPE_16UC1);
+    ROS_INFO_THROTTLE(10, "Depth message is not in %s format. Converting.", sm::image_encodings::TYPE_16UC1.c_str());
     if (depth_msg->encoding == sm::image_encodings::TYPE_32FC1) {
       cv::Mat convertedDepthImg(cv_depth_ptr->image.size(), CV_16UC1);
 
@@ -71,7 +71,7 @@ void KinectSub::imageCb(const sm::ImageConstPtr& rgb_msg, const sm::ImageConstPt
       cv_depth_ptr->encoding = sm::image_encodings::TYPE_16UC1;
       cv_depth_ptr->image = convertedDepthImg;
     } else {
-      ROS_ERROR_THROTTLE(10, "Unhandled depth message format %s", depth_msg->encoding);
+      ROS_ERROR_THROTTLE(10, "Unhandled depth message format %s", depth_msg->encoding.c_str());
       return;
     }
   }

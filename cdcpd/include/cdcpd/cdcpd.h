@@ -105,11 +105,7 @@ class CDCPD
         ros::NodeHandle ph,
         PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
-        double translation_dir_deformability,
-        double translation_dis_deformability,
-        double rotation_deformability,
         const Eigen::MatrixXi &gripper_idx,
-        const obsParam &obs_param,
         bool _use_recovery = true,
         double alpha = 0.5,
         double beta = 1.0,
@@ -118,55 +114,22 @@ class CDCPD
         float zeta = 10.0,
         bool is_sim = false);
 
-  CDCPD(ros::NodeHandle nh,
-        ros::NodeHandle ph,
-        PointCloud::ConstPtr template_cloud,
-        const Eigen::Matrix2Xi &_template_edges,
-        const Eigen::MatrixXi &gripper_idx,
-        const obsParam &obs_param,
-        bool _use_recovery = true,
-        double alpha = 0.5,
-        double beta = 1.0,
-        double lambda = 1.0,
-        double k = 100.0,
-        float zeta = 10.0,
-        bool is_sim = false);
-
-
   Output operator()(const cv::Mat &rgb, // RGB image
                     const cv::Mat &depth, // Depth image
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    obsParam const &obs_param = {},
+                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+                    const smmap::AllGrippersSinglePose &q_config = {},
+                    const std::vector<bool> &is_grasped = {},
                     bool self_intersection = true,
-                    bool interaction_constrain = true);
-
-  Output operator()(const cv::Mat &rgb, // RGB image
-                    const cv::Mat &depth, // Depth image
-                    const cv::Mat &mask,
-                    const cv::Matx33d &intrinsics,
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot,
-                    const smmap::AllGrippersSinglePose &q_config,
-                    bool self_intersection = true,
-                    bool interaction_constrain = true);
-
-
-  Output operator()(const cv::Mat &rgb, // RGB image
-                    const cv::Mat &depth, // Depth image
-                    const cv::Mat &mask,
-                    const cv::Matx33d &intrinsics,
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    bool self_intersection,
-                    bool interaction_constrain,
-                    bool is_prediction,
-                    int pred_choice,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot,
-                    const smmap::AllGrippersSinglePose &q_config,
-                    std::vector<bool> is_grasped,
-                    double translation_dir_deformability,
-                    double translation_dis_deformability,
-                    double rotation_deformability);
+                    bool interaction_constrain = true,
+                    bool is_prediction = true,
+                    int pred_choice = 0,
+                    double translation_dir_deformability = 0,
+                    double translation_dis_deformability = 0,
+                    double rotation_deformability = 0);
 
  private:
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices,
@@ -252,10 +215,6 @@ class CDCPD
   Eigen::MatrixXi gripper_idx;
   std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
   std::vector<bool> last_grasp_status;
-  obsParam obs_param;
-  Mesh mesh;
-  Mesh::Property_map <face_descriptor, Vector> fnormals;
-  Mesh::Property_map <vertex_descriptor, Vector> vnormals;
   bool is_sim;
 };
 

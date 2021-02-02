@@ -120,8 +120,8 @@ int main(int argc, char* argv[]) {
   Eigen::MatrixXi gripper_idx(1, 2);
   gripper_idx << left_node_idx, right_node_idx;
   obsParam obstacles;
-  auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, gripper_idx, obstacles, use_recovery, alpha, beta, lambda,
-                     k_spring);
+  auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, gripper_idx, use_recovery, alpha, beta, lambda, k_spring);
+
   // TODO: Make these const references? Does this matter for CV types?
   auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
     smmap::AllGrippersSinglePose q_config;
@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
     auto const hsv_mask = getHsvMask(ph, rgb);
     auto const n_grippers = q_config.size();
     const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
-    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, q_dot, q_config);
+    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids

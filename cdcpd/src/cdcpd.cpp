@@ -7,7 +7,6 @@
 #include <Eigen/Dense>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/eigen.hpp>
-#include <opencv2/core/core.hpp>
 
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/voxel_grid.h>
@@ -24,6 +23,8 @@
 #include <iostream>
 #include <fstream>
 #include <random>
+
+auto constexpr const LOGNAME = "CDCPD";
 
 using cv::Mat;
 using cv::Vec3b;
@@ -137,7 +138,6 @@ static double calculate_prob_reg(const Matrix3Xf &X,
 {
   int M = TY.cols();
   int N = X.cols();
-  int D = X.rows();
 
   double reg = 0.0;
   Matrix3Xf Y = TY + (G * W).transpose();
@@ -290,87 +290,12 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
 //     }
 // }
 
-CDCPD::CDCPD(ros::NodeHandle nh,
-             ros::NodeHandle ph,
-             PointCloud::ConstPtr template_cloud,
-             const Matrix2Xi &_template_edges,
-             const double translation_dir_deformability,
-             const double translation_dis_deformability,
-             const double rotation_deformability,
-             const Eigen::MatrixXi &gripper_idx,
-             const obsParam &_obs_param,
-             const bool _use_recovery,
-             const double _alpha,
-             const double _beta,
-             const double _lambda,
-             const double _k,
-             const float _zeta,
-             const bool _is_sim) :
-    CDCPD(nh,
-          ph,
-          template_cloud,
-          _template_edges,
-          gripper_idx,
-          _obs_param,
-          _use_recovery,
-          _alpha,
-          _beta,
-          _lambda,
-          _k,
-          _zeta,
-          _is_sim)
-{
-  // initialize gripper data
-  std::vector<smmap::GripperData> grippers_data;
-
-  // format grippers_data
-  std::cout << "gripper data when constructing CDCPD" << std::endl;
-  std::cout << gripper_idx << std::endl << std::endl;
-  for (int g_idx = 0; g_idx < gripper_idx.cols(); g_idx++)
-  {
-    std::vector<long> grip_node_idx;
-    for (int node_idx = 0; node_idx < gripper_idx.rows(); node_idx++)
-    {
-      grip_node_idx.push_back(long(gripper_idx(node_idx, g_idx)));
-    }
-    std::string gripper_name;
-    gripper_name = "gripper" + std::to_string(g_idx);
-    smmap::GripperData gripper(gripper_name, grip_node_idx);
-    grippers_data.push_back(gripper);
-  }
-
-  model->SetGrippersData(grippers_data);
-
-  // set up collision check function
-  // FIXME: yixuan, this seems like a mistake?
-  model->SetCallbackFunctions(fake_collision_check);
-
-  // set initial point configuration
-  Matrix3Xf eigen_template_cloud = template_cloud->getMatrixXfMap().topRows(3);
-  model->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
-
-  model = std::make_shared<smmap::ConstraintJacobianModel>(
-      std::make_shared<ros::NodeHandle>(nh),
-      translation_dir_deformability,
-      translation_dis_deformability,
-      rotation_deformability,
-      sdf_ptr);
-
-  deformModel->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
-
-  deformModel = std::make_shared<smmap::DiminishingRigidityModel>(
-      std::make_shared<ros::NodeHandle>(nh),
-      translation_dir_deformability,
-      rotation_deformability);
-}
-
 // This is for the case where the gripper indices are unknown (in real experiment)
-CDCPD::CDCPD(ros::NodeHandle nh,
-             ros::NodeHandle ph,
+CDCPD::CDCPD(ros::NodeHandle _nh,
+             ros::NodeHandle _ph,
              PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
-             const Eigen::MatrixXi &gripper_idx,
-             const obsParam &_obs_param,
+             const Eigen::MatrixXi &_gripper_idx,
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
@@ -378,8 +303,8 @@ CDCPD::CDCPD(ros::NodeHandle nh,
              const double _k,
              const float _zeta,
              const bool _is_sim) :
-    nh(nh),
-    ph(ph),
+    nh(_nh),
+    ph(_ph),
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
     last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
@@ -398,10 +323,8 @@ CDCPD::CDCPD(ros::NodeHandle nh,
     kvis(1e3),
     zeta(_zeta),
     use_recovery(_use_recovery),
-    gripper_idx(gripper_idx),
+    gripper_idx(_gripper_idx),
     last_grasp_status({false, false}),
-    obs_param(_obs_param),
-    mesh(initObstacle(_obs_param)),
     is_sim(_is_sim)
 {
   Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
@@ -426,15 +349,6 @@ CDCPD::CDCPD(ros::NodeHandle nh,
                                          sdf_tools::COLLISION_CELL(0.0));
   const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
   sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(sdf);
-
-  fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
-  vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
-  CGAL::Polygon_mesh_processing::compute_normals(mesh,
-                                                 vnormals,
-                                                 fnormals,
-                                                 CGAL::Polygon_mesh_processing::parameters::vertex_point_map(
-                                                     mesh.points()).
-                                                     geom_traits(K()));
 }
 
 /*
@@ -949,8 +863,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
 
     // NOTE: lambda means gamma here
     // Corresponding to Eq. (18) in the paper
-    ros::NodeHandle ph("~");
-    const float zeta = ROSHelpers::GetParam<float>(ph, "zeta", 10.0);
+    const float current_zeta = ROSHelpers::GetParam<float>(ph, "zeta", 10.0);
     float lambda = start_lambda;
     MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
@@ -976,7 +889,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
     MatrixXf A = (P1.asDiagonal() * G)
                  + alpha * sigma2 * MatrixXf::Identity(M, M)
                  + sigma2 * lambda * (m_lle * G)
-                 + zeta *
+                 + current_zeta *
                    G;// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
 
     MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() -
@@ -1447,8 +1360,8 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P,
   // q_config: indices of points gripped, a X*G matrix (X: depends on the case)
   // pred_choice:
   // 	- 0: no movement
-  // 	- 1: Dmitry's prediction
-  //  - 2: Mengyao's prediction
+  // 	- 1: prediction from ConstraintJacobianModel
+  //  - 2: prediction from DiminishingRigidityModel
 
   // NOTE:
   //      - WorldState definition
@@ -1507,85 +1420,29 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P,
   }
 }
 
-
 CDCPD::Output CDCPD::operator()(
     const Mat &rgb,
     const Mat &depth,
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    const bool self_intersection,
-    const bool interaction_constrain)
-{
-  AllGrippersSinglePoseDelta q_dot;
-  AllGrippersSinglePose q_config;
-  return operator()(rgb,
-                    depth,
-                    mask,
-                    intrinsics,
-                    template_cloud,
-                    self_intersection,
-                    interaction_constrain,
-                    false,
-                    0,
-                    q_dot,
-                    q_config,
-                    {},
-                    0,
-                    0,
-                    0);
-}
-
-CDCPD::Output CDCPD::operator()(
-    const Mat &rgb,
-    const Mat &depth,
-    const Mat &mask,
-    const cv::Matx33d &intrinsics,
-    const PointCloud::Ptr template_cloud,
+    obsParam const &obs_param,
     const AllGrippersSinglePoseDelta &q_dot,
     const AllGrippersSinglePose &q_config,
-    const bool self_intersection,
-    const bool interaction_constrain)
-{
-  return operator()(rgb,
-                    depth,
-                    mask,
-                    intrinsics,
-                    template_cloud,
-                    self_intersection,
-                    interaction_constrain,
-                    false,
-                    0,
-                    q_dot,
-                    q_config,
-                    {},
-                    0,
-                    0,
-                    0);
-}
-
-CDCPD::Output CDCPD::operator()(
-    const Mat &rgb,
-    const Mat &depth,
-    const Mat &mask,
-    const cv::Matx33d &intrinsics,
-    const PointCloud::Ptr template_cloud,
+    const std::vector<bool> &is_grasped,
     const bool self_intersection,
     const bool interaction_constrain,
     const bool is_prediction,
     const int pred_choice,
-    const AllGrippersSinglePoseDelta &q_dot,
-    const AllGrippersSinglePose &q_config,
-    const std::vector<bool> is_grasped,
     const double translation_dir_deformability,
     const double translation_dis_deformability,
     const double rotation_deformability)
 {
-// rgb: CV_8U3C rgb image
-// depth: CV_16U depth image
-// mask: CV_8U mask for segmentation
-// template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
-// template_edges: (2, K) matrix corresponding to E in the paper
+  // rgb: CV_8U3C rgb image
+  // depth: CV_16U depth image
+  // mask: CV_8U mask for segmentation
+  // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
+  // template_edges: (2, K) matrix corresponding to E in the paper
 
   assert(rgb.type() == CV_8UC3);
   if (is_sim)
@@ -1600,61 +1457,53 @@ CDCPD::Output CDCPD::operator()(
 
   Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
 
-// Useful utility for outputting an Eigen matrix to a file
+  // Useful utility for outputting an Eigen matrix to a file
   auto to_file = [&np_fmt](const std::string &fname, const MatrixXf &mat)
   {
     std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
   };
 
   Eigen::Matrix3d intrinsics_eigen_tmp;
-  cv::cv2eigen(intrinsics, intrinsics_eigen_tmp
-  );
+  cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
   Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
   Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
 
-// entire_cloud: pointer to the entire point cloud
-// cloud: pointer to the point clouds selected
+  // entire_cloud: pointer to the entire point cloud
+  // cloud: pointer to the point clouds selected
 #ifdef ENTIRE
   auto[entire_cloud, cloud]
 #else
   auto [cloud]
 #endif
-  = point_clouds_from_images(
-      depth,
-      rgb,
-      mask,
-      intrinsics_eigen,
-      last_lower_bounding_box - bounding_box_extend,
-      last_upper_bounding_box + bounding_box_extend,
-      is_sim);
+  = point_clouds_from_images(depth,
+                             rgb,
+                             mask,
+                             intrinsics_eigen,
+                             last_lower_bounding_box - bounding_box_extend,
+                             last_upper_bounding_box + bounding_box_extend,
+                             is_sim);
   std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
 
-/// VoxelGrid filter downsampling
+  /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
-  double sigma2 = 0.002;
-// TODO: check whether the change is needed here for unit conversion
+  // TODO: check whether the change is needed here for unit conversion
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
-  std::cout << "Points in cloud before leaf: " << cloud->width <<
-            std::endl;
-  sor.
-      setInputCloud(cloud);
+  std::cout << "Points in cloud before leaf: " << cloud->width << std::endl;
+  sor.setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
-  sor.
-      filter(*cloud_downsampled);
-  std::cout << "Points in fully filtered: " << cloud_downsampled->width <<
-            std::endl;
+  sor.filter(*cloud_downsampled);
+  std::cout << "Points in fully filtered: " << cloud_downsampled->width << std::endl;
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
-// Add points to X according to the previous template
+  // Add points to X according to the previous template
 
 #ifdef ENTIRE
   const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
 #endif
 
-/// START OF GRIPPERS SECTION
   AllGrippersSinglePoseDelta q_dot_valid;
   AllGrippersSinglePose q_config_valid;
 
@@ -1671,18 +1520,13 @@ CDCPD::Output CDCPD::operator()(
   }
   int num_gripper = int(std::accumulate(is_grasped.begin(), is_grasped.end(), 0));
 
-  for (
-      int g_idx = 0;
-      g_idx < num_gripper;
-      g_idx++)
+  for (int g_idx = 0; g_idx < num_gripper; g_idx++)
   {
-    q_config_valid.
-        push_back(q_config[idx_map[g_idx]]);
-    q_dot_valid.
-        push_back(q_dot[idx_map[g_idx]]);
+    q_config_valid.push_back(q_config[idx_map[g_idx]]);
+    q_dot_valid.push_back(q_dot[idx_map[g_idx]]);
   }
 
-// if a model is not created (i.e. no grasping)
+  // if a model is not created (i.e. no grasping)
   if (!is_grasped[0] && !is_grasped[1])
   {
     deformModel = nullptr;
@@ -1690,20 +1534,13 @@ CDCPD::Output CDCPD::operator()(
   } else if (is_grasped != last_grasp_status)
   {
     MatrixXi grippers(1, num_gripper);
-
-    for (
-        int g_idx = 0;
-        g_idx < num_gripper;
-        g_idx++)
+    for (int g_idx = 0; g_idx < num_gripper; g_idx++)
     {
       Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
       MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
       MatrixXf::Index minRow, minCol;
-      float min = dist.minCoeff(&minRow, &minCol);
-      cout << "closest point index: " << minCol <<
-           endl;
-      grippers(0, g_idx) =
-          int(minCol);
+      cout << "closest point index: " << minCol << endl;
+      grippers(0, g_idx) = int(minCol);
     }
 
     gripper_idx = grippers;
@@ -1712,42 +1549,20 @@ CDCPD::Output CDCPD::operator()(
     std::vector<smmap::GripperData> grippers_data;
 
 // format grippers_data
-    std::cout << "gripper data when constructing CDCPD" <<
-              std::endl;
-    std::cout << grippers << std::endl <<
-              std::endl;
-    for (
-        int g_idx = 0;
-        g_idx < grippers.
-
-            cols();
-
-        g_idx++)
+    std::cout << "gripper data when constructing CDCPD" << std::endl;
+    std::cout << grippers << std::endl << std::endl;
+    for (int g_idx = 0; g_idx < grippers.cols(); g_idx++)
     {
       std::vector<long> grip_node_idx;
-      for (
-          int node_idx = 0;
-          node_idx < grippers.
-
-              rows();
-
-          node_idx++)
+      for (int node_idx = 0; node_idx < grippers.rows(); node_idx++)
       {
-        grip_node_idx.
-
-            push_back(long(grippers(node_idx, g_idx)
-
-        ));
-        cout << "grasp point: " <<
-             grippers(node_idx, g_idx
-             ) <<
-             endl;
+        grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
+        cout << "grasp point: " << grippers(node_idx, g_idx) << endl;
       }
       std::string gripper_name;
       gripper_name = "gripper" + std::to_string(g_idx);
       smmap::GripperData gripper(gripper_name, grip_node_idx);
-      grippers_data.
-          push_back(gripper);
+      grippers_data.push_back(gripper);
     }
 
     if (model and deformModel)
@@ -1779,7 +1594,7 @@ CDCPD::Output CDCPD::operator()(
     }
   }
 
-// NOTE: order of P cannot influence delta_P, but influence P+delta_P
+  // NOTE: order of P cannot influence delta_P, but influence P+delta_P
   std::vector<FixedPoint> pred_fixed_points;
   if (q_config.size() != static_cast <unsigned long>(gripper_idx.cols()))
   {
@@ -1795,7 +1610,6 @@ CDCPD::Output CDCPD::operator()(
     pt.position(2) = q_config_valid[col](2, 3);
     pred_fixed_points.push_back(pt);
   }
-  /// END OF GRIPPERS SECTION
 
   Matrix3Xf TY, TY_pred;
   if (is_prediction)
@@ -1815,7 +1629,15 @@ CDCPD::Output CDCPD::operator()(
 
   // Next step: optimization.
   // ???: most likely not 1.0
+  auto mesh = initObstacle(obs_param);
+  // NOTE: how is it possible that these can be const? doesn't `compute_normals` need to modify vnormals and fnormals?
+  auto const fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
+  auto const vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
+  auto const mesh_map = CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).geom_traits(K());
+  CGAL::Polygon_mesh_processing::compute_normals(mesh, vnormals, fnormals, mesh_map);
+
   // NOTE: seems like this should be a function, not a class
+  ROS_DEBUG_STREAM_NAMED(LOGNAME, "n vertices in obstacle input " << obs_param.verts.size());
   Optimizer opt(original_template, Y, 1.1, obs_param);
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interaction_constrain);
 
