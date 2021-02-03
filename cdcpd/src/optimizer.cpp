@@ -247,7 +247,7 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template)
     //       Face_location query_location = PMP::locate_with_AABB_tree(ray, tree, mesh);
     // Point_3 nearestPt = PMP::construct_point(query_location, mesh);
     //       nearestPts.col(pt_ind) = Pt3toVec(nearestPt);
-    // cout << "nearestPt of " << pt << " is on " << source(halfedge(query_location.first,mesh),mesh) << endl;
+
 
     double w[3];
     for (int i = 0; i < 3; i++)
@@ -263,17 +263,17 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template)
     // for (vertex_descriptor vd: vertices_around_face(mesh.halfedge(query_location.first), mesh)) {
     //     cout << vd << endl;
     // }
-    // cout << "242" << endl;
 
-    MatrixXf verts_of_face(3, 3); // cout << "243" << endl;
+
+    MatrixXf verts_of_face(3, 3);
     verts_of_face.col(0) = Pt3toVec(
-        mesh.point(source(halfedge(query_location.first, mesh), mesh))); // cout << "244" << endl;
+        mesh.point(source(halfedge(query_location.first, mesh), mesh)));
     verts_of_face.col(1) = Pt3toVec(
-        mesh.point(target(halfedge(query_location.first, mesh), mesh))); // cout << "245" << endl;
+        mesh.point(target(halfedge(query_location.first, mesh), mesh)));
     verts_of_face.col(2) = Pt3toVec(
-        mesh.point(target(next(halfedge(query_location.first, mesh), mesh), mesh))); // cout << "246" << endl;
+        mesh.point(target(next(halfedge(query_location.first, mesh), mesh), mesh)));
     nearestPts.col(pt_ind) = verts_of_face.col(0) * w[0] + verts_of_face.col(1) * w[1] + verts_of_face.col(2) * w[2];
-    // cout << "248" << endl;
+
 
 
     // std::cout << "Vertex normals :" << std::endl;
@@ -287,7 +287,7 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template)
     // verts_of_face.col(2) = Pt3toVec(mesh.point(target(next(halfedge(query_location.first,mesh),mesh),mesh)));
 
     Vector3f normalVec(0.0, 0.0, 0.0);
-    // cout << "262" << endl;
+
     normalVec = cgalVec2EigenVec(
         vnormals[source(halfedge(query_location.first, mesh), mesh)] * w[0] +
         vnormals[target(halfedge(query_location.first, mesh), mesh)] * w[1] +
@@ -322,19 +322,19 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
   {
     Vector3f P1 = last_template.col(E(0, i));
     Vector3f P2 = last_template.col(E(1, i));
-    // cout << "P1:" << endl;
-    // cout << P1 << endl << endl;
-    // cout << "P2:" << endl;
-    // cout << P2 << endl << endl;
+
+
+
+
     for (int j = 0; j < E.cols(); ++j)
     {
       Vector3f P3 = last_template.col(E(0, j));
       Vector3f P4 = last_template.col(E(1, j));
 
-      // cout << "P3:" << endl;
-      // cout << P3 << endl << endl;
-      // cout << "P4:" << endl;
-      // cout << P4 << endl << endl;
+
+
+
+
 
       float R21 = (P2 - P1).squaredNorm();
       float R22 = (P4 - P3).squaredNorm();
@@ -342,8 +342,8 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
       float D3121 = (P3 - P1).dot(P2 - P1);
       float D4331 = (P4 - P3).dot(P3 - P1);
 
-      // cout << "original s:" << (-D4321*D4331+D3121*R22)/(R21*R22-D4321*D4321) << endl;
-      // cout << "original t:" << (D4321*D3121-D4331*R21)/(R21*R22-D4321*D4321) << endl;
+
+
 
       float s;
       float t;
@@ -377,8 +377,8 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
           t = 1;
         }
       }
-      // cout << "s: " << s << endl;
-      // cout << "t: " << t << endl;
+
+
 
       for (int dim = 0; dim < 3; ++dim)
       {
@@ -647,12 +647,12 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
         std::tie(nearestPts, normalVecs) = nearest_points_and_normal_cyl(last_template);
       }
       cout << "added interaction constrain" << endl;
-      // cout << "last template:" << endl;
-      // cout << last_template << endl << endl;
-      // cout << "nearestPts:" << endl;
-      // cout << nearestPts << endl << endl;
-      // cout << "normalVecs:" << endl;
-      // cout << normalVecs << endl << endl;
+
+
+
+
+
+
       for (ssize_t i = 0; i < num_vectors; ++i)
       {
         // ssize_t fixed_idx = 0;
@@ -807,8 +807,8 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<FixedPoint> &fixed
       float current_distance = (first_elem->position - second_elem->position).squaredNorm();
       float original_distance = (initial_template.col(first_elem->template_index) -
                                  initial_template.col(second_elem->template_index)).squaredNorm();
-      // cout << "current_distance " << current_distance << endl;
-      // cout << "original_distance " << original_distance << endl;
+
+
       if (current_distance > original_distance * stretch_lambda * stretch_lambda)
       {
         return false;
