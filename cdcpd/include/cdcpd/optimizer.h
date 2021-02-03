@@ -59,38 +59,28 @@ class Optimizer
   Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda,
             const obsParam &obstacle_param);
 
-  Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda,
-            const std::vector<float> cylinder_data);
-
   Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda);
 
   Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y,
                               const Eigen::Matrix2Xi &E,
                               const std::vector<FixedPoint> &fixed_points,
-                              const bool self_intersection = true,
-                              const bool interation_constrain = true);
+                              bool self_intersection = true,
+                              bool interation_constrain = true);
 
  private:
-  bool all_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;
+  bool gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;
 
   std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf> nearest_points_and_normal(const Eigen::Matrix3Xf &last_template);
-
-  std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf> nearest_points_and_normal_cyl(const Eigen::Matrix3Xf &last_template);
 
   Eigen::Matrix3Xf initial_template;
   Eigen::Matrix3Xf last_template;
   float stretch_lambda;
-  // const Eigen::Matrix3Xf obs_mesh;
-  // const Eigen::Matrix3Xf obs_normal;
+   const Eigen::Matrix3Xf obs_mesh;
+   const Eigen::Matrix3Xf obs_normal;
   Mesh::Property_map <face_descriptor, Vector> fnormals;
   Mesh::Property_map <vertex_descriptor, Vector> vnormals;
   Mesh mesh;
   CGAL::AABB_tree<AABB_face_graph_traits> tree;
-  Eigen::Vector3f cylinder_orien;
-  Eigen::Vector3f cylinder_center;
-  float cylinder_radius;
-  float cylinder_height;
-  bool is_shape_comp;
 };
 
 #endif

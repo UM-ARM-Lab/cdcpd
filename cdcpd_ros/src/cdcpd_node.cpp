@@ -72,6 +72,19 @@ cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
   return hsv_mask;
 }
 
+obsParam get_moveit_planning_scene_as_mesh() {
+  obsParam obstacles;
+  // subscribe to get moveit planning scene
+
+  // get the latest scene
+
+  // iterate over every collision object
+  // if it's not a mesh, call a subroutine to convert it to a mesh
+  // now that we have a mesh representation, add it to obstacles
+
+  return obstacles;
+}
+
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "cdcpd_node");
   auto nh = ros::NodeHandle();
@@ -117,8 +130,6 @@ int main(int argc, char* argv[]) {
   auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
   auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
 
-
-  obsParam obstacles;
   auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
 
   // TODO: Make these const references? Does this matter for CV types?
@@ -155,25 +166,9 @@ int main(int argc, char* argv[]) {
     auto const hsv_mask = getHsvMask(ph, rgb);
     auto const n_grippers = q_config.size();
     const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
-    Eigen::Matrix3Xf test_verts(3, 4);
-    test_verts << 0, 1, 0, 0,  // x
-        0, 0, 1, 0,            // y
-        0, 0, 0, 1;            // x
 
-    Eigen::Matrix3Xf test_faces(3, 4);
-    test_faces << 0, 0, 0, 1,  // 1
-        1, 1, 2, 2,            // 2
-        2, 3, 3, 3;            // 3
-    Eigen::Matrix3Xf test_normals(3, 4);
-    test_normals << 0, 0, -1, 1,  // x
-        0, -1, 0, 1,              // y
-        -1, 0, 0, 1;              // z
-                                  //    obstacles.verts = test_verts;
-                                  //    obstacles.faces = test_faces;
-                                  //    obstacles.normals = test_normals;
+    obsParam obstacles = get_moveit_planning_scene_as_mesh();
 
-    auto const right_grapsed = ROSHelpers::GetParam<bool>(ph, "right_grasped", false);
-    auto const left_grapsed = ROSHelpers::GetParam<bool>(ph, "left_grasped", false);
     Eigen::MatrixXi gripper_idx(1, 2);
     gripper_idx << left_node_idx, right_node_idx;
     auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config, gripper_idx);

@@ -46,40 +46,6 @@ using Eigen::VectorXi;
 using Eigen::RowVectorXf;
 using Eigen::Isometry3d;
 
-static double abs_derivative(double x)
-{
-  return x;
-  // double eps = 0.000000001;
-  // if (x < eps && x > -eps) {
-  //     return 0.0;
-  // }
-  // else if (x > eps) {
-  //     return 1.0;
-  // }
-  // else if (x < -eps) {
-  //     return -1.0;
-  // }
-}
-
-static double calculate_lle_reg(const MatrixXf &L,
-                                const Matrix3Xf pts_matrix)
-{
-  double reg = 0;
-  for (int ind = 0; ind < L.rows(); ++ind)
-  {
-    Matrix3Xf lle_pt(3, 1);
-    lle_pt(0, 0) = 0;
-    lle_pt(1, 0) = 0;
-    lle_pt(2, 0) = 0;
-    for (int nb_ind = 0; nb_ind < L.cols(); ++nb_ind)
-    {
-      lle_pt = lle_pt + L(ind, nb_ind) * pts_matrix.col(nb_ind);
-    }
-    reg += (lle_pt - pts_matrix.col(ind)).squaredNorm();
-  }
-  return reg;
-}
-
 static double calculate_prob_reg(const Matrix3Xf &X,
                                  const Matrix3Xf &TY,
                                  const MatrixXf &G,
@@ -1191,7 +1157,7 @@ CDCPD::Output CDCPD::operator()(
   // NOTE: seems like this should be a function, not a class
   ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "fixed points" << pred_fixed_points);
   ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "n vertices in obstacle input " << obs_param.verts.size());
-  Optimizer opt(original_template, Y, 1.1, std::vector<float>{});
+  Optimizer opt(original_template, Y, 1.1, obs_param);
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interaction_constrain);
 
   // NOTE: set stateful member variables for next time

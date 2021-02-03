@@ -165,69 +165,6 @@ static Matrix3Xf force_pts(const Matrix3Xf &nearest,
   return Y_force;
 }
 
-std::tuple<Matrix3Xf, Matrix3Xf>
-Optimizer::nearest_points_and_normal_cyl(const Matrix3Xf &last_template)
-{
-  // find of the nearest points and corresponding normal vector on the cylinder
-  Matrix3Xf nearestPts(3, last_template.cols());
-  Matrix3Xf normalVecs(3, last_template.cols());
-  for (int i = 0; i < last_template.cols(); i++)
-  {
-    Vector3f pt;
-    pt << last_template.col(i);
-    Vector3f unitVecH = cylinder_orien / cylinder_orien.norm();
-    Vector3f unitVecR = (pt - cylinder_center) - ((pt - cylinder_center).transpose() * unitVecH) * unitVecH;
-    unitVecR = unitVecR / unitVecR.norm();
-    float h = unitVecH.transpose() * (pt - cylinder_center);
-    float r = unitVecR.transpose() * (pt - cylinder_center);
-    Vector3f nearestPt;
-    Vector3f normalVec;
-    if (h > cylinder_height / 2 && r >= cylinder_radius)
-    {
-      nearestPt = unitVecR * cylinder_radius + unitVecH * cylinder_height / 2 + cylinder_center;
-      normalVec = unitVecR + unitVecH;
-    } else if (h < -cylinder_height / 2 && r >= cylinder_radius)
-    {
-      nearestPt = unitVecR * cylinder_radius - unitVecH * cylinder_height / 2 + cylinder_center;
-      normalVec = unitVecR - cylinder_orien / cylinder_orien.norm();
-    } else if (h > cylinder_height / 2 && r < cylinder_radius)
-    {
-      nearestPt = r * unitVecR + cylinder_height / 2 * unitVecH + cylinder_center;
-      normalVec = unitVecH;
-    } else if (h < -cylinder_height / 2 && r < cylinder_radius)
-    {
-      nearestPt = r * unitVecR - cylinder_height / 2 * unitVecH + cylinder_center;
-      normalVec = -unitVecH;
-    } else if (h <= cylinder_height / 2 && h >= -cylinder_height / 2 && r < cylinder_radius)
-    {
-      if (cylinder_height / 2 - h < cylinder_radius - r)
-      {
-        nearestPt = r * unitVecR + cylinder_height / 2 * unitVecH + cylinder_center;
-        normalVec = unitVecH;
-      } else if (h + cylinder_height / 2 < cylinder_radius - r)
-      {
-        nearestPt = r * unitVecR + cylinder_height / 2 * unitVecH + cylinder_center;
-        normalVec = -unitVecH;
-      } else
-      {
-        nearestPt = cylinder_radius * unitVecR + h * unitVecH + cylinder_center;
-        normalVec = unitVecR;
-      }
-    } else if (h <= cylinder_height / 2 && h >= -cylinder_height / 2 && r >= cylinder_radius)
-    {
-      nearestPt = cylinder_radius * unitVecR + h * unitVecH + cylinder_center;
-      normalVec = unitVecR;
-    }
-    normalVec = normalVec / normalVec.norm();
-    for (int j = 0; j < 3; ++j)
-    {
-      nearestPts(j, i) = nearestPt(j);
-      normalVecs(j, i) = normalVec(j);
-    }
-  }
-  return {nearestPts, normalVecs};
-}
-
 static Vector3f Pt3toVec(const Point_3 pt)
 {
   return Vector3f(float(pt.x()), float(pt.y()), float(pt.z()));
@@ -259,13 +196,12 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template)
 
     if (isnan(w[0]) || isnan(w[1]) || isnan(w[2]))
     {
-      w[0] = w[1] = w[2] = 1 / 3;
+      w[0] = w[1] = w[2] = 1.0 / 3;
     }
 
     // for (vertex_descriptor vd: vertices_around_face(mesh.halfedge(query_location.first), mesh)) {
     //     cout << vd << endl;
     // }
-
 
     MatrixXf verts_of_face(3, 3);
     verts_of_face.col(0) = Pt3toVec(
@@ -518,10 +454,9 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
     : initial_template(_init_temp),
       last_template(_last_temp),
       stretch_lambda(_stretch_lambda),
-    // obs_mesh(obstacle_param.verts),
-    // obs_normal(obstacle_param.normals),
-      mesh(initObstacle(obstacle_param)),
-      is_shape_comp(true)
+      obs_mesh(obstacle_param.verts),
+      obs_normal(obstacle_param.normals),
+      mesh(initObstacle(obstacle_param))
 {
   // typedef boost::property_map<Mesh, CGAL::edge_is_feature_t>::type EIFMap;
   // EIFMap eif = get(CGAL::edge_is_feature, mesh);
@@ -534,48 +469,17 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
   fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
   vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
 
-  CGAL::Polygon_mesh_processing::compute_normals(mesh,
-                                                 vnormals,
-                                                 fnormals,
-                                                 CGAL::Polygon_mesh_processing::parameters::vertex_point_map(
-                                                     mesh.points()).
-                                                     geom_traits(K()));
+  auto const mesh_map = CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).geom_traits(K());
+  CGAL::Polygon_mesh_processing::compute_normals(mesh, vnormals, fnormals, mesh_map);
 
   // PMP::build_AABB_tree(mesh, tree);
-}
-
-Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda,
-                     const std::vector<float> cylinder_data)
-    : initial_template(_init_temp),
-      last_template(_last_temp),
-      stretch_lambda(_stretch_lambda),
-      is_shape_comp(false)
-{
-  // radius must be positive
-  if (!cylinder_data.empty() && cylinder_data[6] > 0)
-  {
-    for (int i = 0; i < 3; i++)
-    {
-      cylinder_orien[i] = cylinder_data[i];
-      cylinder_center[i] = cylinder_data[i + 3];
-    }
-    cylinder_radius = cylinder_data[6];
-    cylinder_height = cylinder_data[7];
-  } else
-  {
-    cylinder_radius = -1.0f;
-    cylinder_height = -1.0f;
-  }
 }
 
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
     : initial_template(_init_temp),
       last_template(_last_temp),
-      stretch_lambda(_stretch_lambda),
-      is_shape_comp(false)
-{
-
-}
+      stretch_lambda(_stretch_lambda)
+{}
 
 
 Matrix3Xf
@@ -625,17 +529,11 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
   }
 
   // Add interaction constraints
-  if (interaction_constrain && cylinder_radius > 0)
+  if (interaction_constrain)
   {
     Matrix3Xf nearestPts, normalVecs;
-    if (is_shape_comp)
-    {
-      std::tie(nearestPts, normalVecs) = nearest_points_and_normal(last_template);
-    } else
-    {
-      std::tie(nearestPts, normalVecs) = nearest_points_and_normal_cyl(last_template);
-    }
-    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "added interaction constrain");
+    std::tie(nearestPts, normalVecs) = nearest_points_and_normal(last_template);
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "added interaction constraint");
 
     for (ssize_t i = 0; i < num_vectors; ++i)
     {
@@ -708,7 +606,7 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
   // TODO make this more
   // First, make sure that the constraints can be satisfied
   GRBQuadExpr gripper_objective_fn(0);
-  if (all_constraints_satisfiable(fixed_points))
+  if (gripper_constraints_satisfiable(fixed_points))
   {
     // If that's possible, we'll require that all constraints are equal
     for (const auto &fixed_point : fixed_points)
@@ -772,7 +670,7 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
   return Y_opt;
 }
 
-bool Optimizer::all_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const
+bool Optimizer::gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const
 {
   for (auto const &p1 : fixed_points)
   {
