@@ -24,8 +24,6 @@ using Eigen::VectorXf;
 
 #include <iostream>
 
-using std::cout;
-using std::endl;
 using std::min;
 using std::max;
 
@@ -588,7 +586,7 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
 
 
 Matrix3Xf
-Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<CDCPD::FixedPoint> &fixed_points,
+Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
                       const bool self_intersection, const bool interaction_constrain)
 {
   // Y: Y^t in Eq. (21)
@@ -800,7 +798,7 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
   return Y_opt;
 }
 
-bool Optimizer::all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint> &fixed_points) const
+bool Optimizer::all_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const
 {
   for (auto first_elem = fixed_points.cbegin(); first_elem != fixed_points.cend(); ++first_elem)
   {

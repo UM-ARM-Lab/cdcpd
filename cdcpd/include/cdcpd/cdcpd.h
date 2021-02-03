@@ -7,6 +7,7 @@
 #include <pcl/io/pcd_io.h>
 
 #include <arc_utilities/ros_helpers.hpp>
+#include <arc_utilities/ostream_operators.hpp>
 
 #include <smmap_models/constraint_jacobian_model.h>
 #include <smmap_models/diminishing_rigidity_model.h>
@@ -80,6 +81,18 @@ Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPt
                                          int lle_neighbors,
                                          double reg);
 
+struct FixedPoint
+{
+  Eigen::Vector3f position;
+  int template_index;
+};
+
+static std::ostream &operator<<(std::ostream &out, FixedPoint const &p)
+{
+  out << "[" << p.template_index << "] " << p.position;
+  return out;
+}
+
 class CDCPD
 {
  public:
@@ -95,17 +108,10 @@ class CDCPD
     pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
   };
 
-  struct FixedPoint
-  {
-    Eigen::Vector3f position;
-    int template_index;
-  };
-
   CDCPD(ros::NodeHandle nh,
         ros::NodeHandle ph,
         PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
-        const Eigen::MatrixXi &gripper_idx,
         bool _use_recovery = true,
         double alpha = 0.5,
         double beta = 1.0,
@@ -125,7 +131,7 @@ class CDCPD
                     const std::vector<bool> &is_grasped = {},
                     bool self_intersection = true,
                     bool interaction_constrain = true,
-                    bool is_prediction = true,
+                    bool use_prediction = true,
                     int pred_choice = 0,
                     double translation_dir_deformability = 0,
                     double translation_dis_deformability = 0,

@@ -66,12 +66,12 @@ class Optimizer
 
   Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y,
                               const Eigen::Matrix2Xi &E,
-                              const std::vector<CDCPD::FixedPoint> &fixed_points,
+                              const std::vector<FixedPoint> &fixed_points,
                               const bool self_intersection = true,
                               const bool interation_constrain = true);
 
  private:
-  bool all_constraints_satisfiable(const std::vector<CDCPD::FixedPoint> &fixed_points) const;
+  bool all_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;
 
   std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf> nearest_points_and_normal(const Eigen::Matrix3Xf &last_template);
 

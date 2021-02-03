@@ -14,6 +14,7 @@
 #include <sdf_tools/collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <arc_utilities/ros_helpers.hpp>
+#include <arc_utilities/enumerate.h>
 #include <fgt.hpp>
 
 #include "cdcpd/obs_util.h"
@@ -24,7 +25,7 @@
 #include <fstream>
 #include <random>
 
-auto constexpr const LOGNAME = "CDCPD";
+auto constexpr const LOGNAME = "cdcpd";
 
 using cv::Mat;
 using cv::Vec3b;
@@ -46,8 +47,6 @@ using Eigen::RowVectorXf;
 using Eigen::Isometry3d;
 using smmap::AllGrippersSinglePose;
 using smmap::AllGrippersSinglePoseDelta;
-using std::cout;
-using std::endl;
 
 static double abs_derivative(double x)
 {
@@ -295,7 +294,6 @@ CDCPD::CDCPD(ros::NodeHandle _nh,
              ros::NodeHandle _ph,
              PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
-             const Eigen::MatrixXi &_gripper_idx,
              const bool _use_recovery,
              const double _alpha,
              const double _beta,
@@ -323,7 +321,6 @@ CDCPD::CDCPD(ros::NodeHandle _nh,
     kvis(1e3),
     zeta(_zeta),
     use_recovery(_use_recovery),
-    gripper_idx(_gripper_idx),
     last_grasp_status({false, false}),
     is_sim(_is_sim)
 {
@@ -863,7 +860,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
 
     // NOTE: lambda means gamma here
     // Corresponding to Eq. (18) in the paper
-    const float current_zeta = ROSHelpers::GetParam<float>(ph, "zeta", 10.0);
+    const float current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
     float lambda = start_lambda;
     MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
 
@@ -971,7 +968,7 @@ Matrix3Xf CDCPD::cheng_cpd(const Matrix3Xf &X,
                            const cv::Mat &mask,
                            const Eigen::Matrix3f &intr)
 {
-  cout << "real cheng is running..." << endl;
+  ROS_DEBUG_NAMED(LOGNAME, "running without prediction");
   // downsampled_cloud: PointXYZ pointer to downsampled point clouds
   // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
   // depth: CV_16U depth image
@@ -1432,7 +1429,7 @@ CDCPD::Output CDCPD::operator()(
     const std::vector<bool> &is_grasped,
     const bool self_intersection,
     const bool interaction_constrain,
-    const bool is_prediction,
+    const bool use_prediction,
     const int pred_choice,
     const double translation_dir_deformability,
     const double translation_dis_deformability,
@@ -1483,7 +1480,7 @@ CDCPD::Output CDCPD::operator()(
                              last_lower_bounding_box - bounding_box_extend,
                              last_upper_bounding_box + bounding_box_extend,
                              is_sim);
-  std::cout << "Points in filtered: (" << cloud->height << " x " << cloud->width << ")\n";
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
@@ -1492,11 +1489,29 @@ CDCPD::Output CDCPD::operator()(
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
-  std::cout << "Points in cloud before leaf: " << cloud->width << std::endl;
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in cloud before leaf: " << cloud->width);
   sor.setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
   sor.filter(*cloud_downsampled);
-  std::cout << "Points in fully filtered: " << cloud_downsampled->width << std::endl;
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in fully filtered: " << cloud_downsampled->width);
+  if (cloud_downsampled->width == 0)
+  {
+    ROS_ERROR_STREAM_NAMED(LOGNAME, "No point in the filtered point cloud");
+    PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
+    PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
+    PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
+
+    return CDCPD::Output{
+#ifdef ENTIRE
+        entire_cloud,
+#endif
+        cloud,
+        cloud_downsampled,
+        cdcpd_cpd,
+        cdcpd_pred,
+        cdcpd_out
+    };
+  }
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
   // Add points to X according to the previous template
 
@@ -1504,69 +1519,65 @@ CDCPD::Output CDCPD::operator()(
   const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
 #endif
 
+  std::vector<int> idx_map;
+  for (auto const &[j, is_grasped_j] : enumerate(is_grasped))
+  {
+    if (j < q_config.size() and j < q_dot.size())
+    {
+      idx_map.push_back(j);
+    } else
+    {
+      ROS_ERROR_STREAM_NAMED(LOGNAME,
+                             "is_grasped index " << j << " given but only " << q_config.size()
+                                                 << " gripper configs and " << q_dot.size()
+                                                 << " gripper velocities given.");
+    }
+  }
+
   AllGrippersSinglePoseDelta q_dot_valid;
   AllGrippersSinglePose q_config_valid;
-
-  std::vector<int> idx_map;
-  if (is_grasped[0] && !is_grasped[1])
+  for (int g_idx : idx_map)
   {
-    idx_map = {0};
-  } else if (is_grasped[1] && !is_grasped[0])
-  {
-    idx_map = {1};
-  } else if (is_grasped[0] && is_grasped[1])
-  {
-    idx_map = {0, 1};
-  }
-  int num_gripper = int(std::accumulate(is_grasped.begin(), is_grasped.end(), 0));
-
-  for (int g_idx = 0; g_idx < num_gripper; g_idx++)
-  {
-    q_config_valid.push_back(q_config[idx_map[g_idx]]);
-    q_dot_valid.push_back(q_dot[idx_map[g_idx]]);
+    q_config_valid.push_back(q_config[g_idx]);
+    q_dot_valid.push_back(q_dot[g_idx]);
   }
 
-  // if a model is not created (i.e. no grasping)
-  if (!is_grasped[0] && !is_grasped[1])
+  // associate each gripper with the closest point in the current estimate
+  if (is_grasped != last_grasp_status)
   {
-    deformModel = nullptr;
-    model = nullptr;
-  } else if (is_grasped != last_grasp_status)
-  {
+    auto const num_gripper = idx_map.size();
     MatrixXi grippers(1, num_gripper);
-    for (int g_idx = 0; g_idx < num_gripper; g_idx++)
+    for (auto g_idx = 0u; g_idx < num_gripper; g_idx++)
     {
       Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
       MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
       MatrixXf::Index minRow, minCol;
-      cout << "closest point index: " << minCol << endl;
+      ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
       grippers(0, g_idx) = int(minCol);
     }
 
     gripper_idx = grippers;
 
-// initialize gripper data
-    std::vector<smmap::GripperData> grippers_data;
-
-// format grippers_data
-    std::cout << "gripper data when constructing CDCPD" << std::endl;
-    std::cout << grippers << std::endl << std::endl;
-    for (int g_idx = 0; g_idx < grippers.cols(); g_idx++)
+    if (model or deformModel)
     {
-      std::vector<long> grip_node_idx;
-      for (int node_idx = 0; node_idx < grippers.rows(); node_idx++)
+      std::vector<smmap::GripperData> grippers_data;
+
+      // format grippers_data
+      ROS_DEBUG_STREAM_NAMED(LOGNAME, "gripper data when constructing CDCPD");
+      ROS_DEBUG_STREAM_NAMED(LOGNAME, grippers);
+      for (int g_idx = 0; g_idx < grippers.cols(); g_idx++)
       {
-        grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
-        cout << "grasp point: " << grippers(node_idx, g_idx) << endl;
+        std::vector<long> grip_node_idx;
+        for (int node_idx = 0; node_idx < grippers.rows(); node_idx++)
+        {
+          grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
+          ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp point: " << grippers(node_idx, g_idx));
+        }
+        std::string gripper_name;
+        gripper_name = "gripper" + std::to_string(g_idx);
+        smmap::GripperData gripper(gripper_name, grip_node_idx);
+        grippers_data.push_back(gripper);
       }
-      std::string gripper_name;
-      gripper_name = "gripper" + std::to_string(g_idx);
-      smmap::GripperData gripper(gripper_name, grip_node_idx);
-      grippers_data.push_back(gripper);
-    }
-
-    if (model and deformModel)
-    {
       model->SetGrippersData(grippers_data);
 
       // set up collision check function
@@ -1594,13 +1605,7 @@ CDCPD::Output CDCPD::operator()(
     }
   }
 
-  // NOTE: order of P cannot influence delta_P, but influence P+delta_P
   std::vector<FixedPoint> pred_fixed_points;
-  if (q_config.size() != static_cast <unsigned long>(gripper_idx.cols()))
-  {
-    std::cerr << "In the constructor you indicated there " << gripper_idx.cols() << " gripper constraints"
-              << " but the q_config passed has " << q_config.size() << " elements.\n";
-  }
   for (int col = 0; col < gripper_idx.cols(); ++col)
   {
     FixedPoint pt;
@@ -1612,9 +1617,9 @@ CDCPD::Output CDCPD::operator()(
   }
 
   Matrix3Xf TY, TY_pred;
-  if (is_prediction)
+  if (use_prediction)
   {
-    if (model != nullptr)
+    if (model != nullptr and deformModel != nullptr)
     {
       TY_pred = predict(Y.cast<double>(), q_dot_valid, q_config_valid, pred_choice).cast<float>();
     } else
@@ -1629,14 +1634,15 @@ CDCPD::Output CDCPD::operator()(
 
   // Next step: optimization.
   // ???: most likely not 1.0
-  auto mesh = initObstacle(obs_param);
+//  auto mesh = initObstacle(obs_param);
   // NOTE: how is it possible that these can be const? doesn't `compute_normals` need to modify vnormals and fnormals?
-  auto const fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
-  auto const vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
-  auto const mesh_map = CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).geom_traits(K());
-  CGAL::Polygon_mesh_processing::compute_normals(mesh, vnormals, fnormals, mesh_map);
+//  auto const fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
+//  auto const vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
+//  auto const mesh_map = CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).geom_traits(K());
+//  CGAL::Polygon_mesh_processing::compute_normals(mesh, vnormals, fnormals, mesh_map);
 
   // NOTE: seems like this should be a function, not a class
+  ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "n vertices in obstacle input " << obs_param.verts.size());
   Optimizer opt(original_template, Y, 1.1, obs_param);
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interaction_constrain);

@@ -21,7 +21,7 @@ namespace ehc = EigenHelpersConversions;
 std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, float const length) {
   Eigen::Matrix3Xf template_vertices = Eigen::Matrix3Xf::Zero(3, num_points);  // Y^0 in the paper
   template_vertices.row(0).setLinSpaced(num_points, -length / 2, length / 2);
-  template_vertices.row(2).array() += 1.4f;
+  template_vertices.row(2).array() += 1.0f;
   Eigen::Matrix2Xi template_edges(2, num_points - 1);
   template_edges(0, 0) = 0;
   template_edges(1, template_edges.cols() - 1) = num_points - 1;
@@ -82,12 +82,12 @@ int main(int argc, char* argv[]) {
 #endif
 
   // Publsihers for the data, some visualizations, others consumed by other nodes
-  auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 1, true);
-  auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 1, true);
-  auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 1, true);
-  auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 1, true);
-  auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 1, true);
-  auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10, true);
+  auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 1);
+  auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 1);
+  auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 1);
+  auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 1);
+  auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 1);
+  auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
 
   // TF objects for getting gripper positions
   auto tf_buffer = tf2_ros::Buffer();
@@ -114,13 +114,9 @@ int main(int argc, char* argv[]) {
   auto const kinect_tf_name = kinect_name + "_rgb_optical_frame";
   auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
   auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
-  auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
-  auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
 
-  Eigen::MatrixXi gripper_idx(1, 2);
-  gripper_idx << left_node_idx, right_node_idx;
   obsParam obstacles;
-  auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, gripper_idx, use_recovery, alpha, beta, lambda, k_spring);
+  auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
 
   // TODO: Make these const references? Does this matter for CV types?
   auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
@@ -156,7 +152,25 @@ int main(int argc, char* argv[]) {
     auto const hsv_mask = getHsvMask(ph, rgb);
     auto const n_grippers = q_config.size();
     const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
-    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config);
+    Eigen::Matrix3Xf test_verts(3, 4);
+    test_verts << 0, 1, 0, 0,  // x
+        0, 0, 1, 0,            // y
+        0, 0, 0, 1;            // x
+
+    Eigen::Matrix3Xf test_faces(3, 4);
+    test_faces << 0, 0, 0, 1,  // 1
+        1, 1, 2, 2,            // 2
+        2, 3, 3, 3;            // 3
+    Eigen::Matrix3Xf test_normals(3, 4);
+    test_normals << 0, 0, -1, 1,  // x
+        0, -1, 0, 1,              // y
+        -1, 0, 0, 1;              // z
+                                  //    obstacles.verts = test_verts;
+                                  //    obstacles.faces = test_faces;
+                                  //    obstacles.normals = test_normals;
+    auto grasp_status = std::vector<bool>{false, false};
+    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config,
+                                grasp_status, true, true, false);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids
