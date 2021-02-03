@@ -31,10 +31,6 @@
 #include <CGAL/AABB_traits.h>
 
 
-// #ifndef DEBUG
-// #define DEBUG
-// #endif
-
 #ifndef ENTIRE
 #define ENTIRE
 #endif
@@ -120,8 +116,9 @@ class CDCPD
         float zeta = 10.0,
         bool is_sim = false);
 
-  Output operator()(const cv::Mat &rgb, // RGB image
-                    const cv::Mat &depth, // Depth image
+  // If you have want gripper constraints to be added & removed automatically based on is_grasped & distance
+  Output operator()(const cv::Mat &rgb,
+                    const cv::Mat &depth,
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
@@ -131,11 +128,35 @@ class CDCPD
                     const std::vector<bool> &is_grasped = {},
                     bool self_intersection = true,
                     bool interaction_constrain = true,
-                    bool use_prediction = true,
-                    int pred_choice = 0,
-                    double translation_dir_deformability = 0,
-                    double translation_dis_deformability = 0,
-                    double rotation_deformability = 0);
+                    int pred_choice = 0);
+
+  // If you want to used a known correspondence between grippers and node indices (gripper_idx)
+  Output operator()(const cv::Mat &rgb,
+                    const cv::Mat &depth,
+                    const cv::Mat &mask,
+                    const cv::Matx33d &intrinsics,
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    obsParam const &obs_param = {},
+                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+                    const smmap::AllGrippersSinglePose &q_config = {},
+                    const Eigen::MatrixXi &gripper_idx = {},
+                    bool self_intersection = true,
+                    bool interaction_constrain = true,
+                    int pred_choice = 0);
+
+  // The common implementation that the above overloads call
+  Output operator()(const cv::Mat &rgb,
+                    const cv::Mat &depth,
+                    const cv::Mat &mask,
+                    const cv::Matx33d &intrinsics,
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
+                    obsParam const &obs_param = {},
+                    // TODO: this should be one data structure
+                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+                    const smmap::AllGrippersSinglePose &q_config = {},
+                    bool self_intersection = true,
+                    bool interaction_constrain = true,
+                    int pred_choice = 0);
 
  private:
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices,
@@ -173,18 +194,6 @@ class CDCPD
                        const cv::Mat &mask,
                        const Eigen::Matrix3f &intr);
 
-  Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X,
-                       const Eigen::Matrix3Xf &Y,
-                       const cv::Mat &depth,
-                       const cv::Mat &mask,
-                       const Eigen::Matrix3f &intr);
-
-  Eigen::Matrix3Xf cheng_cpd(const Eigen::Matrix3Xf &X,
-                             const Eigen::Matrix3Xf &Y,
-                             const cv::Mat &depth,
-                             const cv::Mat &mask,
-                             const Eigen::Matrix3f &intr);
-
   Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P,
                            const smmap::AllGrippersSinglePoseDelta &q_dot,
                            const smmap::AllGrippersSinglePose &q_config,
@@ -193,8 +202,8 @@ class CDCPD
   ros::NodeHandle nh;
   ros::NodeHandle ph;
 
-  std::shared_ptr<smmap::ConstraintJacobianModel> model;
-  std::shared_ptr<smmap::DiminishingRigidityModel> deformModel;
+  std::unique_ptr<smmap::ConstraintJacobianModel> constraint_jacobian_model;
+  std::unique_ptr<smmap::DiminishingRigidityModel> diminishing_rigidity_model;
 
   // PastTemplateMatcher template_matcher;
   Eigen::Matrix3Xf original_template;

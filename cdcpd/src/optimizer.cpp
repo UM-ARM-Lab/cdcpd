@@ -635,7 +635,7 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
     {
       std::tie(nearestPts, normalVecs) = nearest_points_and_normal_cyl(last_template);
     }
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "added interaction constrain");
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "added interaction constrain");
 
     for (ssize_t i = 0; i < num_vectors; ++i)
     {
@@ -665,7 +665,7 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
 
   if (self_intersection)
   {
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "adding self intersection constrain");
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding self intersection constrain");
     auto[startPts, endPts] = nearest_points_line_segments(last_template, E);
     for (int row = 0; row < E.cols(); ++row)
     {
@@ -731,7 +731,7 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
 
   // Build the objective function
   {
-    GRBQuadExpr objective_fn(0);
+    GRBQuadExpr objective_fn = gripper_objective_fn;
     for (ssize_t i = 0; i < num_vectors; ++i)
     {
       const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
@@ -749,7 +749,7 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
   {
     model.optimize();
     if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL)
-    // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC || modelGRB_INF_OR_UNBD)
+      // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC || modelGRB_INF_OR_UNBD)
     {
       // std::cout << "Y" << std::endl;
       // std::cout << Y << std::endl;
@@ -780,7 +780,7 @@ bool Optimizer::all_constraints_satisfiable(const std::vector<FixedPoint> &fixed
     {
       float const current_distance = (p1.position - p2.position).squaredNorm();
       float const original_distance = (initial_template.col(p1.template_index) -
-                                 initial_template.col(p2.template_index)).squaredNorm();
+                                       initial_template.col(p2.template_index)).squaredNorm();
 
       if (current_distance > original_distance * stretch_lambda * stretch_lambda)
       {

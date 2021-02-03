@@ -114,6 +114,9 @@ int main(int argc, char* argv[]) {
   auto const kinect_tf_name = kinect_name + "_rgb_optical_frame";
   auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
   auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
+  auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
+  auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
+
 
   obsParam obstacles;
   auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
@@ -168,9 +171,12 @@ int main(int argc, char* argv[]) {
                                   //    obstacles.verts = test_verts;
                                   //    obstacles.faces = test_faces;
                                   //    obstacles.normals = test_normals;
-    auto grasp_status = std::vector<bool>{false, false};
-    auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config,
-                                grasp_status, true, true, true);
+
+    auto const right_grapsed = ROSHelpers::GetParam<bool>(ph, "right_grasped", false);
+    auto const left_grapsed = ROSHelpers::GetParam<bool>(ph, "left_grasped", false);
+    Eigen::MatrixXi gripper_idx(1, 2);
+    gripper_idx << left_node_idx, right_node_idx;
+    auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config, gripper_idx);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids

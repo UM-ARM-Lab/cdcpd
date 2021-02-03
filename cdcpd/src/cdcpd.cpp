@@ -45,8 +45,6 @@ using Eigen::VectorXd;
 using Eigen::VectorXi;
 using Eigen::RowVectorXf;
 using Eigen::Isometry3d;
-using smmap::AllGrippersSinglePose;
-using smmap::AllGrippersSinglePoseDelta;
 
 static double abs_derivative(double x)
 {
@@ -198,10 +196,9 @@ static MatrixXf gaussian_kernel(const MatrixXf &Y, double beta)
   return kernel;
 }
 
-static std::vector<smmap::CollisionData> fake_collision_check(const AllGrippersSinglePose &gripper_poses)
+static std::vector<smmap::CollisionData> fake_collision_check(const smmap::AllGrippersSinglePose &)
 {
-  std::vector<smmap::CollisionData> nothing;
-  return nothing;
+  return {};
 }
 
 MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree,
@@ -335,17 +332,31 @@ CDCPD::CDCPD(ros::NodeHandle _nh,
   // Qconstructor(template_edges, Q, original_template.cols());
 
   // TODO: how to configure nh so that the it can get correct sdf
-  // grippers: indices of points gripped, a X*G matrix (X: depends on the case)
-
   const double res = 1.0;
   const double size = 10.0;
   const Eigen::Isometry3d origin_transform
       = Eigen::Translation3d(0.0, 0.0, 0.0) * Eigen::Quaterniond(
           Eigen::AngleAxisd(M_PI_4, Eigen::Vector3d::UnitZ()));
-  auto map = sdf_tools::CollisionMapGrid(origin_transform, "world", res, size, size, 1.0,
-                                         sdf_tools::COLLISION_CELL(0.0));
-  const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
-  sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(sdf);
+//  auto map = sdf_tools::CollisionMapGrid(origin_transform, "world", res, size, size, 1.0,
+//                                         sdf_tools::COLLISION_CELL(0.0));
+//  const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
+  sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(origin_transform, "world", res, size, size, 1.0,
+                                                                   1e6);
+
+
+  auto const translation_dir_deformability = 0.0;
+  auto const translation_dis_deformability = 0.0;
+  auto const rotation_deformability = 0.0;
+  // FIXME: these models have horrible static nonsense
+//  constraint_jacobian_model = std::make_unique<smmap::ConstraintJacobianModel>(std::make_shared<ros::NodeHandle>(nh),
+//                                                                               translation_dir_deformability,
+//                                                                               translation_dis_deformability,
+//                                                                               rotation_deformability,
+//                                                                               sdf_ptr);
+//
+//  diminishing_rigidity_model = std::make_unique<smmap::DiminishingRigidityModel>(std::make_shared<ros::NodeHandle>(nh),
+//                                                                                 translation_dir_deformability,
+//                                                                                 rotation_deformability);
 }
 
 /*
@@ -760,11 +771,6 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
   // mask: CV_8U mask for segmentation label
 
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intr, kvis);
-  // Eigen::VectorXf Y_emit_prior(Y.cols());
-  // for (int i = 0; i < Y.cols(); ++i)
-  // {
-  //     Y_emit_prior(i) = 1.0f;
-  // }
 
   /// CPD step
 
@@ -799,8 +805,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
     // Calculate Eq. (9) (Line 5 in Algorithm 1)
     // NOTE: Eq. (9) misses M in the denominator
 
-    MatrixXf P(M,
-               N); // end = std::chrono::system_clock::now(); std::cout << "526: " << (end-start).count() << std::endl;
+    MatrixXf P(M, N);
     {
       for (int i = 0; i < M; ++i)
       {
@@ -821,509 +826,41 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
       den.array() += c;
 
       P = P.array().rowwise() / den.array();
-    }  //end = std::chrono::system_clock::now(); std::cout << "545: " << (end-start).count() << std::endl;
+    }
 
     // Fast Gaussian Transformation to calculate Pt1, P1, PX
-
-    // double bandwidth = std::sqrt(2.0 * sigma2);
-    // double epsilon = 1e-4;
-    // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //std::cout << "575\n";
-    // fgt::Matrix X_fgt = X.transpose().cast<double>(); //std::cout << "576\n";
-    // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //std::cout << "577\n";
-    // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //std::cout << "578\n";// N*1 vector
-
-    // float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-    // c *= w / (1 - w);
-    // c *= static_cast<double>(M) / N;
-    // ArrayXd a = 1 / (kt1.array() + c); // N*1 array
-
-    // VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
-
-    // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //std::cout << "587\n";
-    // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //std::cout << "588\n";
-    // P1 = P1.array()*Y_emit_prior.array();
-
-    // MatrixXd PX_fgt(TY.rows(), TY.cols());
-    // for (size_t i = 0; i < TY.rows(); ++i) {
-    //     // ArrayXd Xi = X_fgt.col(i).array();
-    //     ArrayXd aXarray = X_fgt.col(i).array() * a;
-    //     fgt::Vector aX = fgt::Vector(aXarray);  //std::cout << "594\n";
-    //     PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX)).array() * Y_emit_prior.array().cast<double>();
-    // }
-    // MatrixXf PX = PX_fgt.cast<float>();
     MatrixXf PX = (P * X.transpose()).transpose();
 
     // // Maximization step
-    VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); std::cout << "548: " << (end-start).count() << std::endl;
-    VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); std::cout << "549: " << (end-start).count() << std::endl;
-    float Np = P1.sum(); //end = std::chrono::system_clock::now(); std::cout << "550: " << (end-start).count() << std::endl;
+    VectorXf Pt1 = P.colwise().sum();
+    VectorXf P1 = P.rowwise().sum();
+    float Np = P1.sum();
 
     // NOTE: lambda means gamma here
     // Corresponding to Eq. (18) in the paper
-    const float current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
-    float lambda = start_lambda;
-    MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
+    auto const lambda = start_lambda;
+    MatrixXf p1d = P1.asDiagonal();
 
-    // obstacle normalization
-    // float obs_cons = 100.0;
-    // auto [nearestPts, normalVecs] = nearest_points_and_normal_help(TY, mesh, vnormals);
-    // MatrixXf dist_to_obs = ((TY-nearestPts).array() * normalVecs.array()).colwise().sum();
-    // VectorXf mask_vec(dist_to_obs.cols());
-    // for(int idx = 0; idx < dist_to_obs.cols(); idx++)
-    // {
-    //	if (dist_to_obs(0, idx) < 0.2)
-    //	{
-    //		mask_vec(idx) = 1.0;
-    //	} else
-    //	{
-    //		mask_vec(idx) = 0.0;
-    //	}
-    // }
-    // cout << "mask:" << endl;
-    // cout << mask_vec << endl << endl;
-    // MatrixXf obs_reg = obs_cons * sigma2 * mask_vec.asDiagonal() * normalVecs.transpose();
-
+    auto const current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
     MatrixXf A = (P1.asDiagonal() * G)
                  + alpha * sigma2 * MatrixXf::Identity(M, M)
                  + sigma2 * lambda * (m_lle * G)
-                 + current_zeta *
-                   G;// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
+                 + current_zeta * G;
 
-    MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() -
-                                                                                            Y.transpose()); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
+    MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose()
+                 + zeta * (Y_pred.transpose() - Y.transpose());
 
-    MatrixXf W = (A).householderQr().solve(B); //+obs_reg);
-    // MatrixXf lastW = W;
+    MatrixXf W = (A).householderQr().solve(B);
 
-    // int W_int = 0;
-    // std::cout << std::setw(20) << "W solver loop";
-    // std::cout << std::setw(20) << "W difference" << std::endl;
-    // while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
-    //     lastW = W;
-    //     MatrixXf A_new = A;
-    //     MatrixXf B_new = B;
-    //     for (int i = 0; i < template_edges.cols(); ++i)
-    //     {
-    //         MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
-    //         MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
-    //         double delta = abs_derivative(eit.trace()-ei0.trace());
-    //         // double delta = -1.0;
-    //         A_new = A_new + k*sigma2*delta*Q[i]*G;
-    //         B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
-    //     }
-    //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); std::cout << "562: " << (end-start).count() << std::endl;
-    //     std::cout << std::setw(20) << W_int;
-    //     std::cout << std::setw(20) << (W-lastW).squaredNorm() << std::endl;
-    //     W_int++;
-    // }
-
-    // MatrixXf W(M, D);
-    // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
-
-    TY = Y + (G *
-              W).transpose();// end = std::chrono::system_clock::now(); std::cout << "564: " << (end-start).count() << std::endl;
+    TY = Y + (G * W).transpose();
 
     // Corresponding to Eq. (19) in the paper
     VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
-    // float xPx = (Pt1 * xPxtemp.transpose())(0,0);
-    double xPx = Pt1.dot(
-        xPxtemp);// end = std::chrono::system_clock::now();std::cout << "569: " << (end-start).count() << std::endl;
-    // assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
-    // double xPx = xPxMat.sum();
+    double xPx = Pt1.dot(xPxtemp);
     VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-    // MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
-    // assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
-    double yPy = P1.dot(
-        yPytemp); //end = std::chrono::system_clock::now();std::cout << "575: " << (end-start).count() << std::endl;
-    double trPXY = (TY.array() *
-                    PX.array()).sum(); //end = std::chrono::system_clock::now();std::cout << "576: " << (end-start).count() << std::endl;
-    sigma2 = (xPx - 2 * trPXY + yPy) / (Np *
-                                        D); //end = std::chrono::system_clock::now();std::cout << "577: " << (end-start).count() << std::endl;
-
-    if (sigma2 <= 0)
-    {
-      sigma2 = tolerance / 10;
-    }
-
-#ifdef CPDLOG
-    double prob_reg = calculate_prob_reg(X, TY, G, W, sigma2, Y_emit_prior, P);
-    double lle_reg = start_lambda / 2 * ((TY*m_lle*TY.transpose()).trace() + 2*(W.transpose()*G*m_lle*TY).trace() + (W.transpose()*G*m_lle*G*W).trace());
-    double cpd_reg = alpha * (W.transpose()*G*W).trace()/2;
-    std::cout << std::setw(20) << iterations;
-    std::cout << std::setw(20) << prob_reg;
-    std::cout << std::setw(20) << cpd_reg;
-    std::cout << std::setw(20) << lle_reg << std::endl;
-#endif
-
-
-    error = std::abs(sigma2 - qprev);
-    iterations++;
-  }
-  return TY;
-}
-
-Matrix3Xf CDCPD::cheng_cpd(const Matrix3Xf &X,
-                           const Matrix3Xf &Y,
-                           const cv::Mat &depth,
-                           const cv::Mat &mask,
-                           const Eigen::Matrix3f &intr)
-{
-  ROS_DEBUG_NAMED(LOGNAME, "running without prediction");
-  // downsampled_cloud: PointXYZ pointer to downsampled point clouds
-  // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
-  // depth: CV_16U depth image
-  // mask: CV_8U mask for segmentation label
-
-  Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intr, kvis);
-  //Eigen::VectorXf Y_emit_prior(Y.cols());
-  //for (int i = 0; i < Y.cols(); ++i)
-  //{
-  //    Y_emit_prior(i) = 1.0f;
-  //}
-
-  /// CPD step
-
-  // G: (M, M) Guassian kernel matrix
-  MatrixXf G = gaussian_kernel(Y, beta);//Y, beta);
-
-  // TY: Y^(t) in Algorithm 1
-  Matrix3Xf TY = Y;
-  double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
-
-  int iterations = 0;
-  double error = tolerance + 1; // loop runs the first time
-
-  std::chrono::time_point<std::chrono::system_clock> start, end;
-  start = std::chrono::system_clock::now();
-
-#ifdef CPDLOG
-  std::cout << "\nCPD loop\n";
-  std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << std::endl;
-#endif
-
-  while (iterations <= max_iterations && error > tolerance)
-  {
-    double qprev = sigma2;
-    // Expectation step
-    int N = X.cols();
-    int M = Y.cols();
-    int D = Y.rows();
-
-    // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
-    // Calculate Eq. (9) (Line 5 in Algorithm 1)
-    // NOTE: Eq. (9) misses M in the denominator
-
-    MatrixXf P(M,
-               N); // end = std::chrono::system_clock::now(); std::cout << "526: " << (end-start).count() << std::endl;
-    {
-      for (int i = 0; i < M; ++i)
-      {
-        for (int j = 0; j < N; ++j)
-        {
-          P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
-        }
-      }
-
-      float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-      c *= w / (1 - w);
-      c *= static_cast<double>(M) / N;
-
-      P = (-P / (2 * sigma2)).array().exp().matrix();
-      P.array().colwise() *= Y_emit_prior.array();
-
-      RowVectorXf den = P.colwise().sum();
-      den.array() += c;
-
-      P = P.array().rowwise() / den.array();
-    }  //end = std::chrono::system_clock::now(); std::cout << "545: " << (end-start).count() << std::endl;
-
-    // Fast Gaussian Transformation to calculate Pt1, P1, PX
-
-    // double bandwidth = std::sqrt(2.0 * sigma2);
-    // double epsilon = 1e-4;
-    // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //std::cout << "575\n";
-    // fgt::Matrix X_fgt = X.transpose().cast<double>(); //std::cout << "576\n";
-    // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //std::cout << "577\n";
-    // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //std::cout << "578\n";// N*1 vector
-
-    // float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-    // c *= w / (1 - w);
-    // c *= static_cast<double>(M) / N;
-    // ArrayXd a = 1 / (kt1.array() + c); // N*1 array
-
-    // VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
-
-    // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //std::cout << "587\n";
-    // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //std::cout << "588\n";
-    // P1 = P1.array()*Y_emit_prior.array();
-
-    // MatrixXd PX_fgt(TY.rows(), TY.cols());
-    // for (size_t i = 0; i < TY.rows(); ++i) {
-    //     // ArrayXd Xi = X_fgt.col(i).array();
-    //     ArrayXd aXarray = X_fgt.col(i).array() * a;
-    //     fgt::Vector aX = fgt::Vector(aXarray);  //std::cout << "594\n";
-    //     PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX)).array() * Y_emit_prior.array().cast<double>();
-    // }
-    // MatrixXf PX = PX_fgt.cast<float>();
-    MatrixXf PX = (P * X.transpose()).transpose();
-
-    // // Maximization step
-    VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); std::cout << "548: " << (end-start).count() << std::endl;
-    VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); std::cout << "549: " << (end-start).count() << std::endl;
-    float Np = P1.sum(); //end = std::chrono::system_clock::now(); std::cout << "550: " << (end-start).count() << std::endl;
-
-    // NOTE: lambda means gamma here
-    // Corresponding to Eq. (18) in the paper
-    float lambda = start_lambda;
-    MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
-
-    MatrixXf A = (P1.asDiagonal() * G)
-                 + alpha * sigma2 * MatrixXf::Identity(M, M)
-                 + sigma2 * lambda * (m_lle *
-                                      G);// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
-
-    MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) *
-                                  Y.transpose(); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
-
-    MatrixXf W = A.householderQr().solve(B);
-    // MatrixXf lastW = W;
-
-    // int W_int = 0;
-    // std::cout << std::setw(20) << "W solver loop";
-    // std::cout << std::setw(20) << "W difference" << std::endl;
-    // while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
-    //     lastW = W;
-    //     MatrixXf A_new = A;
-    //     MatrixXf B_new = B;
-    //     for (int i = 0; i < template_edges.cols(); ++i)
-    //     {
-    //         MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
-    //         MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
-    //         double delta = abs_derivative(eit.trace()-ei0.trace());
-    //         // double delta = -1.0;
-    //         A_new = A_new + k*sigma2*delta*Q[i]*G;
-    //         B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
-    //     }
-    //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); std::cout << "562: " << (end-start).count() << std::endl;
-    //     std::cout << std::setw(20) << W_int;
-    //     std::cout << std::setw(20) << (W-lastW).squaredNorm() << std::endl;
-    //     W_int++;
-    // }
-
-    // MatrixXf W(M, D);
-    // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
-
-    TY = Y + (G *
-              W).transpose();// end = std::chrono::system_clock::now(); std::cout << "564: " << (end-start).count() << std::endl;
-
-    // Corresponding to Eq. (19) in the paper
-    VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
-    // float xPx = (Pt1 * xPxtemp.transpose())(0,0);
-    double xPx = Pt1.dot(
-        xPxtemp);// end = std::chrono::system_clock::now();std::cout << "569: " << (end-start).count() << std::endl;
-    // assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
-    // double xPx = xPxMat.sum();
-    VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-    // MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
-    // assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
-    double yPy = P1.dot(
-        yPytemp); //end = std::chrono::system_clock::now();std::cout << "575: " << (end-start).count() << std::endl;
-    double trPXY = (TY.array() *
-                    PX.array()).sum(); //end = std::chrono::system_clock::now();std::cout << "576: " << (end-start).count() << std::endl;
-    sigma2 = (xPx - 2 * trPXY + yPy) / (Np *
-                                        D); //end = std::chrono::system_clock::now();std::cout << "577: " << (end-start).count() << std::endl;
-
-    if (sigma2 <= 0)
-    {
-      sigma2 = tolerance / 10;
-    }
-
-#ifdef CPDLOG
-    double prob_reg = calculate_prob_reg(X, TY, G, W, sigma2, Y_emit_prior, P);
-    double lle_reg = start_lambda / 2 * ((TY*m_lle*TY.transpose()).trace() + 2*(W.transpose()*G*m_lle*TY).trace() + (W.transpose()*G*m_lle*G*W).trace());
-    double cpd_reg = alpha * (W.transpose()*G*W).trace()/2;
-    std::cout << std::setw(20) << iterations;
-    std::cout << std::setw(20) << prob_reg;
-    std::cout << std::setw(20) << cpd_reg;
-    std::cout << std::setw(20) << lle_reg << std::endl;
-#endif
-
-
-    error = std::abs(sigma2 - qprev);
-    iterations++;
-  }
-  return TY;
-}
-
-Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
-                     const Matrix3Xf &Y,
-                     const cv::Mat &depth,
-                     const cv::Mat &mask,
-                     const Eigen::Matrix3f &intr)
-{
-  // downsampled_cloud: PointXYZ pointer to downsampled point clouds
-  // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
-  // depth: CV_16U depth image
-  // mask: CV_8U mask for segmentation label
-
-  Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intr, kvis);
-  // Eigen::VectorXf Y_emit_prior(Y.cols());
-  // for (int i = 0; i < Y.cols(); ++i)
-  // {
-  //   Y_emit_prior(i) = 1.0f;
-  // }
-
-  /// CPD step
-
-  // G: (M, M) Guassian kernel matrix
-  MatrixXf G = gaussian_kernel(original_template, beta);//Y, beta);
-
-  // TY: Y^(t) in Algorithm 1
-  Matrix3Xf TY = Y;
-  double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
-
-  int iterations = 0;
-  double error = tolerance + 1; // loop runs the first time
-
-  std::chrono::time_point<std::chrono::system_clock> start, end;
-  start = std::chrono::system_clock::now();
-
-#ifdef CPDLOG
-  std::cout << "\nCPD loop\n";
-  std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20) << "LLE term" << std::endl;
-#endif
-
-  while (iterations <= max_iterations && error > tolerance)
-  {
-    double qprev = sigma2;
-    // Expectation step
-    int N = X.cols();
-    int M = Y.cols();
-    int D = Y.rows();
-
-    // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
-    // Calculate Eq. (9) (Line 5 in Algorithm 1)
-    // NOTE: Eq. (9) misses M in the denominator
-
-    MatrixXf P(M,
-               N); // end = std::chrono::system_clock::now(); std::cout << "526: " << (end-start).count() << std::endl;
-    {
-      for (int i = 0; i < M; ++i)
-      {
-        for (int j = 0; j < N; ++j)
-        {
-          P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
-        }
-      }
-
-      float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-      c *= w / (1 - w);
-      c *= static_cast<double>(M) / N;
-
-      P = (-P / (2 * sigma2)).array().exp().matrix();
-      P.array().colwise() *= Y_emit_prior.array();
-
-      RowVectorXf den = P.colwise().sum();
-      den.array() += c;
-
-      P = P.array().rowwise() / den.array();
-    }  //end = std::chrono::system_clock::now(); std::cout << "545: " << (end-start).count() << std::endl;
-
-    // Fast Gaussian Transformation to calculate Pt1, P1, PX
-
-    // double bandwidth = std::sqrt(2.0 * sigma2);
-    // double epsilon = 1e-4;
-    // fgt::Matrix Y_fgt = TY.transpose().cast<double>(); //std::cout << "575\n";
-    // fgt::Matrix X_fgt = X.transpose().cast<double>(); //std::cout << "576\n";
-    // fgt::DirectTree fgt1(Y_fgt, bandwidth, epsilon); //std::cout << "577\n";
-    // VectorXd kt1 = fgt1.compute(X_fgt, Y_emit_prior.cast<double>()); //std::cout << "578\n";// N*1 vector
-
-    // float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-    // c *= w / (1 - w);
-    // c *= static_cast<double>(M) / N;
-    // ArrayXd a = 1 / (kt1.array() + c); // N*1 array
-
-    // VectorXf Pt1 = (1 - c * a).cast<float>(); // M*1 array
-
-    // fgt::DirectTree fgt2(X_fgt, bandwidth, epsilon);  //std::cout << "587\n";
-    // VectorXf P1 = (fgt2.compute(Y_fgt, a)).cast<float>(); //std::cout << "588\n";
-    // P1 = P1.array()*Y_emit_prior.array();
-
-    // MatrixXd PX_fgt(TY.rows(), TY.cols());
-    // for (size_t i = 0; i < TY.rows(); ++i) {
-    //     // ArrayXd Xi = X_fgt.col(i).array();
-    //     ArrayXd aXarray = X_fgt.col(i).array() * a;
-    //     fgt::Vector aX = fgt::Vector(aXarray);  //std::cout << "594\n";
-    //     PX_fgt.row(i) = (fgt2.compute(Y_fgt, aX)).array() * Y_emit_prior.array().cast<double>();
-    // }
-    // MatrixXf PX = PX_fgt.cast<float>();
-    MatrixXf PX = (P * X.transpose()).transpose();
-
-    // // Maximization step
-    VectorXf Pt1 = P.colwise().sum();// end = std::chrono::system_clock::now(); std::cout << "548: " << (end-start).count() << std::endl;
-    VectorXf P1 = P.rowwise().sum();// end = std::chrono::system_clock::now(); std::cout << "549: " << (end-start).count() << std::endl;
-    float Np = P1.sum(); //end = std::chrono::system_clock::now(); std::cout << "550: " << (end-start).count() << std::endl;
-
-    // NOTE: lambda means gamma here
-    // Corresponding to Eq. (18) in the paper
-    float lambda = start_lambda;
-    MatrixXf p1d = P1.asDiagonal(); //end = std::chrono::system_clock::now(); std::cout << "557: " << (end-start).count() << std::endl;
-
-    MatrixXf A = (P1.asDiagonal() * G)
-                 + alpha * sigma2 * MatrixXf::Identity(M, M)
-                 + sigma2 * lambda * (m_lle *
-                                      G);// end = std::chrono::system_clock::now();std::cout << "560: " << (end-start).count() << std::endl;
-
-    MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) *
-                                  Y.transpose(); //end = std::chrono::system_clock::now();std::cout << "561: " << (end-start).count() << std::endl;
-
-    MatrixXf W = A.householderQr().solve(B);
-    // MatrixXf lastW = W;
-
-    // int W_int = 0;
-    // std::cout << std::setw(20) << "W solver loop";
-    // std::cout << std::setw(20) << "W difference" << std::endl;
-    // while (W_int == 0 || (W_int <= max_iterations && !W.isApprox(lastW))) {
-    //     lastW = W;
-    //     MatrixXf A_new = A;
-    //     MatrixXf B_new = B;
-    //     for (int i = 0; i < template_edges.cols(); ++i)
-    //     {
-    //         MatrixXf eit = (Y+G*lastW)*Q[i]*(Y+G*lastW).transpose();
-    //         MatrixXf ei0 = original_template*Q[i]*original_template.transpose();
-    //         double delta = abs_derivative(eit.trace()-ei0.trace());
-    //         // double delta = -1.0;
-    //         A_new = A_new + k*sigma2*delta*Q[i]*G;
-    //         B_new = B_new - k*sigma2*delta*Q[i]*Y.transpose();
-    //     }
-    //     W = A_new.householderQr().solve(B_new); //end = std::chrono::system_clock::now(); std::cout << "562: " << (end-start).count() << std::endl;
-    //     std::cout << std::setw(20) << W_int;
-    //     std::cout << std::setw(20) << (W-lastW).squaredNorm() << std::endl;
-    //     W_int++;
-    // }
-
-    // MatrixXf W(M, D);
-    // Wsolver(P, X, Y, G, L_lle, sigma2, alpha, start_lambda, W);
-
-    TY = Y + (G *
-              W).transpose();// end = std::chrono::system_clock::now(); std::cout << "564: " << (end-start).count() << std::endl;
-
-    // Corresponding to Eq. (19) in the paper
-    VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
-    // float xPx = (Pt1 * xPxtemp.transpose())(0,0);
-    double xPx = Pt1.dot(
-        xPxtemp);// end = std::chrono::system_clock::now();std::cout << "569: " << (end-start).count() << std::endl;
-    // assert(xPxMat.rows() == 1 && xPxMat.cols() == 1);
-    // double xPx = xPxMat.sum();
-    VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-    // MatrixXf yPyMat = P1.transpose() * yPytemp.transpose();
-    // assert(yPyMat.rows() == 1 && yPyMat.cols() == 1);
-    double yPy = P1.dot(
-        yPytemp); //end = std::chrono::system_clock::now();std::cout << "575: " << (end-start).count() << std::endl;
-    double trPXY = (TY.array() *
-                    PX.array()).sum(); //end = std::chrono::system_clock::now();std::cout << "576: " << (end-start).count() << std::endl;
-    sigma2 = (xPx - 2 * trPXY + yPy) / (Np *
-                                        D); //end = std::chrono::system_clock::now();std::cout << "577: " << (end-start).count() << std::endl;
+    double yPy = P1.dot(yPytemp);
+    double trPXY = (TY.array() * PX.array()).sum();
+    sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
 
     if (sigma2 <= 0)
     {
@@ -1348,8 +885,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
 }
 
 Matrix3Xd CDCPD::predict(const Matrix3Xd &P,
-                         const AllGrippersSinglePoseDelta &q_dot,
-                         const AllGrippersSinglePose &q_config,
+                         const smmap::AllGrippersSinglePoseDelta &q_dot,
+                         const smmap::AllGrippersSinglePose &q_config,
                          const int pred_choice)
 {
   // P: template
@@ -1409,12 +946,103 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P,
     // }
     if (pred_choice == 1)
     {
-      return model->getObjectDelta(world, grippers_pose_delta) + P;
+      return constraint_jacobian_model->getObjectDelta(world, grippers_pose_delta) + P;
     } else
     {
-      return deformModel->getObjectDelta(world, grippers_pose_delta) + P;
+      return diminishing_rigidity_model->getObjectDelta(world, grippers_pose_delta) + P;
     }
   }
+}
+
+
+CDCPD::Output CDCPD::operator()(
+    const Mat &rgb,
+    const Mat &depth,
+    const Mat &mask,
+    const cv::Matx33d &intrinsics,
+    const PointCloud::Ptr template_cloud,
+    obsParam const &obs_param,
+    const smmap::AllGrippersSinglePoseDelta &q_dot,
+    const smmap::AllGrippersSinglePose &q_config,
+    const std::vector<bool> &is_grasped,
+    const bool self_intersection,
+    const bool interaction_constrain,
+    const int pred_choice)
+{
+  std::vector<int> idx_map;
+  for (auto const &[j, is_grasped_j] : enumerate(is_grasped))
+  {
+    if (j < q_config.size() and j < q_dot.size())
+    {
+      idx_map.push_back(j);
+    } else
+    {
+      ROS_ERROR_STREAM_NAMED(LOGNAME,
+                             "is_grasped index " << j << " given but only " << q_config.size()
+                                                 << " gripper configs and " << q_dot.size()
+                                                 << " gripper velocities given.");
+    }
+  }
+
+  // associate each gripper with the closest point in the current estimate
+  if (is_grasped != last_grasp_status)
+  {
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp status changed, recomputing correspondences");
+
+    // get the previous tracking result
+    const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+
+    auto const num_gripper = idx_map.size();
+    MatrixXi grippers(1, num_gripper);
+    for (auto g_idx = 0u; g_idx < num_gripper; g_idx++)
+    {
+      Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
+      MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
+      MatrixXf::Index minRow, minCol;
+      ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
+      grippers(0, g_idx) = int(minCol);
+    }
+
+    gripper_idx = grippers;
+
+    {
+      std::vector<smmap::GripperData> grippers_data;
+
+      // format grippers_data
+      ROS_DEBUG_STREAM_NAMED(LOGNAME, "gripper data when constructing CDCPD:" << grippers);
+      for (int g_idx = 0; g_idx < grippers.cols(); g_idx++)
+      {
+        std::vector<long> grip_node_idx;
+        for (int node_idx = 0; node_idx < grippers.rows(); node_idx++)
+        {
+          grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
+          ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp point: " << grippers(node_idx, g_idx));
+        }
+        std::string gripper_name;
+        gripper_name = "gripper" + std::to_string(g_idx);
+        smmap::GripperData gripper(gripper_name, grip_node_idx);
+        grippers_data.push_back(gripper);
+      }
+
+      //      constraint_jacobian_model->SetGrippersData(grippers_data);
+      //
+      //      // set up collision check function
+      //      constraint_jacobian_model->SetCallbackFunctions(fake_collision_check);
+      //
+      //      // set initial point configuration
+      //      Matrix3Xf eigen_template_cloud = template_cloud->getMatrixXfMap().topRows(3);
+      //      constraint_jacobian_model->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
+      //      diminishing_rigidity_model->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
+    }
+  }
+
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obs_param, q_dot,
+                                    q_config, self_intersection, interaction_constrain, pred_choice);
+
+  last_grasp_status = is_grasped;
+
+  return cdcpd_out;
+
 }
 
 CDCPD::Output CDCPD::operator()(
@@ -1424,16 +1052,32 @@ CDCPD::Output CDCPD::operator()(
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
     obsParam const &obs_param,
-    const AllGrippersSinglePoseDelta &q_dot,
-    const AllGrippersSinglePose &q_config,
-    const std::vector<bool> &is_grasped,
+    const smmap::AllGrippersSinglePoseDelta &q_dot,
+    const smmap::AllGrippersSinglePose &q_config,
+    const Eigen::MatrixXi &gripper_idx,
     const bool self_intersection,
     const bool interaction_constrain,
-    const bool use_prediction,
-    const int pred_choice,
-    const double translation_dir_deformability,
-    const double translation_dis_deformability,
-    const double rotation_deformability)
+    const int pred_choice)
+{
+  this->gripper_idx = gripper_idx;
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obs_param, q_dot,
+                                    q_config, self_intersection, interaction_constrain, pred_choice);
+  return cdcpd_out;
+
+}
+
+CDCPD::Output CDCPD::operator()(
+    const Mat &rgb,
+    const Mat &depth,
+    const Mat &mask,
+    const cv::Matx33d &intrinsics,
+    const PointCloud::Ptr template_cloud,
+    obsParam const &obs_param,
+    const smmap::AllGrippersSinglePoseDelta &q_dot,
+    const smmap::AllGrippersSinglePose &q_config,
+    const bool self_intersection,
+    const bool interaction_constrain,
+    const int pred_choice)
 {
   // rgb: CV_8U3C rgb image
   // depth: CV_16U depth image
@@ -1519,118 +1163,21 @@ CDCPD::Output CDCPD::operator()(
   const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
 #endif
 
-  std::vector<int> idx_map;
-  for (auto const &[j, is_grasped_j] : enumerate(is_grasped))
-  {
-    if (j < q_config.size() and j < q_dot.size())
-    {
-      idx_map.push_back(j);
-    } else
-    {
-      ROS_ERROR_STREAM_NAMED(LOGNAME,
-                             "is_grasped index " << j << " given but only " << q_config.size()
-                                                 << " gripper configs and " << q_dot.size()
-                                                 << " gripper velocities given.");
-    }
-  }
-
-  AllGrippersSinglePoseDelta q_dot_valid;
-  AllGrippersSinglePose q_config_valid;
-  for (int g_idx : idx_map)
-  {
-    q_config_valid.push_back(q_config[g_idx]);
-    q_dot_valid.push_back(q_dot[g_idx]);
-  }
-
-  // associate each gripper with the closest point in the current estimate
-  if (is_grasped != last_grasp_status)
-  {
-    auto const num_gripper = idx_map.size();
-    MatrixXi grippers(1, num_gripper);
-    for (auto g_idx = 0u; g_idx < num_gripper; g_idx++)
-    {
-      Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
-      MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
-      MatrixXf::Index minRow, minCol;
-      ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
-      grippers(0, g_idx) = int(minCol);
-    }
-
-    gripper_idx = grippers;
-
-    if (model or deformModel)
-    {
-      std::vector<smmap::GripperData> grippers_data;
-
-      // format grippers_data
-      ROS_DEBUG_STREAM_NAMED(LOGNAME, "gripper data when constructing CDCPD");
-      ROS_DEBUG_STREAM_NAMED(LOGNAME, grippers);
-      for (int g_idx = 0; g_idx < grippers.cols(); g_idx++)
-      {
-        std::vector<long> grip_node_idx;
-        for (int node_idx = 0; node_idx < grippers.rows(); node_idx++)
-        {
-          grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
-          ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp point: " << grippers(node_idx, g_idx));
-        }
-        std::string gripper_name;
-        gripper_name = "gripper" + std::to_string(g_idx);
-        smmap::GripperData gripper(gripper_name, grip_node_idx);
-        grippers_data.push_back(gripper);
-      }
-      model->SetGrippersData(grippers_data);
-
-      // set up collision check function
-      model->SetCallbackFunctions(fake_collision_check);
-
-      // set initial point configuration
-      Matrix3Xf eigen_template_cloud = template_cloud->getMatrixXfMap().topRows(3);
-      model->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
-
-      // FIXME: yixuan, here you reset this object after modifying it above, this seems wrong
-      model = std::make_shared<smmap::ConstraintJacobianModel>(
-          std::make_shared<ros::NodeHandle>(nh),
-          translation_dir_deformability,
-          translation_dis_deformability,
-          rotation_deformability,
-          sdf_ptr);
-
-      deformModel->SetInitialObjectConfiguration(eigen_template_cloud.cast<double>());
-
-      deformModel = std::make_shared<smmap::DiminishingRigidityModel>(
-          std::make_shared<ros::NodeHandle>(nh),
-          translation_dir_deformability,
-          rotation_deformability);
-
-    }
-  }
-
   std::vector<FixedPoint> pred_fixed_points;
-  for (int col = 0; col < gripper_idx.cols(); ++col)
+  auto const num_grippers = std::min(static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
+  for (auto col = 0u; col < num_grippers; ++col)
   {
     FixedPoint pt;
     pt.template_index = gripper_idx(0, col);
-    pt.position(0) = q_config_valid[col](0, 3);
-    pt.position(1) = q_config_valid[col](1, 3);
-    pt.position(2) = q_config_valid[col](2, 3);
+    pt.position(0) = q_config[col](0, 3);
+    pt.position(1) = q_config[col](1, 3);
+    pt.position(2) = q_config[col](2, 3);
     pred_fixed_points.push_back(pt);
   }
 
   Matrix3Xf TY, TY_pred;
-  if (use_prediction)
-  {
-    if (model != nullptr and deformModel != nullptr)
-    {
-      TY_pred = predict(Y.cast<double>(), q_dot_valid, q_config_valid, pred_choice).cast<float>();
-    } else
-    {
-      TY_pred = Y;
-    }
-    TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen);
-  } else
-  {
-    TY = cheng_cpd(X, Y, depth, mask, intrinsics_eigen);
-  }
+  TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
+  TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen);
 
   // Next step: optimization.
   // ???: most likely not 1.0
@@ -1642,15 +1189,14 @@ CDCPD::Output CDCPD::operator()(
 //  CGAL::Polygon_mesh_processing::compute_normals(mesh, vnormals, fnormals, mesh_map);
 
   // NOTE: seems like this should be a function, not a class
-  ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
-  ROS_DEBUG_STREAM_NAMED(LOGNAME, "n vertices in obstacle input " << obs_param.verts.size());
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "fixed points" << pred_fixed_points);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "n vertices in obstacle input " << obs_param.verts.size());
   Optimizer opt(original_template, Y, 1.1, std::vector<float>{});
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interaction_constrain);
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();
   last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
-  last_grasp_status = is_grasped;
 
   PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
   PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
