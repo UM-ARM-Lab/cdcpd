@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
                                   //    obstacles.normals = test_normals;
     auto grasp_status = std::vector<bool>{false, false};
     auto out = cdcpd.operator()(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config,
-                                grasp_status, true, true, false);
+                                grasp_status, true, true, true);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids

@@ -1644,7 +1644,7 @@ CDCPD::Output CDCPD::operator()(
   // NOTE: seems like this should be a function, not a class
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "n vertices in obstacle input " << obs_param.verts.size());
-  Optimizer opt(original_template, Y, 1.1, obs_param);
+  Optimizer opt(original_template, Y, 1.1, std::vector<float>{});
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interaction_constrain);
 
   // NOTE: set stateful member variables for next time

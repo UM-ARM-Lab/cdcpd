@@ -116,6 +116,8 @@ float cylinder_height = 0.21;
 #endif
 
 
+constexpr auto const LOGNAME = "optimizer";
+
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
 // where Q is [ I, -I
@@ -324,16 +326,10 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
     Vector3f P2 = last_template.col(E(1, i));
 
 
-
-
     for (int j = 0; j < E.cols(); ++j)
     {
       Vector3f P3 = last_template.col(E(0, j));
       Vector3f P4 = last_template.col(E(1, j));
-
-
-
-
 
 
       float R21 = (P2 - P1).squaredNorm();
@@ -341,8 +337,6 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
       float D4321 = (P4 - P3).dot(P2 - P1);
       float D3121 = (P3 - P1).dot(P2 - P1);
       float D4331 = (P4 - P3).dot(P3 - P1);
-
-
 
 
       float s;
@@ -377,7 +371,6 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
           t = 1;
         }
       }
-
 
 
       for (int dim = 0; dim < 3; ++dim)
@@ -595,201 +588,182 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
   // auto Y_force = force_pts(nearestPts, normalVecs, Y);
   Matrix3Xf Y_opt(Y.rows(), Y.cols());
   GRBVar *vars = nullptr;
-  try
+  const ssize_t num_vectors = Y.cols();
+  const ssize_t num_vars = 3 * num_vectors;
+
+  GRBEnv &env = getGRBEnv();
+
+  // Disables logging to file and logging to console (with a 0 as the value of the flag)
+  env.set(GRB_IntParam_OutputFlag, 0);
+  GRBModel model(env);
+  model.set("ScaleFlag", "0");
+  // model.set("DualReductions", 0);
+  model.set("FeasibilityTol", "0.01");
+  // model.set("OutputFlag", "1");
+
+  // Add the vars to the model
   {
-    const ssize_t num_vectors = Y.cols();
-    const ssize_t num_vars = 3 * num_vectors;
+    // Note that variable bound is important, without a bound, Gurobi defaults to 0, which is clearly unwanted
+    const std::vector<double> lb(num_vars, -GRB_INFINITY);
+    const std::vector<double> ub(num_vars, GRB_INFINITY);
+    vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int) num_vars);
+    model.update();
+  }
 
-    GRBEnv &env = getGRBEnv();
-
-    // Disables logging to file and logging to console (with a 0 as the value of the flag)
-    env.set(GRB_IntParam_OutputFlag, 0);
-    GRBModel model(env);
-    model.set("ScaleFlag", "0");
-    // model.set("DualReductions", 0);
-    model.set("FeasibilityTol", "0.01");
-    // model.set("OutputFlag", "1");
-
-    // Add the vars to the model
+  // Add the edge constraints
+  {
+    for (ssize_t i = 0; i < E.cols(); ++i)
     {
-      // Note that variable bound is important, without a bound, Gurobi defaults to 0, which is clearly unwanted
-      const std::vector<double> lb(num_vars, -GRB_INFINITY);
-      const std::vector<double> ub(num_vars, GRB_INFINITY);
-      vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int) num_vars);
-      model.update();
+      model.addQConstr(
+          buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
+          GRB_LESS_EQUAL,
+          stretch_lambda * stretch_lambda *
+          (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
+          "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
     }
+    model.update();
+  }
 
-    // Add the edge constraints
+  // Add interaction constraints
+  if (interaction_constrain && cylinder_radius > 0)
+  {
+    Matrix3Xf nearestPts, normalVecs;
+    if (is_shape_comp)
     {
-      for (ssize_t i = 0; i < E.cols(); ++i)
-      {
-        model.addQConstr(
-            buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
-            GRB_LESS_EQUAL,
-            stretch_lambda * stretch_lambda *
-            (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
-            "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
-      }
-      model.update();
+      std::tie(nearestPts, normalVecs) = nearest_points_and_normal(last_template);
+    } else
+    {
+      std::tie(nearestPts, normalVecs) = nearest_points_and_normal_cyl(last_template);
     }
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "added interaction constrain");
 
-    // Add interaction constraints
-
-
-    if (interaction_constrain && cylinder_radius > 0)
+    for (ssize_t i = 0; i < num_vectors; ++i)
     {
-      Matrix3Xf nearestPts, normalVecs;
-      if (is_shape_comp)
-      {
-        std::tie(nearestPts, normalVecs) = nearest_points_and_normal(last_template);
-      } else
-      {
-        std::tie(nearestPts, normalVecs) = nearest_points_and_normal_cyl(last_template);
-      }
-      cout << "added interaction constrain" << endl;
-
-
-
-
-
-
-      for (ssize_t i = 0; i < num_vectors; ++i)
-      {
-        // ssize_t fixed_idx = 0;
-        // for (fixed_idx = 0; fixed_idx < fixed_points.size(); fixed_idx++)
-        // {
-        //  	if (i <= int(fixed_points[fixed_idx].template_index) + 5 && i >= int(fixed_points[fixed_idx].template_index) - 5) {
-        //  		break;
-        //  	}
-        // }
-        // if (fixed_idx == fixed_points.size())
-        // {
-        model.addConstr(
-            (vars[i * 3 + 0] - nearestPts(0, i)) * normalVecs(0, i) +
-            (vars[i * 3 + 1] - nearestPts(1, i)) * normalVecs(1, i) +
-            (vars[i * 3 + 2] - nearestPts(2, i)) * normalVecs(2, i) >= 0.0,
-            "interaction constrain for point " + std::to_string(i));
-        // }
-      }
-      // for (ssize_t i = 0; i < num_vectors; ++i) {
-      //     model.addConstr(
-      //             (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
-      //             (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
-      //             (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) <= 1.0, "interaction constrain for point " +std::to_string(i));
+      // ssize_t fixed_idx = 0;
+      // for (fixed_idx = 0; fixed_idx < fixed_points.size(); fixed_idx++)
+      // {
+      //  	if (i <= int(fixed_points[fixed_idx].template_index) + 5 && i >= int(fixed_points[fixed_idx].template_index) - 5) {
+      //  		break;
+      //  	}
+      // }
+      // if (fixed_idx == fixed_points.size())
+      // {
+      model.addConstr(
+          (vars[i * 3 + 0] - nearestPts(0, i)) * normalVecs(0, i) +
+          (vars[i * 3 + 1] - nearestPts(1, i)) * normalVecs(1, i) +
+          (vars[i * 3 + 2] - nearestPts(2, i)) * normalVecs(2, i) >= 0.0,
+          "interaction constrain for point " + std::to_string(i));
       // }
     }
+    // for (ssize_t i = 0; i < num_vectors; ++i) {
+    //     model.addConstr(
+    //             (vars[i*3 + 0] - nearestPts(0, i))*normalVecs(0, i) +
+    //             (vars[i*3 + 1] - nearestPts(1, i))*normalVecs(1, i) +
+    //             (vars[i*3 + 2] - nearestPts(2, i))*normalVecs(2, i) <= 1.0, "interaction constrain for point " +std::to_string(i));
+    // }
+  }
 
-    if (self_intersection)
+  if (self_intersection)
+  {
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "adding self intersection constrain");
+    auto[startPts, endPts] = nearest_points_line_segments(last_template, E);
+    for (int row = 0; row < E.cols(); ++row)
     {
-      cout << "adding self intersection constrain" << endl;
-      auto[startPts, endPts] = nearest_points_line_segments(last_template, E);
-      for (int row = 0; row < E.cols(); ++row)
+      Vector3f P1 = last_template.col(E(0, row));
+      Vector3f P2 = last_template.col(E(1, row));
+      for (int col = 0; col < E.cols(); ++col)
       {
-        Vector3f P1 = last_template.col(E(0, row));
-        Vector3f P2 = last_template.col(E(1, row));
-        for (int col = 0; col < E.cols(); ++col)
+        float s = startPts(3, row * E.cols() + col);
+        float t = endPts(3, row * E.cols() + col);
+        Vector3f P3 = last_template.col(E(0, col));
+        Vector3f P4 = last_template.col(E(1, col));
+        float l = (endPts.col(row * E.cols() + col).topRows(3) -
+                   startPts.col(row * E.cols() + col).topRows(3)).norm();
+        if (!P1.isApprox(P3) && !P1.isApprox(P4) && !P2.isApprox(P3) && !P2.isApprox(P4) && l <= 0.02)
         {
-          float s = startPts(3, row * E.cols() + col);
-          float t = endPts(3, row * E.cols() + col);
-          Vector3f P3 = last_template.col(E(0, col));
-          Vector3f P4 = last_template.col(E(1, col));
-          float l = (endPts.col(row * E.cols() + col).topRows(3) -
-                     startPts.col(row * E.cols() + col).topRows(3)).norm();
-          if (!P1.isApprox(P3) && !P1.isApprox(P4) && !P2.isApprox(P3) && !P2.isApprox(P4) && l <= 0.02)
-          {
-            // model.addConstr((vars[E(0, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
-            //                 (vars[E(0, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
-            //                 (vars[E(0, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
-            // model.addConstr((vars[E(1, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
-            //                 (vars[E(1, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
-            //                 (vars[E(1, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
-            model.addConstr(((vars[E(0, col) * 3 + 0] * (1 - t) + vars[E(1, col) * 3 + 0] * t) -
-                             (vars[E(0, row) * 3 + 0] * (1 - s) + vars[E(1, row) * 3 + 0] * s))
-                            * (endPts(0, row * E.cols() + col) - startPts(0, row * E.cols() + col)) +
-                            ((vars[E(0, col) * 3 + 1] * (1 - t) + vars[E(1, col) * 3 + 1] * t) -
-                             (vars[E(0, row) * 3 + 1] * (1 - s) + vars[E(1, row) * 3 + 1] * s))
-                            * (endPts(1, row * E.cols() + col) - startPts(1, row * E.cols() + col)) +
-                            ((vars[E(0, col) * 3 + 2] * (1 - t) + vars[E(1, col) * 3 + 2] * t) -
-                             (vars[E(0, row) * 3 + 2] * (1 - s) + vars[E(1, row) * 3 + 2] * s))
-                            * (endPts(2, row * E.cols() + col) - startPts(2, row * E.cols() + col)) >= 0.01 * l);
-          }
+          // model.addConstr((vars[E(0, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
+          //                 (vars[E(0, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
+          //                 (vars[E(0, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
+          // model.addConstr((vars[E(1, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
+          //                 (vars[E(1, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
+          //                 (vars[E(1, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
+          model.addConstr(((vars[E(0, col) * 3 + 0] * (1 - t) + vars[E(1, col) * 3 + 0] * t) -
+                           (vars[E(0, row) * 3 + 0] * (1 - s) + vars[E(1, row) * 3 + 0] * s))
+                          * (endPts(0, row * E.cols() + col) - startPts(0, row * E.cols() + col)) +
+                          ((vars[E(0, col) * 3 + 1] * (1 - t) + vars[E(1, col) * 3 + 1] * t) -
+                           (vars[E(0, row) * 3 + 1] * (1 - s) + vars[E(1, row) * 3 + 1] * s))
+                          * (endPts(1, row * E.cols() + col) - startPts(1, row * E.cols() + col)) +
+                          ((vars[E(0, col) * 3 + 2] * (1 - t) + vars[E(1, col) * 3 + 2] * t) -
+                           (vars[E(0, row) * 3 + 2] * (1 - s) + vars[E(1, row) * 3 + 2] * s))
+                          * (endPts(2, row * E.cols() + col) - startPts(2, row * E.cols() + col)) >= 0.01 * l);
         }
       }
     }
+  }
 
 
-    Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
+  Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
 
-    // Next, add the fixed point constraints that we might have.
-    // TODO make this more
-    // First, make sure that the constraints can be satisfied
-    GRBQuadExpr gripper_objective_fn(0);
-    if (all_constraints_satisfiable(fixed_points))
+  // Next, add the fixed point constraints that we might have.
+  // TODO make this more
+  // First, make sure that the constraints can be satisfied
+  GRBQuadExpr gripper_objective_fn(0);
+  if (all_constraints_satisfiable(fixed_points))
+  {
+    // If that's possible, we'll require that all constraints are equal
+    for (const auto &fixed_point : fixed_points)
     {
-      // If that's possible, we'll require that all constraints are equal
-      for (const auto &fixed_point : fixed_points)
+      model.addConstr(vars[3 * fixed_point.template_index + 0], GRB_EQUAL, fixed_point.position(0), "fixed_point");
+      model.addConstr(vars[3 * fixed_point.template_index + 1], GRB_EQUAL, fixed_point.position(1), "fixed_point");
+      model.addConstr(vars[3 * fixed_point.template_index + 2], GRB_EQUAL, fixed_point.position(2), "fixed_point");
+    }
+  } else
+  {
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "Gripper constraint cannot be satisfied.");
+    for (const auto &fixed_point : fixed_points)
+    {
+      const auto expr0 = vars[fixed_point.template_index + 0] - Y_copy(0, fixed_point.template_index);
+      const auto expr1 = vars[fixed_point.template_index + 1] - Y_copy(1, fixed_point.template_index);
+      const auto expr2 = vars[fixed_point.template_index + 2] - Y_copy(2, fixed_point.template_index);
+      gripper_objective_fn += 100.0 * (expr0 * expr0 + expr1 * expr1 + expr2 * expr2);
+    }
+  }
+
+  // Build the objective function
+  {
+    GRBQuadExpr objective_fn(0);
+    for (ssize_t i = 0; i < num_vectors; ++i)
+    {
+      const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
+      const auto expr1 = vars[i * 3 + 1] - Y_copy(1, i);
+      const auto expr2 = vars[i * 3 + 2] - Y_copy(2, i);
+      objective_fn += expr0 * expr0;
+      objective_fn += expr1 * expr1;
+      objective_fn += expr2 * expr2;
+    }
+    model.setObjective(objective_fn, GRB_MINIMIZE);
+    model.update();
+  }
+
+  // Find the optimal solution, and extract it
+  {
+    model.optimize();
+    if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL)
+    // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC || modelGRB_INF_OR_UNBD)
+    {
+      // std::cout << "Y" << std::endl;
+      // std::cout << Y << std::endl;
+      for (ssize_t i = 0; i < num_vectors; i++)
       {
-        model.addConstr(vars[3 * fixed_point.template_index + 0], GRB_EQUAL, fixed_point.position(0), "fixed_point");
-        model.addConstr(vars[3 * fixed_point.template_index + 1], GRB_EQUAL, fixed_point.position(1), "fixed_point");
-        model.addConstr(vars[3 * fixed_point.template_index + 2], GRB_EQUAL, fixed_point.position(2), "fixed_point");
+        Y_opt(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
+        Y_opt(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
+        Y_opt(2, i) = vars[i * 3 + 2].get(GRB_DoubleAttr_X);
       }
     } else
     {
-      cout << "Gripper constraint cannot be satisfied." << endl;
-      for (const auto &fixed_point : fixed_points)
-      {
-        const auto expr0 = vars[fixed_point.template_index + 0] - Y_copy(0, fixed_point.template_index);
-        const auto expr1 = vars[fixed_point.template_index + 1] - Y_copy(1, fixed_point.template_index);
-        const auto expr2 = vars[fixed_point.template_index + 2] - Y_copy(2, fixed_point.template_index);
-        gripper_objective_fn += 100.0 * (expr0 * expr0 + expr1 * expr1 + expr2 * expr2);
-      }
+      ROS_DEBUG_STREAM_NAMED(LOGNAME, "Status: " << model.get(GRB_IntAttr_Status));
+      exit(-1);
     }
-
-    // Build the objective function
-    {
-      GRBQuadExpr objective_fn(0);
-      for (ssize_t i = 0; i < num_vectors; ++i)
-      {
-        const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
-        const auto expr1 = vars[i * 3 + 1] - Y_copy(1, i);
-        const auto expr2 = vars[i * 3 + 2] - Y_copy(2, i);
-        objective_fn += expr0 * expr0;
-        objective_fn += expr1 * expr1;
-        objective_fn += expr2 * expr2;
-      }
-      model.setObjective(objective_fn, GRB_MINIMIZE);
-      model.update();
-    }
-
-    // Find the optimal solution, and extract it
-    {
-      model.optimize();
-      if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) ==
-                                                          GRB_SUBOPTIMAL)  // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC || modelGRB_INF_OR_UNBD)
-      {
-        // std::cout << "Y" << std::endl;
-        // std::cout << Y << std::endl;
-        for (ssize_t i = 0; i < num_vectors; i++)
-        {
-          Y_opt(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
-          Y_opt(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
-          Y_opt(2, i) = vars[i * 3 + 2].get(GRB_DoubleAttr_X);
-        }
-      } else
-      {
-        std::cout << "Status: " << model.get(GRB_IntAttr_Status) << std::endl;
-        exit(-1);
-      }
-    }
-  }
-  catch (GRBException &e)
-  {
-    std::cout << "Error code = " << e.getErrorCode() << std::endl;
-    std::cout << e.getMessage() << std::endl;
-  }
-  catch (...)
-  {
-    std::cout << "Exception during optimization" << std::endl;
   }
 
   delete[] vars;
@@ -800,28 +774,19 @@ Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<
 
 bool Optimizer::all_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const
 {
-  for (auto first_elem = fixed_points.cbegin(); first_elem != fixed_points.cend(); ++first_elem)
+  for (auto const &p1 : fixed_points)
   {
-    for (auto second_elem = first_elem + 1; second_elem != fixed_points.cend(); ++second_elem)
+    for (auto const &p2 : fixed_points)
     {
-      float current_distance = (first_elem->position - second_elem->position).squaredNorm();
-      float original_distance = (initial_template.col(first_elem->template_index) -
-                                 initial_template.col(second_elem->template_index)).squaredNorm();
-
+      float const current_distance = (p1.position - p2.position).squaredNorm();
+      float const original_distance = (initial_template.col(p1.template_index) -
+                                 initial_template.col(p2.template_index)).squaredNorm();
 
       if (current_distance > original_distance * stretch_lambda * stretch_lambda)
       {
         return false;
       }
     }
-    // Matrix3Xf pt(3, 1);
-    // pt.col(0) = first_elem->position;
-    // auto [nearestPt, normalVec] = nearest_points_and_normal_help(pt, mesh, vnormals);
-    // auto dist = ((pt - nearestPt).array()*normalVec.array()).colwise().sum();
-    // if (dist(0, 0)<0)
-    // {
-    //  	return false;
-    // }
   }
   return true;
 }
