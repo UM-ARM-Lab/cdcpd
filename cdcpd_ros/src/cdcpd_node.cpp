@@ -78,6 +78,15 @@ cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
 Objects get_moveit_planning_scene_as_mesh(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor) {
   // get the latest scene
   planning_scene_monitor::LockedPlanningSceneRO planning_scene(scene_monitor);
+
+  // an alternative to manual + CGAL based nearest/normal, we could check check each point on the rope for collision via moveit
+  // but moveit only knows how to check for collision betweeen the robot state and the world/itself so I'm not sure how we'd do this
+//  collision_detection::CollisionRequest req;
+//  req.distance = true;
+//  req.contacts = true;
+//  collision_detection::CollisionResult res;
+//  planning_scene->checkCollisionUnpadded(req, res);
+
   Objects objects;
   planning_scene->getCollisionObjectMsgs(objects);
   return objects;

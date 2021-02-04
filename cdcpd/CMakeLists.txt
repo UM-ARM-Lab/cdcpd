@@ -10,6 +10,8 @@ set(CATKIN_PACKAGES
         sdf_tools
         moveit_msgs
         geometric_shapes
+        pyrosmsg
+        pybind11_catkin
         )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/
@@ -38,6 +40,8 @@ find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization feature
 
 # horrid hack to remove the space at the beginning of the list 
 list(REMOVE_AT PCL_DEFINITIONS 0)
+
+catkin_python_setup()
 
 catkin_package(
         INCLUDE_DIRS include
@@ -74,7 +78,6 @@ target_link_libraries(cdcpd PUBLIC
         ${FAISS_LIBRARY}
         ${OpenCV_LIBS}
         CGAL::CGAL
-
         CGAL::CGAL_Qt5
         )
 
@@ -89,6 +92,11 @@ find_package(OpenMP REQUIRED)
 target_link_libraries(cdcpd PRIVATE OpenMP::OpenMP_CXX)
 
 add_library(cdcpd::cdcpd ALIAS cdcpd)
+
+if (pybind11_catkin_FOUND)
+    pybind_add_module(pycdcpd src/bindings.cpp)
+    target_link_libraries(pycdcpd PUBLIC cdcpd)
+endif()
 
 add_subdirectory(tests)
 

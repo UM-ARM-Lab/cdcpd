@@ -18,6 +18,8 @@
   <depend>smmap_models</depend>
   <depend>moveit_msgs</depend>
   <depend>geometric_shapes</depend>
+  <depend>pybind11_catkin</depend>
+  <depend>pyrosmsg</depend>
   <depend>smmap_utilities</depend>
 </package>
 

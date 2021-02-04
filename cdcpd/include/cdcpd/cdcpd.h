@@ -32,10 +32,6 @@
 
 #include "cdcpd/optimizer.h"
 
-#ifndef ENTIRE
-#define ENTIRE
-#endif
-
 // #ifndef COMP
 // #define COMP
 // #endif
@@ -89,15 +85,23 @@ class CDCPD
  public:
   struct Output
   {
-#ifdef ENTIRE
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr original_cloud;
-#endif
     pcl::PointCloud<pcl::PointXYZ>::Ptr masked_point_cloud;
     pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_output;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_predict;
     pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
   };
+
+  CDCPD(PointCloud::ConstPtr template_cloud,
+        const Eigen::Matrix2Xi &_template_edges,
+        bool _use_recovery = true,
+        double alpha = 0.5,
+        double beta = 1.0,
+        double lambda = 1.0,
+        double k = 100.0,
+        float zeta = 10.0,
+        bool is_sim = false);
 
   CDCPD(ros::NodeHandle nh,
         ros::NodeHandle ph,

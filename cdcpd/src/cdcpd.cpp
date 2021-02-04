@@ -238,92 +238,6 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
   return M;
 }
 
-// static void Qconstructor(const Matrix2Xi& E, std::vector<MatrixXf>& Q, int M)
-// {
-//     for (int i = 0; i < E.cols(); ++i)
-//     {
-//         MatrixXf Qi = MatrixXf::Zero(M, M);
-//         Qi(E(0, i), E(0, i)) = 1.0f;
-//         Qi(E(1, i), E(1, i)) = 1.0f;
-//         Qi(E(0, i), E(1, i)) = -1.0f;
-//         Qi(E(1, i), E(0, i)) = -1.0f;
-//         Q.push_back(Qi);
-//     }
-// }
-
-// This is for the case where the gripper indices are unknown (in real experiment)
-CDCPD::CDCPD(ros::NodeHandle _nh,
-             ros::NodeHandle _ph,
-             PointCloud::ConstPtr template_cloud,
-             const Matrix2Xi &_template_edges,
-             const bool _use_recovery,
-             const double _alpha,
-             const double _beta,
-             const double _lambda,
-             const double _k,
-             const float _zeta,
-             const bool _is_sim) :
-    nh(_nh),
-    ph(_ph),
-    original_template(template_cloud->getMatrixXfMap().topRows(3)),
-    template_edges(_template_edges),
-    last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
-    last_upper_bounding_box(original_template.rowwise().maxCoeff()), // TODO make configurable?
-    lle_neighbors(8), // TODO make configurable?
-    m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
-    tolerance(1e-4), // TODO make configurable?
-    alpha(_alpha), // TODO make configurable?
-    beta(_beta), // TODO make configurable?
-    w(0.1), // TODO make configurable?
-    initial_sigma_scale(1.0 / 8), // TODO make configurable?
-    start_lambda(_lambda), // TODO make configurable?
-    annealing_factor(0.6), // TODO make configurable?
-    k(_k),
-    max_iterations(100), // TODO make configurable?
-    kvis(1e3),
-    zeta(_zeta),
-    use_recovery(_use_recovery),
-    last_grasp_status({false, false}),
-    is_sim(_is_sim)
-{
-  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
-  last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
-  last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
-
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-  kdtree.setInputCloud(template_cloud);
-  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-  L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
-  // Qconstructor(template_edges, Q, original_template.cols());
-
-  // TODO: how to configure nh so that the it can get correct sdf
-  const double res = 1.0;
-  const double size = 10.0;
-  const Eigen::Isometry3d origin_transform
-      = Eigen::Translation3d(0.0, 0.0, 0.0) * Eigen::Quaterniond(
-          Eigen::AngleAxisd(M_PI_4, Eigen::Vector3d::UnitZ()));
-//  auto map = sdf_tools::CollisionMapGrid(origin_transform, "world", res, size, size, 1.0,
-//                                         sdf_tools::COLLISION_CELL(0.0));
-//  const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
-  sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(origin_transform, "world", res, size, size, 1.0,
-                                                                   1e6);
-
-
-  auto const translation_dir_deformability = 0.0;
-  auto const translation_dis_deformability = 0.0;
-  auto const rotation_deformability = 0.0;
-  // FIXME: these models have horrible static nonsense
-//  constraint_jacobian_model = std::make_unique<smmap::ConstraintJacobianModel>(std::make_shared<ros::NodeHandle>(nh),
-//                                                                               translation_dir_deformability,
-//                                                                               translation_dis_deformability,
-//                                                                               rotation_deformability,
-//                                                                               sdf_ptr);
-//
-//  diminishing_rigidity_model = std::make_unique<smmap::DiminishingRigidityModel>(std::make_shared<ros::NodeHandle>(nh),
-//                                                                                 translation_dir_deformability,
-//                                                                                 rotation_deformability);
-}
-
 /*
  * Return a non-normalized probability that each of the tracked vertices produced any detected point.
  * Implement Eq. (7) in the paper
@@ -580,16 +494,10 @@ static float smooth_free_space_cost(const Matrix3Xf vertices,
   return cost;
 }
 
-// TODO return both point clouds
-// TODO based on the implementation here:
+// NOTE: based on the implementation here:
 // https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
-// Note that we expect that cx, cy, fx, fy are in the appropriate places in P
-#ifdef ENTIRE
-
+// we expect that cx, cy, fx, fy are in the appropriate places in P
 static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr>
-#else
-static std::tuple<PointCloud::Ptr>
-#endif
 point_clouds_from_images(const cv::Mat &depth_image,
                          const cv::Mat &rgb_image,
                          const cv::Mat &mask,
@@ -644,10 +552,8 @@ point_clouds_from_images(const cv::Mat &depth_image,
   */
 
   PointCloud::Ptr filtered_cloud(new PointCloud);
-#ifdef ENTIRE
   PointCloudRGB::Ptr unfiltered_cloud(new PointCloudRGB(depth_image.cols, depth_image.rows));
   auto unfiltered_iter = unfiltered_cloud->begin();
-#endif
 
   for (int v = 0; v < depth_image.rows; ++v)
   {
@@ -663,14 +569,12 @@ point_clouds_from_images(const cv::Mat &depth_image,
         float z = float(depth) * unit_scaling;
         // Add to unfiltered cloud
         // ENHANCE: be more concise
-#ifdef ENTIRE
         unfiltered_iter->x = x;
         unfiltered_iter->y = y;
         unfiltered_iter->z = z;
         unfiltered_iter->r = rgb_image.at<Vec3b>(v, u)[0];
         unfiltered_iter->g = rgb_image.at<Vec3b>(v, u)[1];
         unfiltered_iter->b = rgb_image.at<Vec3b>(v, u)[2];
-#endif
 
         Eigen::Array<float, 3, 1> point(x, y, z);
         if (mask.at<bool>(v, u) &&
@@ -679,23 +583,16 @@ point_clouds_from_images(const cv::Mat &depth_image,
         {
           filtered_cloud->push_back(pcl::PointXYZ(x, y, z));
         }
-      }
-#ifdef ENTIRE
-      else
+      } else
       {
         unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
       }
       ++unfiltered_iter;
-#endif
     }
   }
 
-#ifdef ENTIRE
   assert(unfiltered_iter == unfiltered_cloud->end());
   return {unfiltered_cloud, filtered_cloud};
-#else
-  return { filtered_cloud };
-#endif
 }
 
 static void sample_X_points(const Matrix3Xf &Y,
@@ -919,6 +816,100 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P,
   }
 }
 
+// This is for the case where the gripper indices are unknown (in real experiment)
+CDCPD::CDCPD(PointCloud::ConstPtr template_cloud, // this needs a different data-type for python
+             const Matrix2Xi &template_edges,
+             const bool use_recovery,
+             const double alpha,
+             const double beta,
+             const double lambda,
+             const double k,
+             const float zeta,
+             const bool is_sim) :
+    CDCPD(ros::NodeHandle(),
+          ros::NodeHandle("~"),
+          template_cloud,
+          template_edges,
+          use_recovery,
+          alpha,
+          beta,
+          lambda,
+          k,
+          zeta,
+          is_sim)
+{}
+
+CDCPD::CDCPD(ros::NodeHandle _nh,
+             ros::NodeHandle _ph,
+             PointCloud::ConstPtr template_cloud,
+             const Matrix2Xi &_template_edges,
+             const bool _use_recovery,
+             const double _alpha,
+             const double _beta,
+             const double _lambda,
+             const double _k,
+             const float _zeta,
+             const bool _is_sim) :
+    nh(_nh),
+    ph(_ph),
+    original_template(template_cloud->getMatrixXfMap().topRows(3)),
+    template_edges(_template_edges),
+    last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
+    last_upper_bounding_box(original_template.rowwise().maxCoeff()), // TODO make configurable?
+    lle_neighbors(8), // TODO make configurable?
+    m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
+    tolerance(1e-4), // TODO make configurable?
+    alpha(_alpha), // TODO make configurable?
+    beta(_beta), // TODO make configurable?
+    w(0.1), // TODO make configurable?
+    initial_sigma_scale(1.0 / 8), // TODO make configurable?
+    start_lambda(_lambda), // TODO make configurable?
+    annealing_factor(0.6), // TODO make configurable?
+    k(_k),
+    max_iterations(100), // TODO make configurable?
+    kvis(1e3),
+    zeta(_zeta),
+    use_recovery(_use_recovery),
+    last_grasp_status({false, false}),
+    is_sim(_is_sim)
+{
+  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
+  last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
+  last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
+
+  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+  kdtree.setInputCloud(template_cloud);
+  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+  L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+  // Qconstructor(template_edges, Q, original_template.cols());
+
+  // TODO: how to configure nh so that the it can get correct sdf
+  const double res = 1.0;
+  const double size = 10.0;
+  const Eigen::Isometry3d origin_transform
+      = Eigen::Translation3d(0.0, 0.0, 0.0) * Eigen::Quaterniond(
+          Eigen::AngleAxisd(M_PI_4, Eigen::Vector3d::UnitZ()));
+//  auto map = sdf_tools::CollisionMapGrid(origin_transform, "world", res, size, size, 1.0,
+//                                         sdf_tools::COLLISION_CELL(0.0));
+//  const auto sdf = map.ExtractSignedDistanceField(1e6, true, false).first;
+  sdf_ptr = std::make_shared<const sdf_tools::SignedDistanceField>(origin_transform, "world", res, size, size, 1.0,
+                                                                   1e6);
+
+
+  auto const translation_dir_deformability = 0.0;
+  auto const translation_dis_deformability = 0.0;
+  auto const rotation_deformability = 0.0;
+  // FIXME: these models have horrible static nonsense
+//  constraint_jacobian_model = std::make_unique<smmap::ConstraintJacobianModel>(std::make_shared<ros::NodeHandle>(nh),
+//                                                                               translation_dir_deformability,
+//                                                                               translation_dis_deformability,
+//                                                                               rotation_deformability,
+//                                                                               sdf_ptr);
+//
+//  diminishing_rigidity_model = std::make_unique<smmap::DiminishingRigidityModel>(std::make_shared<ros::NodeHandle>(nh),
+//                                                                                 translation_dir_deformability,
+//                                                                                 rotation_deformability);
+}
 
 CDCPD::Output CDCPD::operator()(
     const Mat &rgb,
@@ -1077,18 +1068,13 @@ CDCPD::Output CDCPD::operator()(
 
   // entire_cloud: pointer to the entire point cloud
   // cloud: pointer to the point clouds selected
-#ifdef ENTIRE
-  auto[entire_cloud, cloud]
-#else
-  auto [cloud]
-#endif
-  = point_clouds_from_images(depth,
-                             rgb,
-                             mask,
-                             intrinsics_eigen,
-                             last_lower_bounding_box - bounding_box_extend,
-                             last_upper_bounding_box + bounding_box_extend,
-                             is_sim);
+  auto[entire_cloud, cloud] = point_clouds_from_images(depth,
+                                                       rgb,
+                                                       mask,
+                                                       intrinsics_eigen,
+                                                       last_lower_bounding_box - bounding_box_extend,
+                                                       last_upper_bounding_box + bounding_box_extend,
+                                                       is_sim);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
@@ -1111,9 +1097,7 @@ CDCPD::Output CDCPD::operator()(
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
 
     return CDCPD::Output{
-#ifdef ENTIRE
         entire_cloud,
-#endif
         cloud,
         cloud_downsampled,
         cdcpd_cpd,
@@ -1124,9 +1108,7 @@ CDCPD::Output CDCPD::operator()(
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
   // Add points to X according to the previous template
 
-#ifdef ENTIRE
   const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
-#endif
 
   std::vector<FixedPoint> pred_fixed_points;
   auto const num_grippers = std::min(static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
@@ -1162,9 +1144,7 @@ CDCPD::Output CDCPD::operator()(
   PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
 
   return CDCPD::Output{
-#ifdef ENTIRE
       entire_cloud,
-#endif
       cloud,
       cloud_downsampled,
       cdcpd_cpd,
