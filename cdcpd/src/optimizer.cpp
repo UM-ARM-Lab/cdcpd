@@ -21,10 +21,12 @@ namespace PMP = CGAL::Polygon_mesh_processing;
 typedef PMP::Face_location<Mesh, FT> Face_location;
 
 using Eigen::Matrix3Xf;
+using Eigen::Matrix4Xf;
 using Eigen::MatrixXf;
 using Eigen::Matrix3Xd;
 using Eigen::Matrix2Xi;
 using Eigen::Vector3f;
+using Eigen::Vector4f;
 using Eigen::VectorXf;
 
 using std::min;
@@ -187,32 +189,32 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
 {
   auto const position = ConvertTo<Vector3f>(pose.position);
   auto const orientation = ConvertTo<Eigen::Quaternionf>(pose.orientation).toRotationMatrix();
-  auto const box_x = box.dimensions[shape_msgs::SOlidPrimitive::BOX_X];
-  auto const box_y = box.dimensions[shape_msgs::SOlidPrimitive::BOX_Y];
-  auto const box_z = box.dimensions[shape_msgs::SOlidPrimitive::BOX_Z];
+  auto const box_x = box.dimensions[shape_msgs::SolidPrimitive::BOX_X];
+  auto const box_y = box.dimensions[shape_msgs::SolidPrimitive::BOX_Y];
+  auto const box_z = box.dimensions[shape_msgs::SolidPrimitive::BOX_Z];
 
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
 
   Matrix4Xf homo_last_template = last_template.colwise().homogeneous();
   Matrix4Xf transform(4,4);
-  transform<3,3>(0,0) = orientation;
-  trnasform(3,3) = 1.0;
-  transform<3,1>(0,3) = position;
+  transform.block<3,3>(0,0) = orientation;
+  transform(3,3) = 1.0;
+  transform.block<3,1>(0,3) = position;
 
   Matrix4Xf tf_inv = transform.inverse();
 
-  Matrix4Xf pts_box = tf_inv * homo_last_template.colwise();
 
-  Vector3f box_x_dir = orientaion.col(0);
-  Vector3f box_y_dir = orientaion.col(1);
-  Vector3f box_z_dir = orientaion.col(2);
+  Vector3f box_x_dir = orientation.col(0);
+  Vector3f box_y_dir = orientation.col(1);
+  Vector3f box_z_dir = orientation.col(2);
 
   for (int i = 0; i < last_template.cols(); i++)
   {
-    float x = pts_box(0, i);
-    float y = pts_box(1, i);
-    float z = pts_box(2, i);
+    Vector4f pts_box = tf_inv * homo_last_template.col(i);
+    float x = pts_box(0);
+    float y = pts_box(1);
+    float z = pts_box(2);
 
     if (x > box_x/2 || x < -box_x/2 || y > box_y/2 || y < -box_y/2 || z > box_z/2 || z < -box_z/2)
     // If the point is not inside the box
