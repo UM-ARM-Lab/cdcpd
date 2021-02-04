@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include <ros/console.h>
+#include <arc_utilities/eigen_ros_conversions.hpp>
 
 #include "cdcpd/optimizer.h"
 
@@ -82,28 +83,101 @@ static Vector3f Pt3toVec(const Point_3 pt)
   return Vector3f(float(pt.x()), float(pt.y()), float(pt.z()));
 }
 
-std::tuple<Matrix3Xf, Matrix3Xf>
+PointsNormals
 Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects const &objects)
 {
   for (auto const &object : objects)
   {
-//    if ()
-//    {
-//      case shapes::MESH:
-//        return nearest_points_and_normal_mesh(last_template, static_cast<const shapes::Mesh *>(&body));
-//      case shapes::BOX:
-//        return nearest_points_and_normal_box(last_template, object);
-//      case shapes::CYLINDER:
-//        return nearest_points_and_normal_cylinder(last_template, object);
-//      case shapes::SPHERE:
-//        return nearest_points_and_normal_sphere(last_template, ob);
-//      case shapes::PLANE:
-//        return nearest_points_and_normal_plane(last_template, body);
-//    }
+    // Meshes
+    if (object.meshes.size() != object.mesh_poses.size())
+    {
+      ROS_ERROR_STREAM_THROTTLE_NAMED(1, LOGNAME,
+                                      "got " << object.meshes.size() << " meshes but " << object.mesh_poses.size()
+                                             << " mesh poses, they should match.");
+    } else
+    {
+      for (auto mesh_idx = 0u; mesh_idx <= object.meshes.size(); ++mesh_idx)
+      {
+        auto const mesh = object.meshes[mesh_idx];
+        auto const mesh_pose = object.mesh_poses[mesh_idx];
+        // apply the pose transform to all the vertices in the mesh
+        shape_msgs::Mesh mesh_transformed;
+        for (auto &vertex : mesh_transformed.vertices)
+        {
+          auto const transform = ConvertTo<Eigen::Isometry3d>(mesh_pose);
+          auto const transformed_vertex = transform * ConvertTo<Eigen::Vector3d>(vertex);
+          vertex = ConvertTo<geometry_msgs::Point>(transformed_vertex);
+        }
+        nearest_points_and_normal_mesh(last_template, mesh_transformed);
+      }
+    }
+
+    // Planes
+    if (object.planes.size() != object.plane_poses.size())
+    {
+      ROS_ERROR_STREAM_THROTTLE_NAMED(1, LOGNAME,
+                                      "got " << object.planes.size() << " planes but " << object.plane_poses.size()
+                                             << " plane poses, they should match.");
+    } else
+    {
+      for (auto plane_idx = 0u; plane_idx <= object.planes.size(); ++plane_idx)
+      {
+        auto plane = object.planes[plane_idx];
+        auto const plane_pose = object.plane_poses[plane_idx];
+        shape_msgs::Plane plane_transformed;
+        auto const transform = ConvertTo<Eigen::Isometry3d>(plane_pose);
+        // NOTE: We ignore the d coefficient here because the gazebo plugin I use to generate these always sets it to 0.
+        // the d coefficient is redundant since the plane also has a pose
+        Eigen::Vector3d plane_normal(plane.coef[0], plane.coef[1], plane.coef[2]);
+        auto const transformed_coef = transform * plane_normal;
+        plane.coef[0] = transformed_coef[0];
+        plane.coef[1] = transformed_coef[1];
+        plane.coef[2] = transformed_coef[2];
+        auto const points_normals = nearest_points_and_normal_plane(last_template, plane_transformed);
+      }
+    }
+
+    // Primitives
+    if (object.primitives.size() != object.primitive_poses.size())
+    {
+      ROS_ERROR_STREAM_THROTTLE_NAMED(1, LOGNAME,
+                                      "got " << object.primitives.size() << " primitives but "
+                                             << object.primitive_poses.size()
+                                             << " primitive poses, they should match.");
+    } else
+    {
+      for (auto primitive_idx = 0u; primitive_idx <= object.primitives.size(); ++primitive_idx)
+      {
+        auto const primitive = object.primitives[primitive_idx];
+        auto const primitive_pose = object.primitive_poses[primitive_idx];
+
+        switch (primitive.type)
+        {
+          case shape_msgs::SolidPrimitive::BOX:
+          {
+            auto const points_normals = nearest_points_and_normal_box(last_template, primitive, primitive_pose);
+            break;
+          }
+          case shape_msgs::SolidPrimitive::CYLINDER:
+          {
+            auto const points_normals = nearest_points_and_normal_cylinder(last_template, primitive, primitive_pose);
+            break;
+          }
+          case shape_msgs::SolidPrimitive::SPHERE:
+          {
+            auto const points_normals = nearest_points_and_normal_sphere(last_template, primitive, primitive_pose);
+            break;
+          }
+          default:
+            ROS_ERROR_STREAM_THROTTLE_NAMED(1, LOGNAME, "Unsupported shape type " << primitive.type);
+            break;
+        }
+      }
+    }
   }
 }
 
-std::tuple<Matrix3Xf, Matrix3Xf>
+PointsNormals
 Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &box,
                                          geometry_msgs::Pose const &pose)
 {
@@ -113,7 +187,7 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
 }
 
 
-std::tuple<Matrix3Xf, Matrix3Xf>
+PointsNormals
 Optimizer::nearest_points_and_normal_sphere(const Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &sphere,
                                             geometry_msgs::Pose const &pose)
 {
@@ -123,90 +197,89 @@ Optimizer::nearest_points_and_normal_sphere(const Matrix3Xf &last_template, shap
 }
 
 
-std::tuple<Matrix3Xf, Matrix3Xf>
-Optimizer::nearest_points_and_normal_plane(const Matrix3Xf &last_template, shape_msgs::Plane const &plane,
-                                           geometry_msgs::Pose const &pose)
+PointsNormals
+Optimizer::nearest_points_and_normal_plane(const Matrix3Xf &last_template, shape_msgs::Plane const &plane)
 {
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
   return {nearestPts, normalVecs};
 }
 
-std::tuple<Matrix3Xf, Matrix3Xf>
+PointsNormals
 Optimizer::nearest_points_and_normal_cylinder(const Matrix3Xf &last_template,
                                               shape_msgs::SolidPrimitive const &cylinder,
                                               geometry_msgs::Pose const &pose)
 {
-//  auto const position = pose.translation;
-//  auto const orientation = pose.orientation;
+  auto const position = ConvertTo<Vector3f>(pose.position);
+  // NOTE: Yixuan, should orientation be roll, pitch, yaw here?
+  auto const orientation = ConvertTo<Eigen::Quaternionf>(pose.orientation).toRotationMatrix().eulerAngles(0, 1, 2);
   auto const radius = cylinder.dimensions[shape_msgs::SolidPrimitive::CYLINDER_RADIUS];
   auto const height = cylinder.dimensions[shape_msgs::SolidPrimitive::CYLINDER_HEIGHT];
 
   // find of the nearest points and corresponding normal vector on the cylinder
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
-//  for (int i = 0; i < last_template.cols(); i++)
-//  {
-//    Vector3f pt;
-//    pt << last_template.col(i);
-//    Vector3f unitVecH = orientation / orientation.norm();
-//    Vector3f unitVecR = (pt - position) - ((pt - position).transpose() * unitVecH) * unitVecH;
-//    unitVecR = unitVecR / unitVecR.norm();
-//    float h = unitVecH.transpose() * (pt - position);
-//    float r = unitVecR.transpose() * (pt - position);
-//    Vector3f nearestPt;
-//    Vector3f normalVec;
-//    if (h > height / 2 && r >= radius)
-//    {
-//      nearestPt = unitVecR * radius + unitVecH * height / 2 + position;
-//      normalVec = unitVecR + unitVecH;
-//    } else if (h < -height / 2 && r >= radius)
-//    {
-//      nearestPt = unitVecR * radius - unitVecH * height / 2 + position;
-//      normalVec = unitVecR - orientation / orientation.norm();
-//    } else if (h > height / 2 && r < radius)
-//    {
-//      nearestPt = r * unitVecR + height / 2 * unitVecH + position;
-//      normalVec = unitVecH;
-//    } else if (h < -height / 2 && r < radius)
-//    {
-//      nearestPt = r * unitVecR - height / 2 * unitVecH + position;
-//      normalVec = -unitVecH;
-//    } else if (h <= height / 2 && h >= -height / 2 && r < radius)
-//    {
-//      if (height / 2 - h < radius - r)
-//      {
-//        nearestPt = r * unitVecR + height / 2 * unitVecH + position;
-//        normalVec = unitVecH;
-//      } else if (h + height / 2 < radius - r)
-//      {
-//        nearestPt = r * unitVecR + height / 2 * unitVecH + position;
-//        normalVec = -unitVecH;
-//      } else
-//      {
-//        nearestPt = radius * unitVecR + h * unitVecH + position;
-//        normalVec = unitVecR;
-//      }
-//    } else if (h <= height / 2 && h >= -height / 2 && r >= radius)
-//    {
-//      nearestPt = radius * unitVecR + h * unitVecH + position;
-//      normalVec = unitVecR;
-//    }
-//    normalVec = normalVec / normalVec.norm();
-//    for (int j = 0; j < 3; ++j)
-//    {
-//      nearestPts(j, i) = nearestPt(j);
-//      normalVecs(j, i) = normalVec(j);
-//    }
-//  }
+  for (int i = 0; i < last_template.cols(); i++)
+  {
+    Vector3f pt;
+    pt << last_template.col(i);
+    Vector3f unitVecH = orientation / orientation.norm();
+    Vector3f unitVecR = (pt - position) - ((pt - position).transpose() * unitVecH) * unitVecH;
+    unitVecR = unitVecR / unitVecR.norm();
+    float h = unitVecH.transpose() * (pt - position);
+    float r = unitVecR.transpose() * (pt - position);
+    Vector3f nearestPt;
+    Vector3f normalVec;
+    if (h > height / 2 && r >= radius)
+    {
+      nearestPt = unitVecR * radius + unitVecH * height / 2 + position;
+      normalVec = unitVecR + unitVecH;
+    } else if (h < -height / 2 && r >= radius)
+    {
+      nearestPt = unitVecR * radius - unitVecH * height / 2 + position;
+      normalVec = unitVecR - orientation / orientation.norm();
+    } else if (h > height / 2 && r < radius)
+    {
+      nearestPt = r * unitVecR + height / 2 * unitVecH + position;
+      normalVec = unitVecH;
+    } else if (h < -height / 2 && r < radius)
+    {
+      nearestPt = r * unitVecR - height / 2 * unitVecH + position;
+      normalVec = -unitVecH;
+    } else if (h <= height / 2 && h >= -height / 2 && r < radius)
+    {
+      if (height / 2 - h < radius - r)
+      {
+        nearestPt = r * unitVecR + height / 2 * unitVecH + position;
+        normalVec = unitVecH;
+      } else if (h + height / 2 < radius - r)
+      {
+        nearestPt = r * unitVecR + height / 2 * unitVecH + position;
+        normalVec = -unitVecH;
+      } else
+      {
+        nearestPt = radius * unitVecR + h * unitVecH + position;
+        normalVec = unitVecR;
+      }
+    } else if (h <= height / 2 && h >= -height / 2 && r >= radius)
+    {
+      nearestPt = radius * unitVecR + h * unitVecH + position;
+      normalVec = unitVecR;
+    }
+    normalVec = normalVec / normalVec.norm();
+    for (int j = 0; j < 3; ++j)
+    {
+      nearestPts(j, i) = nearestPt(j);
+      normalVecs(j, i) = normalVec(j);
+    }
+  }
   return {nearestPts, normalVecs};
 }
 
 
-std::tuple<Matrix3Xf, Matrix3Xf>
+PointsNormals
 Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
-                                          shape_msgs::Mesh const &shapes_mesh,
-                                          geometry_msgs::Pose const &pose)
+                                          shape_msgs::Mesh const &shapes_mesh)
 {
   auto mesh = shapes_mesh_to_cgal_mesh(shapes_mesh);
   auto const fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
@@ -259,7 +332,7 @@ Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
   return {nearestPts, normalVecs};
 }
 
-std::tuple<MatrixXf, MatrixXf>
+PointsNormals
 nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
 {
   // find the nearest points on the line segments
@@ -333,134 +406,6 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
   return {startPts, endPts};
 }
 
-void Wsolver(const MatrixXf &P, const Matrix3Xf &X, const Matrix3Xf &Y, const MatrixXf &G, const MatrixXf &L,
-             const double sigma2, const double alpha, const double lambda, MatrixXf &W)
-{
-  try
-  {
-    GRBEnv &env = getGRBEnv();
-    env.set(GRB_IntParam_OutputFlag, 0);
-    GRBModel model(env);
-    model.set("ScaleFlag", "2");
-    model.set("NonConvex", "2");
-
-    GRBVar *vars = nullptr;
-
-    const ssize_t num_vars = 3 * X.cols();
-
-    // Note that variable bound is important, without a bound, Gurobi defaults to 0, which is clearly unwanted
-    const std::vector<double> lb(num_vars, -GRB_INFINITY);
-    const std::vector<double> ub(num_vars, GRB_INFINITY);
-    vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int) num_vars);
-    model.update();
-
-    GRBQuadExpr objective_fn(0);
-    for (ssize_t m = 0; m < Y.cols(); ++m)
-    {
-      for (ssize_t n = 0; n < X.cols(); ++n)
-      {
-        GRBLinExpr GWx(0);
-        GRBLinExpr GWy(0);
-        GRBLinExpr GWz(0);
-        for (ssize_t i = 0; i < Y.cols(); ++i)
-        {
-          GWx += G(m, i) * vars[i * 3 + 0];
-          GWy += G(m, i) * vars[i * 3 + 1];
-          GWz += G(m, i) * vars[i * 3 + 2];
-        }
-        auto diffx = X(0, n) - (Y(0, m) + GWx);
-        auto diffy = X(1, n) - (Y(1, m) + GWy);
-        auto diffz = X(2, n) - (Y(2, m) + GWz);
-        objective_fn += (P(m, n) / sigma2) * (diffx * diffx + diffy * diffy + diffz * diffz);
-      }
-    }
-
-    for (ssize_t d = 0; d < 3; ++d)
-    {
-      for (ssize_t m = 0; m < Y.cols(); ++m)
-      {
-        GRBLinExpr WTG(0);
-        for (ssize_t i = 0; i < Y.cols(); ++i)
-        {
-          WTG += G(m, i) * vars[i * 3 + d];
-        }
-        auto WTGW = WTG * vars[m * 3 + d];
-        objective_fn += (alpha / 2) * WTGW;
-      }
-    }
-
-    for (int m = 0; m < Y.cols(); ++m)
-    {
-      GRBLinExpr Tmx(0);
-      GRBLinExpr Tmy(0);
-      GRBLinExpr Tmz(0);
-      GRBLinExpr Tix(0);
-      GRBLinExpr Tiy(0);
-      GRBLinExpr Tiz(0);
-      for (ssize_t i = 0; i < Y.cols(); ++i)
-      {
-        Tmx += G(m, i) * vars[i * 3 + 0];
-        Tmy += G(m, i) * vars[i * 3 + 1];
-        Tmz += G(m, i) * vars[i * 3 + 2];
-      }
-      Tmx += Y(0, m);
-      Tmy += Y(1, m);
-      Tmz += Y(2, m);
-      for (ssize_t i = 0; i < L.cols(); ++i)
-      {
-        if (L(m, i) < 0.00000001 && L(m, i) > -0.00000001)
-        {
-          for (ssize_t j = 0; j < Y.cols(); ++j)
-          {
-            Tix += L(m, i) * G(m, j) * vars[j * 3 + 0];
-            Tiy += L(m, i) * G(m, j) * vars[j * 3 + 1];
-            Tiz += L(m, i) * G(m, j) * vars[j * 3 + 2];
-          }
-          Tix += L(m, i) * Y(0, i);
-          Tiy += L(m, i) * Y(1, i);
-          Tiz += L(m, i) * Y(2, i);
-        }
-      }
-      auto diffx = Tmx - Tix;
-      auto diffy = Tmy - Tiy;
-      auto diffz = Tmz - Tiz;
-      objective_fn += (lambda / 2) * (diffx * diffx + diffy * diffy + diffz * diffz);
-    }
-    model.setObjective(objective_fn, GRB_MINIMIZE);
-    model.update();
-
-    // Find the optimal solution, and extract it
-    {
-      model.optimize();
-      if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL)
-      {
-        // std::cout << "Y" << std::endl;
-        // std::cout << Y << std::endl;
-        for (ssize_t i = 0; i < Y.cols(); i++)
-        {
-          W(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
-          W(1, i) = vars[i * 3 + 1].get(GRB_DoubleAttr_X);
-          W(2, i) = vars[i * 3 + 2].get(GRB_DoubleAttr_X);
-        }
-      } else
-      {
-        std::cout << "Status: " << model.get(GRB_IntAttr_Status) << std::endl;
-        exit(-1);
-      }
-    }
-    delete[] vars;
-  }
-  catch (GRBException &e)
-  {
-    std::cout << "Error code = " << e.getErrorCode() << std::endl;
-    std::cout << e.getMessage() << std::endl;
-  }
-  catch (...)
-  {
-    std::cout << "Exception during optimization" << std::endl;
-  }
-}
-
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
     : initial_template(_init_temp),
       last_template(_last_temp),
@@ -530,9 +475,8 @@ Optimizer::operator()(const Matrix3Xf &Y,
   // Add interaction constraints
   if (interaction_constrain)
   {
-    Matrix3Xf nearestPts, normalVecs;
-    std::tie(nearestPts, normalVecs) = nearest_points_and_normal(last_template, objects);
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "added interaction constraint");
+    auto const &[nearestPts, normalVecs] = nearest_points_and_normal(last_template, objects);
 
     for (ssize_t i = 0; i < num_vectors; ++i)
     {

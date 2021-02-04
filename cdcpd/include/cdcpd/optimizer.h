@@ -43,65 +43,43 @@ typedef CGAL::AABB_face_graph_triangle_primitive<Mesh> AABB_face_graph_primitive
 typedef CGAL::AABB_traits<K, AABB_face_graph_primitive> AABB_face_graph_traits;
 
 using Objects = std::vector<moveit_msgs::CollisionObject>;
-
-
-////////////////////////////////////////////////////////////////
-// Internally used static objects
-////////////////////////////////////////////////////////////////
-
-// std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-// nearest_points_and_normal(const Eigen::Matrix3Xf& last_template);
-
-// std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-//    nearest_points_line_segments(const Eigen::Matrix3Xf& last_template, const Eigen::Matrix2Xi& E);
-
-void Wsolver(const Eigen::MatrixXf &P, const Eigen::Matrix3Xf &X, const Eigen::Matrix3Xf &Y, const Eigen::MatrixXf &G,
-             const Eigen::MatrixXf &L, const double sigma2, const double alpha, const double lambda,
-             Eigen::MatrixXf &W);
-
+using PointsNormals = std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>;
 
 class Optimizer
 {
  public:
   Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda);
 
-  Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y,
-                              const Eigen::Matrix2Xi &E,
-                              const std::vector<FixedPoint> &fixed_points,
-                              Objects const &objects,
-                              bool self_intersection = true,
-                              bool interation_constrain = true);
+  [[nodiscard]] Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y,
+                                            const Eigen::Matrix2Xi &E,
+                                            const std::vector<FixedPoint> &fixed_points,
+                                            Objects const &objects,
+                                            bool self_intersection = true,
+                                            bool interation_constrain = true);
 
  private:
-  bool gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;
+  [[nodiscard]] bool gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;
 
-  std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-  nearest_points_and_normal_box(const Eigen::Matrix3Xf &last_template,
-                                shape_msgs::SolidPrimitive const &box,
-                                geometry_msgs::Pose const &pose);
+  [[nodiscard]] PointsNormals nearest_points_and_normal_box(const Eigen::Matrix3Xf &last_template,
+                                                            shape_msgs::SolidPrimitive const &box,
+                                                            geometry_msgs::Pose const &pose);
 
-  std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-  nearest_points_and_normal_sphere(const Eigen::Matrix3Xf &last_template,
-                                   shape_msgs::SolidPrimitive const &sphere,
-                                   geometry_msgs::Pose const &pose);
+  [[nodiscard]]  PointsNormals nearest_points_and_normal_sphere(const Eigen::Matrix3Xf &last_template,
+                                                                shape_msgs::SolidPrimitive const &sphere,
+                                                                geometry_msgs::Pose const &pose);
 
-  std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-  nearest_points_and_normal_plane(const Eigen::Matrix3Xf &last_template,
-                                  shape_msgs::Plane const &plane,
-                                  geometry_msgs::Pose const &pose);
+  [[nodiscard]]  PointsNormals nearest_points_and_normal_plane(const Eigen::Matrix3Xf &last_template,
+                                                               shape_msgs::Plane const &plane);
 
-  std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-  nearest_points_and_normal_cylinder(const Eigen::Matrix3Xf &last_template,
-                                     shape_msgs::SolidPrimitive const &cylinder,
-                                     geometry_msgs::Pose const &pose);
+  [[nodiscard]]  PointsNormals nearest_points_and_normal_cylinder(const Eigen::Matrix3Xf &last_template,
+                                                                  shape_msgs::SolidPrimitive const &cylinder,
+                                                                  geometry_msgs::Pose const &pose);
 
-  std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
+  [[nodiscard]]  PointsNormals
   nearest_points_and_normal_mesh(const Eigen::Matrix3Xf &last_template,
-                                 shape_msgs::Mesh const &shapes_mesh,
-                                 geometry_msgs::Pose const &pose);
+                                 shape_msgs::Mesh const &shapes_mesh);
 
-  std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
-  nearest_points_and_normal(const Eigen::Matrix3Xf &last_template, Objects const &objects);
+  [[nodiscard]]  PointsNormals nearest_points_and_normal(const Eigen::Matrix3Xf &last_template, Objects const &objects);
 
   Eigen::Matrix3Xf initial_template;
   Eigen::Matrix3Xf last_template;
