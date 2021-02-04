@@ -1,17 +1,20 @@
 #include <cdcpd/cdcpd.h>
+#include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <opencv2/imgproc/types_c.h>
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 #include <ros/ros.h>
 #include <tf2_ros/transform_listener.h>
 #include <visualization_msgs/Marker.h>
-#include <visualization_msgs/MarkerArray.h>
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 
 #include "cdcpd_ros/kinect_sub.h"
+
+constexpr auto const LOGNAME = "cdcpd_node";
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
@@ -72,23 +75,25 @@ cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
   return hsv_mask;
 }
 
-obsParam get_moveit_planning_scene_as_mesh() {
-  obsParam obstacles;
-  // subscribe to get moveit planning scene
-
+Objects get_moveit_planning_scene_as_mesh(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor) {
   // get the latest scene
-
-  // iterate over every collision object
-  // if it's not a mesh, call a subroutine to convert it to a mesh
-  // now that we have a mesh representation, add it to obstacles
-
-  return obstacles;
+  planning_scene_monitor::LockedPlanningSceneRO planning_scene(scene_monitor);
+  Objects objects;
+  planning_scene->getCollisionObjectMsgs(objects);
+  return objects;
 }
 
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "cdcpd_node");
   auto nh = ros::NodeHandle();
   auto ph = ros::NodeHandle("~");
+
+  std::string robot_namespace{"hdt_michigan"};
+  auto scene_monitor = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
+  auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
+  auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
+  scene_monitor->startSceneMonitor(scene_topic);
+  scene_monitor->requestPlanningSceneState(service_name);
 
 #ifndef ROPE
   static_assert("This node is only designed for rope right now");
@@ -167,11 +172,11 @@ int main(int argc, char* argv[]) {
     auto const n_grippers = q_config.size();
     const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
 
-    obsParam obstacles = get_moveit_planning_scene_as_mesh();
+    auto const objects = get_moveit_planning_scene_as_mesh(scene_monitor);
 
     Eigen::MatrixXi gripper_idx(1, 2);
     gripper_idx << left_node_idx, right_node_idx;
-    auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, template_cloud, obstacles, q_dot, q_config, gripper_idx);
+    auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, template_cloud, objects, q_dot, q_config, gripper_idx);
     template_cloud = out.gurobi_output;
 
     // Update the frame ids

@@ -8,6 +8,8 @@ set(CATKIN_PACKAGES
         smmap_models
         smmap_utilities
         sdf_tools
+        moveit_msgs
+        geometric_shapes
         )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/
@@ -65,15 +67,15 @@ add_library(cdcpd SHARED
 
 target_link_libraries(cdcpd PUBLIC
         ${PCL_LIBRARIES}
-        ${OpenCV_LIBS}
-        Eigen3::Eigen)
-target_link_libraries(cdcpd PRIVATE
+        Eigen3::Eigen
         ${catkin_LIBRARIES}
         ${GUROBI_LIBRARIES}
         ${FAISS_LIBRARY}
+        ${OpenCV_LIBS}
         CGAL::CGAL
         CGAL::CGAL_Qt5
-        Qt5::Gui)
+        lapack)
+
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
 target_compile_options(cdcpd PRIVATE -Wall -Wextra)
@@ -85,6 +87,10 @@ find_package(OpenMP REQUIRED)
 target_link_libraries(cdcpd PRIVATE OpenMP::OpenMP_CXX)
 
 add_library(cdcpd::cdcpd ALIAS cdcpd)
+
+add_executable(mesh_conversion_test tests/mesh_conversion_test.cpp)
+target_link_libraries(mesh_conversion_test PUBLIC cdcpd ${OpenCV_LIBS})
+target_compile_definitions(mesh_conversion_test PUBLIC CGAL_USE_BASIC_VIEWER)
 
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)

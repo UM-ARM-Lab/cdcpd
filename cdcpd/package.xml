@@ -16,6 +16,8 @@
 
   <depend>sdf_tools</depend>
   <depend>smmap_models</depend>
+  <depend>moveit_msgs</depend>
+  <depend>geometric_shapes</depend>
   <depend>smmap_utilities</depend>
 </package>
 

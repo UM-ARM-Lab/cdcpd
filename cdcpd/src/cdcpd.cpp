@@ -19,7 +19,6 @@
 
 #include "cdcpd/obs_util.h"
 #include "cdcpd/cdcpd.h"
-#include "cdcpd/optimizer.h"
 
 #include <iostream>
 #include <fstream>
@@ -927,7 +926,7 @@ CDCPD::Output CDCPD::operator()(
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    obsParam const &obs_param,
+    Objects const &objects,
     const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config,
     const std::vector<bool> &is_grasped,
@@ -1002,7 +1001,7 @@ CDCPD::Output CDCPD::operator()(
     }
   }
 
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obs_param, q_dot,
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, objects, q_dot,
                                     q_config, self_intersection, interaction_constrain, pred_choice);
 
   last_grasp_status = is_grasped;
@@ -1017,7 +1016,7 @@ CDCPD::Output CDCPD::operator()(
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    obsParam const &obs_param,
+    Objects const &objects,
     const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config,
     const Eigen::MatrixXi &gripper_idx,
@@ -1026,7 +1025,7 @@ CDCPD::Output CDCPD::operator()(
     const int pred_choice)
 {
   this->gripper_idx = gripper_idx;
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obs_param, q_dot,
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, objects, q_dot,
                                     q_config, self_intersection, interaction_constrain, pred_choice);
   return cdcpd_out;
 
@@ -1038,7 +1037,7 @@ CDCPD::Output CDCPD::operator()(
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    obsParam const &obs_param,
+    Objects const &objects,
     const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config,
     const bool self_intersection,
@@ -1146,19 +1145,13 @@ CDCPD::Output CDCPD::operator()(
   TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen);
 
   // Next step: optimization.
-  // ???: most likely not 1.0
-//  auto mesh = initObstacle(obs_param);
-  // NOTE: how is it possible that these can be const? doesn't `compute_normals` need to modify vnormals and fnormals?
-//  auto const fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
-//  auto const vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
-//  auto const mesh_map = CGAL::Polygon_mesh_processing::parameters::vertex_point_map(mesh.points()).geom_traits(K());
-//  CGAL::Polygon_mesh_processing::compute_normals(mesh, vnormals, fnormals, mesh_map);
 
-  // NOTE: seems like this should be a function, not a class
   ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "fixed points" << pred_fixed_points);
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "n vertices in obstacle input " << obs_param.verts.size());
-  Optimizer opt(original_template, Y, 1.1, obs_param);
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, self_intersection, interaction_constrain);
+
+  // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
+  // ???: most likely not 1.0
+  Optimizer opt(original_template, Y, 1.1);
+  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, objects, self_intersection, interaction_constrain);
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();

@@ -30,111 +30,31 @@ static Vector3f cgalVec2EigenVec(Vector cgal_v)
 }
 
 
-Mesh initObstacle(obsParam obs_param)
+Mesh shapes_mesh_to_cgal_mesh(shapes::Mesh const &input_mesh)
 {
-  Mesh mesh;
-  std::vector<Point_3> points;
-  for (int pt_ind = 0; pt_ind < obs_param.verts.cols(); pt_ind++)
+  Mesh output_mesh;
+  // first copy all the vertices
+  // create a mapping between vertex indices in the input mesh and the output mesh
+  std::unordered_map<unsigned int, CGAL::SM_Vertex_index> vertex_index_map;
+  for (auto vertex_idx = 0u; vertex_idx < input_mesh.vertex_count; ++vertex_idx)
   {
-    // std::vector<Mesh::Vertex_index> indices;
-    points.push_back(Point_3(obs_param.verts(0, pt_ind),
-                             obs_param.verts(1, pt_ind),
-                             obs_param.verts(2, pt_ind)));
-    // int pt_ind = int(obs_param.faces(i, face_ind));
-    // indices.push_back(mesh.add_vertex(Point_3(obs_param.verts(0, pt_ind),
-    // 									      obs_param.verts(1, pt_ind),
-    // 									      obs_param.verts(2, pt_ind))));
-    // mesh.add_face(indices[0], indices[1], indices[2]);
+    auto const vertex = Point_3(input_mesh.vertices[3 * vertex_idx],
+                                input_mesh.vertices[3 * vertex_idx + 1],
+                                input_mesh.vertices[3 * vertex_idx + 2]);
+    auto const output_v_index = output_mesh.add_vertex(vertex);
+    vertex_index_map.emplace(vertex_idx, output_v_index);
   }
-  CGAL::convex_hull_3(points.begin(), points.end(), mesh);
-  // std::vector<face_descriptor> newfaces;
-  // std::vector<vertex_descriptor> newvertices;
-  // CGAL::Polygon_mesh_processing::refine(mesh,
-  // 									  faces(mesh),
-  // 									  std::back_inserter(newfaces),
-  // 									  std::back_inserter(newvertices),
-  // 									  CGAL::Polygon_mesh_processing::parameters::density_control_factor(10.));
-  // CGAL::draw(mesh);
-  // std::vector<vertex_descriptor> region;
-  // CGAL::Polygon_mesh_processing::fair(mesh, region);
-  return mesh;
-}
 
-std::tuple<Matrix3Xf, Matrix3Xf> nearest_points_and_normal_help(const Matrix3Xf &last_template,
-                                                                const Mesh &mesh,
-                                                                const Mesh::Property_map <vertex_descriptor, Vector> &vnormals)
-{
-  Matrix3Xf nearestPts(3, last_template.cols());
-  Matrix3Xf normalVecs(3, last_template.cols());
-
-  for (int pt_ind = 0; pt_ind < last_template.cols(); pt_ind++)
+  // now copy the faces
+  for (auto face_idx = 0u; face_idx < input_mesh.triangle_count; ++face_idx)
   {
-    Point_3 pt(last_template(0, pt_ind),
-               last_template(1, pt_ind),
-               last_template(2, pt_ind));
-    Ray_3 ray(pt, pt);
-    Face_location query_location = PMP::locate(pt, mesh);
-    //       Face_location query_location = PMP::locate_with_AABB_tree(ray, tree, mesh);
-    // Point_3 nearestPt = PMP::construct_point(query_location, mesh);
-    //       nearestPts.col(pt_ind) = Pt3toVec(nearestPt);
-    // cout << "nearestPt of " << pt << " is on " << source(halfedge(query_location.first,mesh),mesh) << endl;
-
-    double w[3];
-    for (int i = 0; i < 3; i++)
-    {
-      w[i] = query_location.second[i];
-    }
-
-    if (isnan(w[0]) || isnan(w[1]) || isnan(w[2]))
-    {
-      w[0] = w[1] = w[2] = 1 / 3;
-    }
-
-    // for (vertex_descriptor vd: vertices_around_face(mesh.halfedge(query_location.first), mesh)) {
-    //     cout << vd << endl;
-    // }
-    // cout << "242" << endl;
-
-    MatrixXf verts_of_face(3, 3); // cout << "243" << endl;
-    verts_of_face.col(0) = Pt3toVec(
-        mesh.point(source(halfedge(query_location.first, mesh), mesh))); // cout << "244" << endl;
-    verts_of_face.col(1) = Pt3toVec(
-        mesh.point(target(halfedge(query_location.first, mesh), mesh))); // cout << "245" << endl;
-    verts_of_face.col(2) = Pt3toVec(
-        mesh.point(target(next(halfedge(query_location.first, mesh), mesh), mesh))); // cout << "246" << endl;
-    nearestPts.col(pt_ind) = verts_of_face.col(0) * w[0] + verts_of_face.col(1) * w[1] + verts_of_face.col(2) * w[2];
-    // cout << "248" << endl;
-
-
-    // std::cout << "Vertex normals :" << std::endl;
-    // for(vertex_descriptor vd: vertices(mesh)){
-    //     std::cout << vnormals[vd][0] << std::endl;
-    // }
-
-    // MatrixXf verts_of_face(3, 3);
-    // verts_of_face.col(0) = Pt3toVec(mesh.point(source(halfedge(query_location.first,mesh),mesh)));
-    // verts_of_face.col(1) = Pt3toVec(mesh.point(target(halfedge(query_location.first,mesh),mesh)));
-    // verts_of_face.col(2) = Pt3toVec(mesh.point(target(next(halfedge(query_location.first,mesh),mesh),mesh)));
-
-    Vector3f normalVec(0.0, 0.0, 0.0);
-    // cout << "262" << endl;
-    normalVec = cgalVec2EigenVec(
-        vnormals[source(halfedge(query_location.first, mesh), mesh)] * w[0] +
-        vnormals[target(halfedge(query_location.first, mesh), mesh)] * w[1] +
-        vnormals[target(next(halfedge(query_location.first, mesh), mesh), mesh)] * w[2]
-    );
-    // normalVec = cgalVec2EigenVec(fnormals[query_location.first]);
-
-    // for (int i = 0; i < 3; i++) {
-    // 	for (int mesh_ind = 0; mesh_ind < obs_mesh.cols(); mesh_ind++)
-    // 	{
-    // 		if (verts_of_face.col(i).isApprox(obs_mesh.col(mesh_ind))) {
-    // 			normalVec = normalVec + obs_normal.col(mesh_ind) * w[i];
-    // 		}
-    // 	}
-    // }
-
-    normalVecs.col(pt_ind) = normalVec;
+    auto const input_v_index1 = input_mesh.triangles[3 * face_idx];
+    auto const input_v_index2 = input_mesh.triangles[3 * face_idx + 1];
+    auto const input_v_index3 = input_mesh.triangles[3 * face_idx + 2];
+    CGAL::SM_Vertex_index output_v_index1 = vertex_index_map[input_v_index1];
+    CGAL::SM_Vertex_index output_v_index2 = vertex_index_map[input_v_index2];
+    CGAL::SM_Vertex_index output_v_index3 = vertex_index_map[input_v_index3];
+    output_mesh.add_face(output_v_index1, output_v_index2, output_v_index3);
   }
-  return {nearestPts, normalVecs};
+  return output_mesh;
 }

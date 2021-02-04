@@ -30,6 +30,7 @@
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
 
+#include "cdcpd/optimizer.h"
 
 #ifndef ENTIRE
 #define ENTIRE
@@ -77,12 +78,6 @@ Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPt
                                          int lle_neighbors,
                                          double reg);
 
-struct FixedPoint
-{
-  Eigen::Vector3f position;
-  int template_index;
-};
-
 static std::ostream &operator<<(std::ostream &out, FixedPoint const &p)
 {
   out << "[" << p.template_index << "] " << p.position;
@@ -122,7 +117,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    obsParam const &obs_param = {},
+                    Objects const &objects = {},
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const std::vector<bool> &is_grasped = {},
@@ -136,7 +131,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    obsParam const &obs_param = {},
+                    Objects const &objects = {},
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const Eigen::MatrixXi &gripper_idx = {},
@@ -150,7 +145,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    obsParam const &obs_param = {},
+                    Objects const &objects = {},
                     // TODO: this should be one data structure
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
@@ -176,16 +171,6 @@ class CDCPD
   Eigen::Matrix3Xf blend_result(const Eigen::Matrix3Xf &Y_pred,
                                 const Eigen::Matrix3Xf &Y_cpd,
                                 const Eigen::VectorXi &is_occluded);
-
-  // TODO instead of transforming the P matrix continually, we should just store P as an Eigen matrix
-  // and not have to pass around intr in here
-  Eigen::MatrixXf calcP(int N,
-                        int M,
-                        int D,
-                        double sigma2,
-                        const Eigen::Matrix3Xf &X,
-                        const Eigen::Matrix3Xf &TY,
-                        const Eigen::Matrix3Xf &Y_emit_prior);
 
   Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X,
                        const Eigen::Matrix3Xf &Y,
