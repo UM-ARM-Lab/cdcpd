@@ -1,9 +1,10 @@
-#include <iostream>
-
-#include <ros/console.h>
-#include <arc_utilities/eigen_ros_conversions.hpp>
-
 #include "cdcpd/optimizer.h"
+
+#include <arc_utilities/enumerate.h>
+#include <ros/console.h>
+
+#include <arc_utilities/eigen_ros_conversions.hpp>
+#include <iostream>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::FT FT;
@@ -20,17 +21,17 @@ namespace PMP = CGAL::Polygon_mesh_processing;
 
 typedef PMP::Face_location<Mesh, FT> Face_location;
 
+using Eigen::Matrix2Xi;
+using Eigen::Matrix3Xd;
 using Eigen::Matrix3Xf;
 using Eigen::Matrix4Xf;
 using Eigen::MatrixXf;
-using Eigen::Matrix3Xd;
-using Eigen::Matrix2Xi;
 using Eigen::Vector3f;
 using Eigen::Vector4f;
 using Eigen::VectorXf;
 
-using std::min;
 using std::max;
+using std::min;
 constexpr auto const LOGNAME = "optimizer";
 
 // Builds the quadratic term ||point_a - point_b||^2
@@ -60,13 +61,9 @@ static GRBEnv &getGRBEnv()
 }
 
 static Vector3f cgalVec2EigenVec(Vector cgal_v)
-{
-  return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]);
-}
+{ return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]); }
 
-static Matrix3Xf force_pts(const Matrix3Xf &nearest,
-                           const Matrix3Xf &normal,
-                           const Matrix3Xf &Y)
+static Matrix3Xf force_pts(const Matrix3Xf &nearest, const Matrix3Xf &normal, const Matrix3Xf &Y)
 {
   Matrix3Xf Y_force = Y;
   MatrixXf dist_to_obs = ((Y - nearest).array() * normal.array()).colwise().sum();
@@ -81,12 +78,10 @@ static Matrix3Xf force_pts(const Matrix3Xf &nearest,
 }
 
 static Vector3f Pt3toVec(const Point_3 pt)
-{
-  return Vector3f(float(pt.x()), float(pt.y()), float(pt.z()));
-}
+{ return Vector3f(float(pt.x()), float(pt.y()), float(pt.z())); }
 
-PointsNormals
-Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects const &objects)
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template,
+                                                                 Objects const &objects)
 {
   for (auto const &object : objects)
   {
@@ -180,12 +175,12 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects con
 
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
-  return {nearestPts, normalVecs};
+  return {};
 }
 
-PointsNormals
-Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &box,
-                                         geometry_msgs::Pose const &pose)
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template,
+                                                                     shape_msgs::SolidPrimitive const &box,
+                                                                     geometry_msgs::Pose const &pose)
 {
   auto const position = ConvertTo<Vector3f>(pose.position);
   auto const orientation = ConvertTo<Eigen::Quaternionf>(pose.orientation).toRotationMatrix();
@@ -218,15 +213,12 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
     if (x > box_x / 2 || x < -box_x / 2 || y > box_y / 2 || y < -box_y / 2 || z > box_z / 2 || z < -box_z / 2)
       // If the point is not inside the box
     {
-      int c_x, c_y, c_z; // coeffient in front of box_x_dir
+      int c_x, c_y, c_z;  // coeffient in front of box_x_dir
       c_x = (x > box_x / 2) ? 1 : ((x < -box_x / 2) ? -1 : 0);
       c_y = (y > box_y / 2) ? 1 : ((y < -box_y / 2) ? -1 : 0);
       c_z = (z > box_z / 2) ? 1 : ((z < -box_z / 2) ? -1 : 0);
-      normalVecs.col(i) = c_x * box_x_dir +
-                          c_y * box_y_dir +
-                          c_z * box_z_dir;
-      const Vector3f nearestPt_box_frame(c_x * box_x / 2 + (1 - abs(c_x)) * x,
-                                         c_y * box_y / 2 + (1 - abs(c_y)) * y,
+      normalVecs.col(i) = c_x * box_x_dir + c_y * box_y_dir + c_z * box_z_dir;
+      const Vector3f nearestPt_box_frame(c_x * box_x / 2 + (1 - abs(c_x)) * x, c_y * box_y / 2 + (1 - abs(c_y)) * y,
                                          c_z * box_z / 2 + (1 - abs(c_z)) * z);
       nearestPts.col(i) = (transform * nearestPt_box_frame.homogeneous()).head(3);
     } else
@@ -264,29 +256,26 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
   return {nearestPts, normalVecs};
 }
 
-
-PointsNormals
-Optimizer::nearest_points_and_normal_sphere(const Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &sphere,
-                                            geometry_msgs::Pose const &pose)
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_sphere(const Matrix3Xf &last_template,
+                                                                        shape_msgs::SolidPrimitive const &sphere,
+                                                                        geometry_msgs::Pose const &pose)
 {
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
   return {nearestPts, normalVecs};
 }
 
-
-PointsNormals
-Optimizer::nearest_points_and_normal_plane(const Matrix3Xf &last_template, shape_msgs::Plane const &plane)
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_plane(const Matrix3Xf &last_template,
+                                                                       shape_msgs::Plane const &plane)
 {
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
   return {nearestPts, normalVecs};
 }
 
-PointsNormals
-Optimizer::nearest_points_and_normal_cylinder(const Matrix3Xf &last_template,
-                                              shape_msgs::SolidPrimitive const &cylinder,
-                                              geometry_msgs::Pose const &pose)
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_cylinder(const Matrix3Xf &last_template,
+                                                                          shape_msgs::SolidPrimitive const &cylinder,
+                                                                          geometry_msgs::Pose const &pose)
 {
   auto const position = ConvertTo<Vector3f>(pose.position);
   // NOTE: Yixuan, should orientation be roll, pitch, yaw here?
@@ -355,10 +344,8 @@ Optimizer::nearest_points_and_normal_cylinder(const Matrix3Xf &last_template,
   return {nearestPts, normalVecs};
 }
 
-
-PointsNormals
-Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
-                                          shape_msgs::Mesh const &shapes_mesh)
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
+                                                                      shape_msgs::Mesh const &shapes_mesh)
 {
   auto mesh = shapes_mesh_to_cgal_mesh(shapes_mesh);
   auto const fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
@@ -372,9 +359,7 @@ Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
 
   for (int pt_ind = 0; pt_ind < last_template.cols(); pt_ind++)
   {
-    Point_3 pt(last_template(0, pt_ind),
-               last_template(1, pt_ind),
-               last_template(2, pt_ind));
+    Point_3 pt(last_template(0, pt_ind), last_template(1, pt_ind), last_template(2, pt_ind));
     Ray_3 ray(pt, pt);
     Face_location query_location = PMP::locate(pt, mesh);
     // NOTE: this might be faster
@@ -400,44 +385,39 @@ Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
     nearestPts.col(pt_ind) = verts_of_face.col(0) * w[0] + verts_of_face.col(1) * w[1] + verts_of_face.col(2) * w[2];
 
     Vector3f normalVec(0.0, 0.0, 0.0);
-    normalVec = cgalVec2EigenVec(
-        vnormals[source(halfedge(query_location.first, mesh), mesh)] * w[0] +
-        vnormals[target(halfedge(query_location.first, mesh), mesh)] * w[1] +
-        vnormals[target(next(halfedge(query_location.first, mesh), mesh), mesh)] * w[2]
-    );
+    normalVec = cgalVec2EigenVec(vnormals[source(halfedge(query_location.first, mesh), mesh)] * w[0] +
+                                 vnormals[target(halfedge(query_location.first, mesh), mesh)] * w[1] +
+                                 vnormals[target(next(halfedge(query_location.first, mesh), mesh), mesh)] * w[2]);
 
     normalVecs.col(pt_ind) = normalVec;
   }
   return {nearestPts, normalVecs};
 }
 
-PointsNormals
+std::tuple<MatrixXf, MatrixXf>
 nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
 {
   // find the nearest points on the line segments
   // refer to the website https://math.stackexchange.com/questions/846054/closest-points-on-two-line-segments
-  MatrixXf startPts(4, E.cols() *
-                       E.cols()); // Matrix: 3 * E^2: startPts.col(E*cols()*i + j) is the nearest point on edge i w.r.t. j
-  MatrixXf endPts(4, E.cols() *
-                     E.cols()); // Matrix: 3 * E^2: endPts.col(E*cols()*i + j) is the nearest point on edge j w.r.t. i
+  MatrixXf startPts(
+      4, E.cols() * E.cols());  // Matrix: 3 * E^2: startPts.col(E*cols()*i + j) is the nearest point on edge i w.r.t. j
+  MatrixXf endPts(
+      4, E.cols() * E.cols());  // Matrix: 3 * E^2: endPts.col(E*cols()*i + j) is the nearest point on edge j w.r.t. i
   for (int i = 0; i < E.cols(); ++i)
   {
     Vector3f P1 = last_template.col(E(0, i));
     Vector3f P2 = last_template.col(E(1, i));
-
 
     for (int j = 0; j < E.cols(); ++j)
     {
       Vector3f P3 = last_template.col(E(0, j));
       Vector3f P4 = last_template.col(E(1, j));
 
-
       float R21 = (P2 - P1).squaredNorm();
       float R22 = (P4 - P3).squaredNorm();
       float D4321 = (P4 - P3).dot(P2 - P1);
       float D3121 = (P3 - P1).dot(P2 - P1);
       float D4331 = (P4 - P3).dot(P3 - P1);
-
 
       float s;
       float t;
@@ -472,7 +452,6 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
         }
       }
 
-
       for (int dim = 0; dim < 3; ++dim)
       {
         startPts(dim, E.cols() * i + j) = (1 - s) * P1(dim) + s * P2(dim);
@@ -486,9 +465,7 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
 }
 
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
-    : initial_template(_init_temp),
-      last_template(_last_temp),
-      stretch_lambda(_stretch_lambda)
+    : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
 {
   // NOTE: simplifying the mesh?
   // typedef boost::property_map<Mesh, CGAL::edge_is_feature_t>::type EIFMap;
@@ -503,20 +480,9 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
   // PMP::build_AABB_tree(mesh, tree);
 }
 
-PointsNormals Optimizer::test_box(const Eigen::Matrix3Xf &last_template,
-                                                            shape_msgs::SolidPrimitive const &box,
-                                                            geometry_msgs::Pose const &pose)
-{
-  return nearest_points_and_normal_box(last_template, box, pose);
-}
-
-Matrix3Xf
-Optimizer::operator()(const Matrix3Xf &Y,
-                      const Matrix2Xi &E,
-                      const std::vector<FixedPoint> &fixed_points,
-                      PointsNormals const &points_normals,
-                      const bool self_intersection,
-                      const bool interaction_constrain)
+Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
+                                PointsNormals const &points_normals, const bool self_intersection,
+                                const bool interaction_constrain)
 {
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
@@ -548,12 +514,10 @@ Optimizer::operator()(const Matrix3Xf &Y,
   {
     for (ssize_t i = 0; i < E.cols(); ++i)
     {
-      model.addQConstr(
-          buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
-          GRB_LESS_EQUAL,
-          stretch_lambda * stretch_lambda *
-          (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
-          "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
+      model.addQConstr(buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3), GRB_LESS_EQUAL,
+                       stretch_lambda * stretch_lambda *
+                       (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
+                       "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
     }
     model.update();
   }
@@ -562,15 +526,14 @@ Optimizer::operator()(const Matrix3Xf &Y,
   if (interaction_constrain)
   {
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "added interaction constraint");
-    auto const &[contact_points, contact_normals] = points_normals;
-
-    for (ssize_t i = 0; i < num_vectors; ++i)
+    for (auto const &[i, point_normal_pair] : enumerate(points_normals))
     {
-      model.addConstr(
-          (vars[i * 3 + 0] - contact_points(0, i)) * contact_normals(0, i) +
-          (vars[i * 3 + 1] - contact_points(1, i)) * contact_normals(1, i) +
-          (vars[i * 3 + 2] - contact_points(2, i)) * contact_normals(2, i) >= 0.0,
-          "interaction constrain for point " + std::to_string(i));
+      auto const &[contact_point, normal] = point_normal_pair;
+      model.addConstr((vars[i * 3 + 0] - contact_point(0)) * normal(0) +
+                      (vars[i * 3 + 1] - contact_point(1)) * normal(1) +
+                      (vars[i * 3 + 2] - contact_point(2)) * normal(2) >=
+                      0.0,
+                      "interaction constraint " + std::to_string(i));
     }
   }
 
@@ -588,31 +551,35 @@ Optimizer::operator()(const Matrix3Xf &Y,
         float t = endPts(3, row * E.cols() + col);
         Vector3f P3 = last_template.col(E(0, col));
         Vector3f P4 = last_template.col(E(1, col));
-        float l = (endPts.col(row * E.cols() + col).topRows(3) -
-                   startPts.col(row * E.cols() + col).topRows(3)).norm();
+        float l = (endPts.col(row * E.cols() + col).topRows(3) - startPts.col(row * E.cols() + col).topRows(3)).norm();
         if (!P1.isApprox(P3) && !P1.isApprox(P4) && !P2.isApprox(P3) && !P2.isApprox(P4) && l <= 0.02)
         {
-          // model.addConstr((vars[E(0, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
-          //                 (vars[E(0, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
-          //                 (vars[E(0, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
-          // model.addConstr((vars[E(1, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) - startPts(0, row*E.cols() + col)) +
-          //                 (vars[E(1, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) - startPts(1, row*E.cols() + col)) +
-          //                 (vars[E(1, col)*3 + 2] - startPts(2, row*E.cols() + col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
+          // model.addConstr((vars[E(0, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) -
+          // startPts(0, row*E.cols() + col)) +
+          //                 (vars[E(0, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) -
+          //                 startPts(1, row*E.cols() + col)) + (vars[E(0, col)*3 + 2] - startPts(2, row*E.cols() +
+          //                 col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
+          // model.addConstr((vars[E(1, col)*3 + 0] - startPts(0, row*E.cols() + col))*(endPts(0, row*E.cols() + col) -
+          // startPts(0, row*E.cols() + col)) +
+          //                 (vars[E(1, col)*3 + 1] - startPts(1, row*E.cols() + col))*(endPts(1, row*E.cols() + col) -
+          //                 startPts(1, row*E.cols() + col)) + (vars[E(1, col)*3 + 2] - startPts(2, row*E.cols() +
+          //                 col))*(endPts(2, row*E.cols() + col) - startPts(2, row*E.cols() + col)) >= 0);
           model.addConstr(((vars[E(0, col) * 3 + 0] * (1 - t) + vars[E(1, col) * 3 + 0] * t) -
-                           (vars[E(0, row) * 3 + 0] * (1 - s) + vars[E(1, row) * 3 + 0] * s))
-                          * (endPts(0, row * E.cols() + col) - startPts(0, row * E.cols() + col)) +
+                           (vars[E(0, row) * 3 + 0] * (1 - s) + vars[E(1, row) * 3 + 0] * s)) *
+                          (endPts(0, row * E.cols() + col) - startPts(0, row * E.cols() + col)) +
                           ((vars[E(0, col) * 3 + 1] * (1 - t) + vars[E(1, col) * 3 + 1] * t) -
-                           (vars[E(0, row) * 3 + 1] * (1 - s) + vars[E(1, row) * 3 + 1] * s))
-                          * (endPts(1, row * E.cols() + col) - startPts(1, row * E.cols() + col)) +
+                           (vars[E(0, row) * 3 + 1] * (1 - s) + vars[E(1, row) * 3 + 1] * s)) *
+                          (endPts(1, row * E.cols() + col) - startPts(1, row * E.cols() + col)) +
                           ((vars[E(0, col) * 3 + 2] * (1 - t) + vars[E(1, col) * 3 + 2] * t) -
-                           (vars[E(0, row) * 3 + 2] * (1 - s) + vars[E(1, row) * 3 + 2] * s))
-                          * (endPts(2, row * E.cols() + col) - startPts(2, row * E.cols() + col)) >= 0.01 * l);
+                           (vars[E(0, row) * 3 + 2] * (1 - s) + vars[E(1, row) * 3 + 2] * s)) *
+                          (endPts(2, row * E.cols() + col) - startPts(2, row * E.cols() + col)) >=
+                          0.01 * l);
         }
       }
     }
   }
 
-  Matrix3Xd Y_copy = Y.cast<double>(); // TODO is this exactly what we want?
+  Matrix3Xd Y_copy = Y.cast<double>();  // TODO is this exactly what we want?
 
   // Next, add the fixed point constraints that we might have.
   // TODO make this more
@@ -659,7 +626,8 @@ Optimizer::operator()(const Matrix3Xf &Y,
   {
     model.optimize();
     if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL)
-      // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC || modelGRB_INF_OR_UNBD)
+      // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC ||
+      // modelGRB_INF_OR_UNBD)
     {
       // std::cout << "Y" << std::endl;
       // std::cout << Y << std::endl;
@@ -687,8 +655,8 @@ bool Optimizer::gripper_constraints_satisfiable(const std::vector<FixedPoint> &f
     for (auto const &p2 : fixed_points)
     {
       float const current_distance = (p1.position - p2.position).squaredNorm();
-      float const original_distance = (initial_template.col(p1.template_index) -
-                                       initial_template.col(p2.template_index)).squaredNorm();
+      float const original_distance =
+          (initial_template.col(p1.template_index) - initial_template.col(p2.template_index)).squaredNorm();
 
       if (current_distance > original_distance * stretch_lambda * stretch_lambda)
       {
@@ -698,6 +666,3 @@ bool Optimizer::gripper_constraints_satisfiable(const std::vector<FixedPoint> &f
   }
   return true;
 }
-
-
-

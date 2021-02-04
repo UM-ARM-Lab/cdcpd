@@ -86,8 +86,8 @@ Objects get_moveit_planning_scene_as_mesh(planning_scene_monitor::PlanningSceneM
   return objects;
 }
 
-PointNormal find_nearest_point_and_normal(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-                                          pcl::PointXYZ const& point) {
+std::optional<PointNormal> find_nearest_point_and_normal(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+                                                         pcl::PointXYZ const& point) {
   auto world = planning_scene->getWorldNonConst();
   auto sphere = std::make_shared<shapes::Sphere>(0.02);
 
@@ -99,32 +99,38 @@ PointNormal find_nearest_point_and_normal(planning_scene_monitor::LockedPlanning
   world->addToObject(COLLISION_BODY_NAME, sphere, pose);
 
   collision_detection::CollisionRequest req;
-  req.distance = true;
   req.contacts = true;
   req.verbose = true;
   req.max_contacts_per_pair = 1;
+  req.max_contacts = std::numeric_limits<typeof(collision_detection::CollisionRequest::max_contacts)>::max();
   collision_detection::CollisionResult res;
   planning_scene->checkCollisionUnpadded(req, res);
 
+  PointsNormals points_normals;
   for (auto const& [contact_names, contacts] : res.contacts) {
     if (contacts.empty()) {
     }
 
     auto const contact = contacts[0];
-//    if (contact_names.first == COLLISION_BODY_NAME) {
-//      body_idx = 0;
-//    } else if (contact_names.second == COLLISION_BODY_NAME) {
-//      body_idx = 1;
-//    } else {
-//      continue;
-//    }
-//
-//    auto const contact_point = contact.nearest_points[body_idx];
-//    auto const normal = res.contacts.begin()->second.begin()->normal;
-//    return {contact_point, normal};
+    if (contact_names.first == COLLISION_BODY_NAME) {
+      auto const contact_point = contact.nearest_points[0].cast<float>();
+      auto const normal = res.contacts.begin()->second.begin()->normal.cast<float>();
+      points_normals.emplace_back(contact_point, normal);
+    } else if (contact_names.second == COLLISION_BODY_NAME) {
+      auto const contact_point = contact.nearest_points[1].cast<float>();
+      auto const normal = res.contacts.begin()->second.begin()->normal.cast<float>();
+      points_normals.emplace_back(contact_point, normal);
+    } else {
+      continue;
+    }
   }
 
-  return {{0,0,0}, {0,0,1}};
+  if (points_normals.empty()) {
+    return {};
+  } else if (points_normals.size() != 1) {
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "Found multiple collisions for rope point at " << point);
+  }
+  return {points_normals[0]};
 }
 
 PointsNormals moveit_get_points_normals(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor,
@@ -135,19 +141,20 @@ PointsNormals moveit_get_points_normals(planning_scene_monitor::PlanningSceneMon
 
   planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor);
 
-  Points contact_points(3, tracked_points->size());
-  Normals normals(3, tracked_points->size());
+  PointsNormals points_normals;
 
   // add a point to the moveit world and collision check it
-  for (auto const& [point_idx, point] : enumerate(*tracked_points)) {
-    auto const& [contact_point, normal] = find_nearest_point_and_normal(planning_scene, point);
-    contact_points.col(point_idx) = contact_point;
-    normals.col(point_idx) = normal;
+  for (auto const& point : *tracked_points) {
+    auto const point_normal = find_nearest_point_and_normal(planning_scene, point);
+    if (point_normal) {
+      auto const& [contact_point, normal] = point_normal.value();
+      ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "contact points: " << contact_point);
+      ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "normals: " << normal);
+      points_normals.emplace_back(point_normal.value());
+    }
   }
 
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "contact points: " << contact_points);
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "normals: " << normals);
-  return {contact_points, normals};
+  return points_normals;
 }
 
 int main(int argc, char* argv[]) {
