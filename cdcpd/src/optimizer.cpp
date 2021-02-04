@@ -96,7 +96,7 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects con
                                              << " mesh poses, they should match.");
     } else
     {
-      for (auto mesh_idx = 0u; mesh_idx <= object.meshes.size(); ++mesh_idx)
+      for (auto mesh_idx = 0u; mesh_idx < object.meshes.size(); ++mesh_idx)
       {
         auto const mesh = object.meshes[mesh_idx];
         auto const mesh_pose = object.mesh_poses[mesh_idx];
@@ -108,7 +108,7 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects con
           auto const transformed_vertex = transform * ConvertTo<Eigen::Vector3d>(vertex);
           vertex = ConvertTo<geometry_msgs::Point>(transformed_vertex);
         }
-        nearest_points_and_normal_mesh(last_template, mesh_transformed);
+        auto const points_normals = nearest_points_and_normal_mesh(last_template, mesh_transformed);
       }
     }
 
@@ -120,7 +120,7 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects con
                                              << " plane poses, they should match.");
     } else
     {
-      for (auto plane_idx = 0u; plane_idx <= object.planes.size(); ++plane_idx)
+      for (auto plane_idx = 0u; plane_idx < object.planes.size(); ++plane_idx)
       {
         auto plane = object.planes[plane_idx];
         auto const plane_pose = object.plane_poses[plane_idx];
@@ -146,7 +146,7 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects con
                                              << " primitive poses, they should match.");
     } else
     {
-      for (auto primitive_idx = 0u; primitive_idx <= object.primitives.size(); ++primitive_idx)
+      for (auto primitive_idx = 0u; primitive_idx < object.primitives.size(); ++primitive_idx)
       {
         auto const primitive = object.primitives[primitive_idx];
         auto const primitive_pose = object.primitive_poses[primitive_idx];
@@ -175,6 +175,10 @@ Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template, Objects con
       }
     }
   }
+
+  Matrix3Xf nearestPts(3, last_template.cols());
+  Matrix3Xf normalVecs(3, last_template.cols());
+  return {nearestPts, normalVecs};
 }
 
 PointsNormals
