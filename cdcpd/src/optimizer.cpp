@@ -185,8 +185,59 @@ PointsNormals
 Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &box,
                                          geometry_msgs::Pose const &pose)
 {
+  auto const position = ConvertTo<Vector3f>(pose.position);
+  auto const orientation = ConvertTo<Eigen::Quaternionf>(pose.orientation).toRotationMatrix();
+  auto const box_x = box.dimensions[shape_msgs::SOlidPrimitive::BOX_X];
+  auto const box_y = box.dimensions[shape_msgs::SOlidPrimitive::BOX_Y];
+  auto const box_z = box.dimensions[shape_msgs::SOlidPrimitive::BOX_Z];
+
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
+
+  Matrix4Xf homo_last_template = last_template.colwise().homogeneous();
+  Matrix4Xf transform(4,4);
+  transform<3,3>(0,0) = orientation;
+  trnasform(3,3) = 1.0;
+  transform<3,1>(0,3) = position;
+
+  Matrix4Xf tf_inv = transform.inverse();
+
+  Matrix4Xf pts_box = tf_inv * homo_last_template.colwise();
+
+  Vector3f box_x_dir = orientaion.col(0);
+  Vector3f box_y_dir = orientaion.col(1);
+  Vector3f box_z_dir = orientaion.col(2);
+
+  for (int i = 0; i < last_template.cols(); i++)
+  {
+    float x = pts_box(0, i);
+    float y = pts_box(1, i);
+    float z = pts_box(2, i);
+
+    if (x > box_x/2 || x < -box_x/2 || y > box_y/2 || y < -box_y/2 || z > box_z/2 || z < -box_z/2)
+    // If the point is not inside the box
+    {
+      int c_x, c_y, c_z; // coeffient in front of box_x_dir
+      c_x = (x > box_x/2) ? 1 : ((x < -box_x/2) ? -1 : 0);
+      c_y = (y > box_y/2) ? 1 : ((y < -box_y/2) ? -1 : 0);
+      c_z = (z > box_z/2) ? 1 : ((z < -box_z/2) ? -1 : 0);
+      normalVecs.col(i) = c_x * box_x_dir + \
+			  c_y * box_y_dir + \
+			  c_z * box_z_dir;
+      auto const nearestPt_box_frame = c_x * box_x/2 + (1-abs(c_x)) * x + \
+                                       c_y * box_y/2 + (1-abs(c_y)) * y + \
+                                       c_z * box_z/2 + (1-abs(c_z)) * z;
+      nearestPts.col(i) = (transform * nearestPt_box_frame.homogeneous()).head(3);
+    } else
+    {
+      float ratio_x = 2*x/box_x; float ratio_y = 2*y/box_y; float ratio_z = 2*z/box_z;
+      if (abs(ratio_x) > abs(ratio_y) && abs(ratio_x) > abs(ratio_z))
+      {
+        // AFTER DINNER
+      }
+    }
+  }
+
   return {nearestPts, normalVecs};
 }
 
@@ -216,6 +267,7 @@ Optimizer::nearest_points_and_normal_cylinder(const Matrix3Xf &last_template,
 {
   auto const position = ConvertTo<Vector3f>(pose.position);
   // NOTE: Yixuan, should orientation be roll, pitch, yaw here?
+  // Answer: As what I can recall, the orientation is the unit vector along center axis
   auto const orientation = ConvertTo<Eigen::Quaternionf>(pose.orientation).toRotationMatrix().eulerAngles(0, 1, 2);
   auto const radius = cylinder.dimensions[shape_msgs::SolidPrimitive::CYLINDER_RADIUS];
   auto const height = cylinder.dimensions[shape_msgs::SolidPrimitive::CYLINDER_HEIGHT];
