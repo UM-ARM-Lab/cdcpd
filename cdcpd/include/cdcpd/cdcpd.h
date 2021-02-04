@@ -70,7 +70,7 @@ Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ
                                             int lle_neighbors,
                                             double reg);
 
-Eigen::MatrixXf locally_linear_embedding(pcl::PointCloud<pcl::PointXYZ>::ConstPtr template_cloud,
+Eigen::MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
                                          int lle_neighbors,
                                          double reg);
 
@@ -85,12 +85,12 @@ class CDCPD
  public:
   struct Output
   {
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr original_cloud;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr masked_point_cloud;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_output;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cpd_predict;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr gurobi_output;
+    PointCloudRGB::Ptr original_cloud;
+    PointCloud::Ptr masked_point_cloud;
+    PointCloud::Ptr downsampled_cloud;
+    PointCloud::Ptr cpd_output;
+    PointCloud::Ptr cpd_predict;
+    PointCloud::Ptr gurobi_output;
   };
 
   CDCPD(PointCloud::ConstPtr template_cloud,
@@ -120,8 +120,8 @@ class CDCPD
                     const cv::Mat &depth,
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    Objects const &objects = {},
+                    const PointCloud::Ptr template_cloud,
+                    PointsNormals points_normals,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const std::vector<bool> &is_grasped = {},
@@ -134,8 +134,8 @@ class CDCPD
                     const cv::Mat &depth,
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    Objects const &objects = {},
+                    PointCloud::Ptr template_cloud,
+                    PointsNormals points_normals,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const Eigen::MatrixXi &gripper_idx = {},
@@ -148,10 +148,9 @@ class CDCPD
                     const cv::Mat &depth,
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr template_cloud,
-                    Objects const &objects = {},
-                    // TODO: this should be one data structure
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+                    const PointCloud::Ptr template_cloud,
+                    PointsNormals points_normals,
+                    const smmap::AllGrippersSinglePoseDelta &q_dot = {}, // TODO: this should be one data structure
                     const smmap::AllGrippersSinglePose &q_config = {},
                     bool self_intersection = true,
                     bool interaction_constrain = true,

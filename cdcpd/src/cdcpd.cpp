@@ -917,7 +917,7 @@ CDCPD::Output CDCPD::operator()(
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    Objects const &objects,
+    PointsNormals points_normals,
     const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config,
     const std::vector<bool> &is_grasped,
@@ -992,7 +992,7 @@ CDCPD::Output CDCPD::operator()(
     }
   }
 
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, objects, q_dot,
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, points_normals, q_dot,
                                     q_config, self_intersection, interaction_constrain, pred_choice);
 
   last_grasp_status = is_grasped;
@@ -1007,7 +1007,7 @@ CDCPD::Output CDCPD::operator()(
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    Objects const &objects,
+    PointsNormals points_normals,
     const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config,
     const Eigen::MatrixXi &gripper_idx,
@@ -1016,7 +1016,7 @@ CDCPD::Output CDCPD::operator()(
     const int pred_choice)
 {
   this->gripper_idx = gripper_idx;
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, objects, q_dot,
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, points_normals, q_dot,
                                     q_config, self_intersection, interaction_constrain, pred_choice);
   return cdcpd_out;
 
@@ -1028,7 +1028,7 @@ CDCPD::Output CDCPD::operator()(
     const Mat &mask,
     const cv::Matx33d &intrinsics,
     const PointCloud::Ptr template_cloud,
-    Objects const &objects,
+    PointsNormals points_normals,
     const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config,
     const bool self_intersection,
@@ -1133,7 +1133,7 @@ CDCPD::Output CDCPD::operator()(
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
   Optimizer opt(original_template, Y, 1.1);
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, objects, self_intersection, interaction_constrain);
+  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, points_normals, self_intersection, interaction_constrain);
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();

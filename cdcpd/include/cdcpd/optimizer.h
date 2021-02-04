@@ -43,7 +43,12 @@ typedef CGAL::AABB_face_graph_triangle_primitive<Mesh> AABB_face_graph_primitive
 typedef CGAL::AABB_traits<K, AABB_face_graph_primitive> AABB_face_graph_traits;
 
 using Objects = std::vector<moveit_msgs::CollisionObject>;
-using PointsNormals = std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>;
+using Point = Eigen::Vector3f;
+using Normal = Eigen::Vector3f;
+using PointNormal = std::tuple<Point, Normal>;
+using Points = Eigen::Matrix3Xf;
+using Normals = Eigen::Matrix3Xf;
+using PointsNormals = std::tuple<Points, Normals>;
 
 class Optimizer
 {
@@ -53,7 +58,7 @@ class Optimizer
   [[nodiscard]] Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y,
                                             const Eigen::Matrix2Xi &E,
                                             const std::vector<FixedPoint> &fixed_points,
-                                            Objects const &objects,
+                                            PointsNormals const &points_normals,
                                             bool self_intersection = true,
                                             bool interation_constrain = true);
   

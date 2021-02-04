@@ -74,6 +74,14 @@ include_directories(
         ${catkin_INCLUDE_DIRS}
 )
 
+# Debugging
+add_executable(test_moveit_cc
+        src/test_moveit_cc.cpp
+        )
+add_dependencies(test_moveit_cc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(test_moveit_cc PRIVATE ${catkin_LIBRARIES})
+
+
 # Node for live data
 add_executable(cdcpd_node
         src/${PROJECT_NAME}/kinect_sub.cpp

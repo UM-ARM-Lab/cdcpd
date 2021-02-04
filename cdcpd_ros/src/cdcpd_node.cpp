@@ -1,3 +1,4 @@
+#include <arc_utilities/enumerate.h>
 #include <cdcpd/cdcpd.h>
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -15,6 +16,7 @@
 #include "cdcpd_ros/kinect_sub.h"
 
 constexpr auto const LOGNAME = "cdcpd_node";
+constexpr auto const COLLISION_BODY_NAME = "cdcpd_tracked_point";
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
@@ -77,19 +79,75 @@ cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
 
 Objects get_moveit_planning_scene_as_mesh(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor) {
   // get the latest scene
-  planning_scene_monitor::LockedPlanningSceneRO planning_scene(scene_monitor);
-
-  // an alternative to manual + CGAL based nearest/normal, we could check check each point on the rope for collision via moveit
-  // but moveit only knows how to check for collision betweeen the robot state and the world/itself so I'm not sure how we'd do this
-//  collision_detection::CollisionRequest req;
-//  req.distance = true;
-//  req.contacts = true;
-//  collision_detection::CollisionResult res;
-//  planning_scene->checkCollisionUnpadded(req, res);
+  planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor);
 
   Objects objects;
   planning_scene->getCollisionObjectMsgs(objects);
   return objects;
+}
+
+PointNormal find_nearest_point_and_normal(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+                                          pcl::PointXYZ const& point) {
+  auto world = planning_scene->getWorldNonConst();
+  auto sphere = std::make_shared<shapes::Sphere>(0.02);
+
+  Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+  pose.translation().x() = point.x;
+  pose.translation().y() = point.y;
+  pose.translation().z() = point.z;
+
+  world->addToObject(COLLISION_BODY_NAME, sphere, pose);
+
+  collision_detection::CollisionRequest req;
+  req.distance = true;
+  req.contacts = true;
+  req.verbose = true;
+  req.max_contacts_per_pair = 1;
+  collision_detection::CollisionResult res;
+  planning_scene->checkCollisionUnpadded(req, res);
+
+  for (auto const& [contact_names, contacts] : res.contacts) {
+    if (contacts.empty()) {
+    }
+
+    auto const contact = contacts[0];
+//    if (contact_names.first == COLLISION_BODY_NAME) {
+//      body_idx = 0;
+//    } else if (contact_names.second == COLLISION_BODY_NAME) {
+//      body_idx = 1;
+//    } else {
+//      continue;
+//    }
+//
+//    auto const contact_point = contact.nearest_points[body_idx];
+//    auto const normal = res.contacts.begin()->second.begin()->normal;
+//    return {contact_point, normal};
+  }
+
+  return {{0,0,0}, {0,0,1}};
+}
+
+PointsNormals moveit_get_points_normals(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor,
+                                        PointCloud::ConstPtr tracked_points) {
+  // an alternative to manual + CGAL based nearest/normal, we could check check each point on the rope for collision via
+  // moveit but moveit only knows how to check for collision betweeen the robot state and the world/itself so I'm not
+  // sure how we'd do this
+
+  planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor);
+
+  Points contact_points(3, tracked_points->size());
+  Normals normals(3, tracked_points->size());
+
+  // add a point to the moveit world and collision check it
+  for (auto const& [point_idx, point] : enumerate(*tracked_points)) {
+    auto const& [contact_point, normal] = find_nearest_point_and_normal(planning_scene, point);
+    contact_points.col(point_idx) = contact_point;
+    normals.col(point_idx) = normal;
+  }
+
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "contact points: " << contact_points);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "normals: " << normals);
+  return {contact_points, normals};
 }
 
 int main(int argc, char* argv[]) {
@@ -125,7 +183,7 @@ int main(int argc, char* argv[]) {
   auto const length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
   auto const [template_vertices, template_edges] = makeRopeTemplate(num_points, length);
   // Construct the initial template as a PCL cloud
-  auto template_cloud = makeCloud(template_vertices);
+  auto tracked_points = makeCloud(template_vertices);
 
   // CDCPD parameters
   // ENHANCE: describe each parameter in words (and a pointer to an equation/section of paper)
@@ -144,7 +202,7 @@ int main(int argc, char* argv[]) {
   auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
   auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
 
-  auto cdcpd = CDCPD(nh, ph, template_cloud, template_edges, use_recovery, alpha, beta, lambda, k_spring);
+  auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring);
 
   // TODO: Make these const references? Does this matter for CV types?
   auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
@@ -181,12 +239,14 @@ int main(int argc, char* argv[]) {
     auto const n_grippers = q_config.size();
     const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
 
-    auto const objects = get_moveit_planning_scene_as_mesh(scene_monitor);
+    //    auto const objects = get_moveit_planning_scene_as_mesh(scene_monitor);
+    auto const points_normals = moveit_get_points_normals(scene_monitor, tracked_points);
 
     Eigen::MatrixXi gripper_idx(1, 2);
     gripper_idx << left_node_idx, right_node_idx;
-    auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, template_cloud, objects, q_dot, q_config, gripper_idx);
-    template_cloud = out.gurobi_output;
+    auto const out =
+        cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config, gripper_idx);
+    tracked_points = out.gurobi_output;
 
     // Update the frame ids
     {

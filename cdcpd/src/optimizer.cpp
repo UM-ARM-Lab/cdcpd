@@ -197,10 +197,10 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
   Matrix3Xf normalVecs(3, last_template.cols());
 
   Matrix4Xf homo_last_template = last_template.colwise().homogeneous();
-  Matrix4Xf transform(4,4);
-  transform.block<3,3>(0,0) = orientation;
-  transform(3,3) = 1.0;
-  transform.block<3,1>(0,3) = position;
+  Matrix4Xf transform(4, 4);
+  transform.block<3, 3>(0, 0) = orientation;
+  transform(3, 3) = 1.0;
+  transform.block<3, 1>(0, 3) = position;
 
   Matrix4Xf tf_inv = transform.inverse();
 
@@ -215,40 +215,47 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
     float y = pts_box(1);
     float z = pts_box(2);
 
-    if (x > box_x/2 || x < -box_x/2 || y > box_y/2 || y < -box_y/2 || z > box_z/2 || z < -box_z/2)
-    // If the point is not inside the box
+    if (x > box_x / 2 || x < -box_x / 2 || y > box_y / 2 || y < -box_y / 2 || z > box_z / 2 || z < -box_z / 2)
+      // If the point is not inside the box
     {
       int c_x, c_y, c_z; // coeffient in front of box_x_dir
-      c_x = (x > box_x/2) ? 1 : ((x < -box_x/2) ? -1 : 0);
-      c_y = (y > box_y/2) ? 1 : ((y < -box_y/2) ? -1 : 0);
-      c_z = (z > box_z/2) ? 1 : ((z < -box_z/2) ? -1 : 0);
-      normalVecs.col(i) = c_x * box_x_dir + 
-			  c_y * box_y_dir + 
-			  c_z * box_z_dir;
-      normalVecs.col(i).normalize();
-      const Vector3f nearestPt_box_frame(c_x * box_x/2 + (1-abs(c_x)) * x,
-                                         c_y * box_y/2 + (1-abs(c_y)) * y,
-                                         c_z * box_z/2 + (1-abs(c_z)) * z);
+      c_x = (x > box_x / 2) ? 1 : ((x < -box_x / 2) ? -1 : 0);
+      c_y = (y > box_y / 2) ? 1 : ((y < -box_y / 2) ? -1 : 0);
+      c_z = (z > box_z / 2) ? 1 : ((z < -box_z / 2) ? -1 : 0);
+      normalVecs.col(i) = c_x * box_x_dir +
+                          c_y * box_y_dir +
+                          c_z * box_z_dir;
+      const Vector3f nearestPt_box_frame(c_x * box_x / 2 + (1 - abs(c_x)) * x,
+                                         c_y * box_y / 2 + (1 - abs(c_y)) * y,
+                                         c_z * box_z / 2 + (1 - abs(c_z)) * z);
       nearestPts.col(i) = (transform * nearestPt_box_frame.homogeneous()).head(3);
     } else
     {
-      float ratio_x = 2*x/box_x; float ratio_y = 2*y/box_y; float ratio_z = 2*z/box_z;
+      float ratio_x = 2 * x / box_x;
+      float ratio_y = 2 * y / box_y;
+      float ratio_z = 2 * z / box_z;
       Vector3f nearestPt_box_frame;
       if (abs(ratio_x) > abs(ratio_y) && abs(ratio_x) > abs(ratio_z))
       {
         float sign_x = ratio_x > 0 ? 1.0 : -1.0;
         normalVecs.col(i) = sign_x * box_x_dir;
-        nearestPt_box_frame(0) = sign_x * box_x/2; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = z;
+        nearestPt_box_frame(0) = sign_x * box_x / 2;
+        nearestPt_box_frame(1) = y;
+        nearestPt_box_frame(2) = z;
       } else if (abs(ratio_y) > abs(ratio_x) && abs(ratio_y) > abs(ratio_z))
       {
         float sign_y = ratio_y > 0 ? 1.0 : -1.0;
         normalVecs.col(i) = sign_y * box_y_dir;
-        nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = sign_y * box_y/2; nearestPt_box_frame(2) = z;
+        nearestPt_box_frame(0) = x;
+        nearestPt_box_frame(1) = sign_y * box_y / 2;
+        nearestPt_box_frame(2) = z;
       } else
       {
         float sign_z = ratio_z > 0 ? 1.0 : -1.0;
         normalVecs.col(i) = sign_z * box_z_dir;
-        nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = sign_z * box_z/2;
+        nearestPt_box_frame(0) = x;
+        nearestPt_box_frame(1) = y;
+        nearestPt_box_frame(2) = sign_z * box_z / 2;
       }
       nearestPts.col(i) = (transform * nearestPt_box_frame.homogeneous()).head(3);
     }
@@ -507,7 +514,7 @@ Matrix3Xf
 Optimizer::operator()(const Matrix3Xf &Y,
                       const Matrix2Xi &E,
                       const std::vector<FixedPoint> &fixed_points,
-                      Objects const &objects,
+                      PointsNormals const &points_normals,
                       const bool self_intersection,
                       const bool interaction_constrain)
 {
@@ -555,14 +562,14 @@ Optimizer::operator()(const Matrix3Xf &Y,
   if (interaction_constrain)
   {
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "added interaction constraint");
-    auto const &[nearestPts, normalVecs] = nearest_points_and_normal(last_template, objects);
+    auto const &[contact_points, contact_normals] = points_normals;
 
     for (ssize_t i = 0; i < num_vectors; ++i)
     {
       model.addConstr(
-          (vars[i * 3 + 0] - nearestPts(0, i)) * normalVecs(0, i) +
-          (vars[i * 3 + 1] - nearestPts(1, i)) * normalVecs(1, i) +
-          (vars[i * 3 + 2] - nearestPts(2, i)) * normalVecs(2, i) >= 0.0,
+          (vars[i * 3 + 0] - contact_points(0, i)) * contact_normals(0, i) +
+          (vars[i * 3 + 1] - contact_points(1, i)) * contact_normals(1, i) +
+          (vars[i * 3 + 2] - contact_points(2, i)) * contact_normals(2, i) >= 0.0,
           "interaction constrain for point " + std::to_string(i));
     }
   }
