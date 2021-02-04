@@ -97,7 +97,7 @@ class Optimizer
 
   std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>
   nearest_points_and_normal_mesh(const Eigen::Matrix3Xf &last_template,
-                                 shapes::Mesh const &shapes_mesh,
+                                 shape_msgs::Mesh const &shapes_mesh,
                                  geometry_msgs::Pose const &pose);
 
   std::tuple<Eigen::Matrix3Xf, Eigen::Matrix3Xf>

@@ -66,6 +66,7 @@ add_library(cdcpd SHARED
         )
 
 target_link_libraries(cdcpd PUBLIC
+        lapack
         ${PCL_LIBRARIES}
         Eigen3::Eigen
         ${catkin_LIBRARIES}
@@ -73,8 +74,9 @@ target_link_libraries(cdcpd PUBLIC
         ${FAISS_LIBRARY}
         ${OpenCV_LIBS}
         CGAL::CGAL
+
         CGAL::CGAL_Qt5
-        lapack)
+        )
 
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
@@ -88,9 +90,7 @@ target_link_libraries(cdcpd PRIVATE OpenMP::OpenMP_CXX)
 
 add_library(cdcpd::cdcpd ALIAS cdcpd)
 
-add_executable(mesh_conversion_test tests/mesh_conversion_test.cpp)
-target_link_libraries(mesh_conversion_test PUBLIC cdcpd ${OpenCV_LIBS})
-target_compile_definitions(mesh_conversion_test PUBLIC CGAL_USE_BASIC_VIEWER)
+add_subdirectory(tests)
 
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)

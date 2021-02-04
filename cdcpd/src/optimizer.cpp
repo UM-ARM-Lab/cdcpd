@@ -205,7 +205,7 @@ Optimizer::nearest_points_and_normal_cylinder(const Matrix3Xf &last_template,
 
 std::tuple<Matrix3Xf, Matrix3Xf>
 Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
-                                          shapes::Mesh const &shapes_mesh,
+                                          shape_msgs::Mesh const &shapes_mesh,
                                           geometry_msgs::Pose const &pose)
 {
   auto mesh = shapes_mesh_to_cgal_mesh(shapes_mesh);
