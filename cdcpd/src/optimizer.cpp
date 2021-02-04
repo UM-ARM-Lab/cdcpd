@@ -221,20 +221,34 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
       c_x = (x > box_x/2) ? 1 : ((x < -box_x/2) ? -1 : 0);
       c_y = (y > box_y/2) ? 1 : ((y < -box_y/2) ? -1 : 0);
       c_z = (z > box_z/2) ? 1 : ((z < -box_z/2) ? -1 : 0);
-      normalVecs.col(i) = c_x * box_x_dir + \
-			  c_y * box_y_dir + \
+      normalVecs.col(i) = c_x * box_x_dir + 
+			  c_y * box_y_dir + 
 			  c_z * box_z_dir;
-      auto const nearestPt_box_frame = c_x * box_x/2 + (1-abs(c_x)) * x + \
-                                       c_y * box_y/2 + (1-abs(c_y)) * y + \
-                                       c_z * box_z/2 + (1-abs(c_z)) * z;
+      const Vector3f nearestPt_box_frame(c_x * box_x/2 + (1-abs(c_x)) * x,
+                                         c_y * box_y/2 + (1-abs(c_y)) * y,
+                                         c_z * box_z/2 + (1-abs(c_z)) * z);
       nearestPts.col(i) = (transform * nearestPt_box_frame.homogeneous()).head(3);
     } else
     {
       float ratio_x = 2*x/box_x; float ratio_y = 2*y/box_y; float ratio_z = 2*z/box_z;
+      Vector3f nearestPt_box_frame;
       if (abs(ratio_x) > abs(ratio_y) && abs(ratio_x) > abs(ratio_z))
       {
-        // AFTER DINNER
+	float sign_x = ratio_x > 0 ? 1.0 : -1.0;
+	normalVecs.col(i) = sign_x * box_x_dir;
+	nearestPt_box_frame(0) = sign_x * box_x/2; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = z;
+      } else if (abs(ratio_y) > abs(ratio_x) && abs(ratio_y) > abs(ratio_z))
+      {
+	float sign_y = ratio_y > 0 ? 1.0 : -1.0;
+	normalVecs.col(i) = sign_y * box_y_dir;
+	nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = sign_y * box_y/2; nearestPt_box_frame(2) = z;
+      } else
+      {
+	float sign_z = ratio_z > 0 ? 1.0 : -1.0;
+	normalVecs.col(i) = sign_z * box_z_dir;
+	nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = sign_z * box_z/2;
       }
+      nearestPts.col(i) = (transform * nearestPt_box_frame.homogeneous()).head(3);
     }
   }
 
