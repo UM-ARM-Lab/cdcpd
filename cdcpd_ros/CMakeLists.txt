@@ -22,6 +22,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+        moveit_visual_tools
         cv_bridge
         genmsg
         image_geometry
@@ -73,14 +74,6 @@ include_directories(
         SYSTEM
         ${catkin_INCLUDE_DIRS}
 )
-
-# Debugging
-add_executable(test_moveit_cc
-        src/test_moveit_cc.cpp
-        )
-add_dependencies(test_moveit_cc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(test_moveit_cc PRIVATE ${catkin_LIBRARIES})
-
 
 # Node for live data
 add_executable(cdcpd_node

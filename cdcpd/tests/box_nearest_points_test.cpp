@@ -29,7 +29,7 @@ int main()
   pose.orientation = orien;
 
   Optimizer opt(init_temp, last_temp, 1.0);
-  PointsNormals res = opt.test_box(init_temp, box, pose);
+  auto res = opt.test_box(init_temp, box, pose);
 
   std::cout << std::get<0>(res) << std::endl;
   std::cout << std::get<1>(res) << std::endl;

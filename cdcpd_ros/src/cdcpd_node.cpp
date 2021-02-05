@@ -1,8 +1,15 @@
 #include <arc_utilities/enumerate.h>
 #include <cdcpd/cdcpd.h>
+#include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <moveit/collision_detection/collision_common.h>
+#include <moveit/collision_detection/collision_tools.h>
+#include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
+#include <moveit/collision_detection_bullet/collision_env_bullet.h>
+#include <moveit/collision_detection_fcl/collision_common.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <moveit_visual_tools/moveit_visual_tools.h>
 #include <opencv2/imgproc/types_c.h>
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
@@ -17,7 +24,6 @@
 #include "cdcpd_ros/kinect_sub.h"
 
 constexpr auto const LOGNAME = "cdcpd_node";
-constexpr auto const COLLISION_BODY_NAME = "cdcpd_tracked_point";
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
@@ -78,36 +84,59 @@ cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
   return hsv_mask;
 }
 
-Objects get_moveit_planning_scene_as_mesh(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor) {
-  // get the latest scene
-  planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor);
-
-  Objects objects;
-  planning_scene->getCollisionObjectMsgs(objects);
-  return objects;
-}
+void print_bodies(robot_state::RobotState const& state) {
+  std::vector<robot_state::AttachedBody const*> bs;
+  std::cout << "Attached Bodies:\n";
+  state.getAttachedBodies(bs);
+  for (auto const& b : bs) {
+    std::cout << b->getName() << '\n';
+  }
+};
 
 struct CDCPD_Moveit_Node {
+  std::string collision_body_prefix{"cdcpd_tracked_point_"};
   ros::NodeHandle nh;
   ros::NodeHandle ph;
   ros::Publisher contact_marker_pub;
+  planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
+  robot_model_loader::RobotModelLoaderPtr model_loader_;
+  robot_model::RobotModelPtr model_;
+  moveit_visual_tools::MoveItVisualTools visual_tools_;
+  std::string moveit_frame{"robot_root"};
 
-  CDCPD_Moveit_Node() : ph("~") {
+  CDCPD_Moveit_Node()
+      : ph("~"),
+        scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description")),
+        model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>()),
+        model_(model_loader_->getModel()),
+        visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_) {
     std::string robot_namespace{"hdt_michigan"};
-    auto scene_monitor = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
-    scene_monitor->startSceneMonitor(scene_topic);
-    scene_monitor->requestPlanningSceneState(service_name);
+    scene_monitor_->startSceneMonitor(scene_topic);
+    scene_monitor_->requestPlanningSceneState(service_name);
 
     // Publsihers for the data, some visualizations, others consumed by other nodes
     auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 1);
     auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 1);
     auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 1);
     auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 1);
+    auto pre_template_publisher = nh.advertise<PointCloud>("cdcpd/pre_template", 1);
     auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 1);
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
+
+    // Moveit Visualization
+    auto const viz_robot_state_topic = "cdcpd_moveit_node/robot_state";
+    visual_tools_.loadRobotStatePub(viz_robot_state_topic, false);
+    //    auto const viz_planning_scene_topic = "cdcpd_moveit_node/planning_scene";
+    //    visual_tools_.setPlanningSceneTopic(viz_planning_scene_topic);
+    //    visual_tools_.setManualSceneUpdating();
+    //    auto const loaded_viz_psm = visual_tools_.loadPlanningSceneMonitor();
+    //    if (not loaded_viz_psm) {
+    //      ROS_WARN_STREAM_NAMED(LOGNAME, "Failed to load planning scene monitor on topic " <<
+    //      viz_planning_scene_topic);
+    //    }
 
     // TF objects for getting gripper positions
     auto tf_buffer = tf2_ros::Buffer();
@@ -136,6 +165,8 @@ struct CDCPD_Moveit_Node {
     auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
     auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
     auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
+    Eigen::MatrixXi gripper_idx(1, 2);
+    gripper_idx << left_node_idx, right_node_idx;
 
     auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring);
 
@@ -174,27 +205,31 @@ struct CDCPD_Moveit_Node {
       auto const n_grippers = q_config.size();
       const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
 
-      //    auto const objects = get_moveit_planning_scene_as_mesh(scene_monitor);
-      auto const points_normals = moveit_get_points_normals(scene_monitor, tf_buffer, kinect_tf_name, tracked_points);
+      // publish the template before processing
+      {
+        auto time = ros::Time::now();
+        tracked_points->header.frame_id = kinect_tf_name;
+        pcl_conversions::toPCL(time, tracked_points->header.stamp);
+        pre_template_publisher.publish(tracked_points);
+      }
 
-      Eigen::MatrixXi gripper_idx(1, 2);
-      gripper_idx << left_node_idx, right_node_idx;
-      auto const out =
-          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config, gripper_idx);
+      //    auto const objects = get_moveit_planning_scene_as_mesh(scene_monitor);
+      auto const points_normals = moveit_get_points_normals(scene_monitor_, tf_buffer, kinect_tf_name, tracked_points);
+
+      ros::Duration(0.5).sleep();
+      return;
+
+      auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config,
+                             gripper_idx, false, false);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids
       {
-#ifdef ENTIRE
         out.original_cloud->header.frame_id = kinect_tf_name;
-#endif
         out.masked_point_cloud->header.frame_id = kinect_tf_name;
         out.downsampled_cloud->header.frame_id = kinect_tf_name;
         out.cpd_output->header.frame_id = kinect_tf_name;
         out.gurobi_output->header.frame_id = kinect_tf_name;
-#ifdef COMP
-        out_without_constrain.gurobi_output->header.frame_id = kinect_tf_name;
-#endif
       }
 
       // Add timestamp information
@@ -247,125 +282,150 @@ struct CDCPD_Moveit_Node {
     };
 
     auto const options = KinectSub::SubscriptionOptions(kinect_name + "/" + kinect_channel);
+    // wait a second so the TF buffer can fill
+    ros::Duration(0.5).sleep();
     KinectSub sub(callback, options);
 
     ROS_INFO("Spinning...");
     ros::waitForShutdown();
   }
 
-  std::optional<PointNormal> find_nearest_point_and_normal(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-                                                           tf2_ros::Buffer const& tf_buffer, std::string kinect_tf_name,
-                                                           pcl::PointXYZ const& point) {
-    auto world = planning_scene->getWorldNonConst();
-    auto sphere = std::make_shared<shapes::Sphere>(0.02);
-    std::string moveit_frame{"robot_root"};
+  PointsNormals find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+                                                tf2_ros::Buffer const& tf_buffer, std::string kinect_tf_name,
+                                                Eigen::Isometry3d const& cdcpd_to_moveit) {
+    collision_detection::CollisionRequest req;
+    req.contacts = true;
+    req.verbose = true;
+    req.distance = true;
+    req.max_contacts_per_pair = 1;
+    req.max_contacts = 1;
+    collision_detection::CollisionResult res;
+    planning_scene->checkCollisionUnpadded(req, res);
 
-    try {
-      auto const cdcpd_to_moveit = tf_buffer.lookupTransform(kinect_tf_name, moveit_frame, ros::Time(0));
-      auto const cdcpd_to_moveit_transform = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit.transform);
-
-      auto const point_in_moveit_frame = cdcpd_to_moveit_transform * point.getVector3fMap().cast<double>();
-      Eigen::Isometry3d pose_moveit_frame = Eigen::Isometry3d::Identity();
-      pose_moveit_frame.translation() = point_in_moveit_frame;
-
-      world->addToObject(COLLISION_BODY_NAME, sphere, pose_moveit_frame);
-
-      collision_detection::CollisionRequest req;
-      req.contacts = true;
-      req.verbose = true;
-      req.max_contacts_per_pair = 1;
-      req.max_contacts = std::numeric_limits<typeof(collision_detection::CollisionRequest::max_contacts)>::max();
-      collision_detection::CollisionResult res;
-      planning_scene->checkCollisionUnpadded(req, res);
-
-      PointsNormals points_normals;
-      for (auto const& [contact_names, contacts] : res.contacts) {
-        // FIXME: is this correct?
-        if (contacts.empty()) {
-          continue;
-        }
-
-        auto const contact = contacts[0];
-        auto add_point_normal = [&](int body_idx) {
-          // FIXME: the contact point in moveit frame seems to be wrong
-          auto const contact_point_moveit_frame = contact.nearest_points[body_idx];
-          auto const normal_moveit_frame = res.contacts.begin()->second.begin()->normal;
-          auto const contact_point_cdcpd_frame = cdcpd_to_moveit_transform.inverse() * contact_point_moveit_frame;
-          auto const normal_cdcpd_frame = cdcpd_to_moveit_transform.inverse() * normal_moveit_frame;
-          points_normals.emplace_back(contact_point_cdcpd_frame.cast<float>(), normal_cdcpd_frame.cast<float>());
-
-          // NOTE: debug & visualize
-          {
-            ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "contact point in cdcpd frame: " << contact_point_cdcpd_frame);
-            ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "normal in cdcpd frame: " << normal_cdcpd_frame);
-
-            vm::MarkerArray markers;
-            vm::Marker arrow;
-            arrow.color.r = 1.0;
-            arrow.color.g = 0.0;
-            arrow.color.b = 1.0;
-            arrow.color.a = 0.5;
-            arrow.type = vm::Marker::ARROW;
-            arrow.action = vm::Marker::ADD;
-            arrow.header.frame_id = kinect_tf_name;
-            arrow.header.stamp = ros::Time::now();
-            arrow.scale.x = 0.01;
-            arrow.scale.y = 0.02;
-            arrow.scale.z = 0;
-            arrow.pose.orientation.w = 1;
-            Eigen::Vector3d arrow_end_point_cdcpd_frame = contact_point_cdcpd_frame + normal_cdcpd_frame;
-            arrow.points.push_back(ConvertTo<geometry_msgs::Point>(contact_point_cdcpd_frame));
-            arrow.points.push_back(ConvertTo<geometry_msgs::Point>(arrow_end_point_cdcpd_frame));
-
-            markers.markers.push_back(arrow);
-            /* Get the contact ponts and display them as markers */
-            contact_marker_pub.publish(markers);
-          }
-        };
-
-        if (contact_names.first == COLLISION_BODY_NAME) {
-          add_point_normal(0);
-        } else if (contact_names.second == COLLISION_BODY_NAME) {
-          add_point_normal(1);
-        } else {
-          continue;
-        }
+    vm::MarkerArray contact_markers;
+    PointsNormals points_normals;
+    auto contact_idx = 0u;
+    for (auto const& [contact_names, contacts] : res.contacts) {
+      // FIXME: is this correct?
+      if (contacts.empty()) {
+        continue;
       }
 
-      if (points_normals.empty()) {
-        return {};
-      } else if (points_normals.size() != 1) {
-        ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "Found multiple collisions for rope point at " << point);
+      auto const contact = contacts[0];
+      auto add_point_normal = [&](int contact_idx, int body_idx) {
+        // FIXME: the contact point in moveit frame seems to be wrong
+        auto const contact_point_moveit_frame = contact.pos;
+        auto const normal_moveit_frame = res.contacts.begin()->second.begin()->normal;
+        Eigen::Vector3d const contact_point_cdcpd_frame = cdcpd_to_moveit.inverse() * contact_point_moveit_frame;
+        Eigen::Vector3d const normal_cdcpd_frame = cdcpd_to_moveit.inverse() * normal_moveit_frame;
+        points_normals.emplace_back(contact_point_cdcpd_frame.cast<float>(), normal_cdcpd_frame.cast<float>());
+
+        // NOTE: debug & visualize
+        {
+          ROS_DEBUG_STREAM_NAMED(LOGNAME, "contact point in cdcpd frame: " << contact_point_cdcpd_frame.x() << ", "
+                                                                           << contact_point_cdcpd_frame.y() << ", "
+                                                                           << contact_point_cdcpd_frame.z());
+          ROS_DEBUG_STREAM_NAMED(LOGNAME, "normal in cdcpd frame: " << normal_cdcpd_frame.x() << ", "
+                                                                    << normal_cdcpd_frame.y() << ", "
+                                                                    << normal_cdcpd_frame.z());
+
+          vm::Marker arrow;
+          arrow.id = 100 * contact_idx + 0;
+          arrow.action = vm::Marker::ADD;
+          arrow.type = vm::Marker::ARROW;
+          arrow.ns = "arrow";
+          arrow.header.frame_id = kinect_tf_name;
+          arrow.header.stamp = ros::Time::now();
+          arrow.color.r = 1.0;
+          arrow.color.g = 0.0;
+          arrow.color.b = 1.0;
+          arrow.color.a = 1.0;
+          arrow.scale.x = 0.005;
+          arrow.scale.y = 0.01;
+          arrow.scale.z = 0;
+          arrow.pose.orientation.w = 1;
+          auto const normal_cdcpd_frame_scaled = normal_cdcpd_frame.normalized() * 0.1;
+          Eigen::Vector3d arrow_end_point_cdcpd_frame = contact_point_cdcpd_frame + normal_cdcpd_frame;
+          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(contact.nearest_points[0]));
+          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(contact.nearest_points[1]));
+
+          contact_markers.markers.push_back(arrow);
+        }
+      };
+
+      if (contact_names.first.find(collision_body_prefix) != std::string::npos) {
+        add_point_normal(contact_idx, 0);
+      } else if (contact_names.second.find(collision_body_prefix) != std::string::npos) {
+        add_point_normal(contact_idx, 1);
+      } else {
+        continue;
       }
-      return {points_normals[0]};
-    } catch (tf2::TransformException const& ex) {
-      ROS_WARN_STREAM_THROTTLE(
-          10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << moveit_frame << ": " << ex.what());
+
+      ++contact_idx;
     }
-    return {};
+
+    vm::MarkerArray clear_array;
+    vm::Marker clear_marker;
+    clear_marker.type = vm::Marker::DELETEALL;
+    contact_marker_pub.publish(clear_array);
+    contact_marker_pub.publish(contact_markers);
+    return points_normals;
   }
 
   PointsNormals moveit_get_points_normals(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor,
                                           tf2_ros::Buffer const& tf_buffer, std::string kinect_tf_name,
                                           PointCloud::ConstPtr tracked_points) {
-    // an alternative to manual + CGAL based nearest/normal, we could check check each point on the rope for collision
-    // via moveit but moveit only knows how to check for collision betweeen the robot state and the world/itself so I'm
-    // not sure how we'd do this
+    Eigen::Isometry3d cdcpd_to_moveit;
+    try {
+      auto const cdcpd_to_moveit_msg = tf_buffer.lookupTransform(moveit_frame, kinect_tf_name, ros::Time(0));
+      cdcpd_to_moveit = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit_msg.transform);
+    } catch (tf2::TransformException const& ex) {
+      ROS_WARN_STREAM_THROTTLE(
+          10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << moveit_frame << ": " << ex.what());
+      return {};
+    }
 
     planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor);
+    planning_scene->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
+    auto robot_state = planning_scene->getCurrentStateNonConst();
 
-    PointsNormals points_normals;
-
-    // add a point to the moveit world and collision check it
-    for (auto const& point : *tracked_points) {
-      auto const point_normal = find_nearest_point_and_normal(planning_scene, tf_buffer, kinect_tf_name, point);
-      if (point_normal) {
-        auto const& [contact_point, normal] = point_normal.value();
-        points_normals.emplace_back(point_normal.value());
+    // remove the attached "tool boxes"
+    std::vector<std::string> objects_to_detach{"left_tool_box", "right_tool_box"};
+    for (auto const& object_to_detach : objects_to_detach) {
+      if (not robot_state.hasAttachedBody(object_to_detach)) {
+        continue;
+      }
+      auto success = robot_state.clearAttachedBody(object_to_detach);
+      if (not success) {
+        ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to detach " << object_to_detach);
       }
     }
 
-    return points_normals;
+    // attach to the robot base link, sort of hacky but MoveIt only has API for checking robot vs self/world,
+    // so we have to make the tracked points part of the robot, hence "attached collision objects"
+    for (auto const& [tracked_point_idx, point] : enumerate(*tracked_points)) {
+      Eigen::Vector3d const tracked_point_cdcpd_frame = point.getVector3fMap().cast<double>();
+      Eigen::Vector3d const tracked_point_moveit_frame = cdcpd_to_moveit * tracked_point_cdcpd_frame;
+      Eigen::Isometry3d tracked_point_pose_moveit_frame = Eigen::Isometry3d::Identity();
+      tracked_point_pose_moveit_frame.translation() = tracked_point_moveit_frame;
+
+      std::stringstream collision_body_name_stream;
+      collision_body_name_stream << collision_body_prefix << tracked_point_idx;
+      auto const collision_body_name = collision_body_name_stream.str();
+
+      // FIXME: not moveit frame, but the base link_frame, could those be different?
+      auto sphere = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
+      robot_state.attachBody(collision_body_name, {sphere}, {tracked_point_pose_moveit_frame},
+                             std::vector<std::string>{}, "base");
+    }
+
+    // this shouldn't be necessary...!?
+    planning_scene->setCurrentState(robot_state);
+
+    // visualize
+    visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
+
+    return find_nearest_points_and_normals(planning_scene, tf_buffer, kinect_tf_name, cdcpd_to_moveit);
   }
 };
 

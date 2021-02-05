@@ -47,7 +47,7 @@ using Points = Eigen::Matrix3Xf;
 using Normals = Eigen::Matrix3Xf;
 using Point = Eigen::Vector3f;
 using Normal = Eigen::Vector3f;
-using PointNormal = std::tuple<Point, Normal>;
+using PointNormal = std::tuple<Point, Normal>; // Hyperplane, for enforcing that tracked points aren't inside obstacles
 using PointsNormals = std::vector<PointNormal>;
 
 class Optimizer
@@ -61,10 +61,10 @@ class Optimizer
                                             PointsNormals const &points_normals,
                                             bool self_intersection = true,
                                             bool interation_constrain = true);
-  
-  PointsNormals test_box(const Eigen::Matrix3Xf &last_template,
-                                                            shape_msgs::SolidPrimitive const &box,
-                                                            geometry_msgs::Pose const &pose);
+
+  std::tuple<Points, Normals> test_box(const Eigen::Matrix3Xf &last_template,
+                                       shape_msgs::SolidPrimitive const &box,
+                                       geometry_msgs::Pose const &pose);
 
  private:
   [[nodiscard]] bool gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;

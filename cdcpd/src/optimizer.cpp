@@ -464,6 +464,14 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
   return {startPts, endPts};
 }
 
+std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_template,
+                                  shape_msgs::SolidPrimitive const &box,
+                                  geometry_msgs::Pose const &pose)
+{
+  return nearest_points_and_normal_box(last_template, box, pose);
+}
+
+
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
     : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
 {

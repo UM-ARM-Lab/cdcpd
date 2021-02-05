@@ -15,6 +15,7 @@
     <exec_depend>message_runtime</exec_depend>
 
     <depend>arc_utilities</depend>
+    <depend>moveit_visual_tools</depend>
     <depend>cdcpd</depend>
     <depend>disgnostic_msgs</depend>
     <depend>geometry_msgs</depend>
