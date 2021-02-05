@@ -322,19 +322,20 @@ struct CDCPD_Moveit_Node {
 
         // NOTE: debug & visualize
         {
-          ROS_DEBUG_STREAM_NAMED(LOGNAME, "contact point in cdcpd frame: " << contact_point_cdcpd_frame.x() << ", "
-                                                                           << contact_point_cdcpd_frame.y() << ", "
-                                                                           << contact_point_cdcpd_frame.z());
-          ROS_DEBUG_STREAM_NAMED(LOGNAME, "normal in cdcpd frame: " << normal_cdcpd_frame.x() << ", "
-                                                                    << normal_cdcpd_frame.y() << ", "
-                                                                    << normal_cdcpd_frame.z());
+          ROS_DEBUG_STREAM_NAMED(
+              LOGNAME, "nearest point: " << contact.nearest_points[0].x() << ", " << contact.nearest_points[0].y()
+                                         << ", " << contact.nearest_points[0].z() << " on " << contact.body_name_1
+                                         << " and " << contact.nearest_points[1].x() << ", "
+                                         << contact.nearest_points[1].y() << ", " << contact.nearest_points[1].z()
+                                         << " on " << contact.body_name_2 << " depth " << contact.depth
+                                         << " (in moveit frame)");
 
           vm::Marker arrow;
           arrow.id = 100 * contact_idx + 0;
           arrow.action = vm::Marker::ADD;
           arrow.type = vm::Marker::ARROW;
           arrow.ns = "arrow";
-          arrow.header.frame_id = kinect_tf_name;
+          arrow.header.frame_id = moveit_frame;
           arrow.header.stamp = ros::Time::now();
           arrow.color.r = 1.0;
           arrow.color.g = 0.0;
