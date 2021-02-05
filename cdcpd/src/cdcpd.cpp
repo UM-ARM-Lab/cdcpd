@@ -314,185 +314,6 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf &vertices,
   return prob;
 }
 
-#ifdef NOUSE
-VectorXi CDCPD::is_occluded(const Matrix3Xf& vertices,
-                            const Mat& depth,
-                            const Mat& mask,
-                            const Matrix3f& intrinsics,
-              const bool is_sim)
-{
-    // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
-    // depth: CV_16U depth image
-    // mask: CV_8U mask for segmentation
-    // kvis: k_vis in the paper
-
-    // Project the vertices to get their corresponding pixel coordinate
-    Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
-
-    // Homogeneous coords: divide by third row
-    // the for-loop is unnecessary
-    image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
-    image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
-    for (int i = 0; i < image_space_vertices.cols(); ++i)
-    {
-        float x = image_space_vertices(0, i);
-        float y = image_space_vertices(1, i);
-        image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
-        image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
-    }
-
-    // Get image coordinates
-    Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
-
-    for (int i = 0; i < coords.cols(); ++i)
-    {
-        coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
-        coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
-    }
-
-    // Find difference between point depth and image depth
-    // depth_diffs: (1, M) vector
-    Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
-    for (int i = 0; i < vertices.cols(); ++i)
-    {
-        // std::cout << "depth at " << coords(1, i) << " " << coords(0, i) << std::endl;
-        if(is_sim) {
-          assert(depth.depth() == CV_32F);
-          float raw_depth = depth.at<float>(coords(1, i), coords(0, i));
-        } else {
-          assert(depth.depth() == CV_16U);
-          uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
-        }
-        if (raw_depth != 0)
-        {
-            depth_diffs(i) = vertices(2, i) - static_cast<float>(raw_depth) / 1000.0;
-        }
-        else
-        {
-            depth_diffs(i) = 0.02; // prevent numerical problems; taken from the Python code
-        }
-    }
-
-    depth_diffs = depth_diffs.array().max(0.0);
-    VectorXi occl_idx(depth_diffs.size());
-    for (int i = 0; i < depth_diffs.size(); ++i)
-    {
-        if (depth_diffs(i) > 0.5) {
-            occl_idx(i) = 1;
-        }
-        else
-        {
-            occl_idx(i) = 0;
-        }
-    }
-
-    return occl_idx;
-}
-#endif
-
-Matrix3Xf CDCPD::blend_result(const Matrix3Xf &Y_pred,
-                              const Matrix3Xf &Y_cpd,
-                              const VectorXi &is_occluded)
-{
-  Matrix3Xf result(3, Y_pred.cols());
-  for (int i = 0; i < is_occluded.size(); ++i)
-  {
-    if (is_occluded(i))
-    {
-      result.col(i) = Y_pred.col(i);
-    } else
-    {
-      result.col(i) = Y_cpd.col(i);
-    }
-  }
-
-  return result;
-}
-
-/*
- * Used for failure recovery. Very similar to the visibility_prior function, but with a different K and
- * image_depth - vertex_depth, not vice-versa. There's also no normalization.
- * Calculate Eq. (22) in the paper
- */
-static float smooth_free_space_cost(const Matrix3Xf vertices,
-                                    const Eigen::Matrix3f &intrinsics,
-                                    const cv::Mat &depth,
-                                    const cv::Mat &mask,
-                                    const float k = 1e2)
-{
-  // vertices: Y^t in Eq. (22)
-  // intrinsics: intrinsic matrix of the camera
-  // depth: depth image
-  // mask: mask image
-  // k: constant defined in Eq. (22)
-
-  Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-#ifdef DEBUG
-  auto to_file = [&np_fmt](const std::string& fname, const MatrixXf& mat) {
-      std::ofstream(fname) << mat.format(np_fmt);
-  };
-#endif
-
-  // Project the vertices to get their corresponding pixel coordinate
-  Eigen::Matrix3Xf image_space_vertices = intrinsics * vertices;
-  // Homogeneous coords: divide by third row
-  image_space_vertices.row(0).array() /= image_space_vertices.row(2).array();
-  image_space_vertices.row(1).array() /= image_space_vertices.row(2).array();
-  for (int i = 0; i < image_space_vertices.cols(); ++i)
-  {
-    float x = image_space_vertices(0, i);
-    float y = image_space_vertices(1, i);
-    // ENHANCE: no need to create coords again
-    image_space_vertices(0, i) = std::min(std::max(x, 0.0f), static_cast<float>(depth.cols));
-    image_space_vertices(1, i) = std::min(std::max(y, 0.0f), static_cast<float>(depth.rows));
-  }
-
-  // Get image coordinates
-  Eigen::Matrix2Xi coords = image_space_vertices.topRows(2).cast<int>();
-
-  for (int i = 0; i < coords.cols(); ++i)
-  {
-    coords(0, i) = std::min(std::max(coords(0, i), 0), depth.cols - 1);
-    coords(1, i) = std::min(std::max(coords(1, i), 1), depth.rows - 1);
-  }
-  // coords.row(0) = coords.row(0).array().min(0);
-  // coords.row(0) = coords.row(0).array().max(depth.cols - 1);
-  // coords.row(1) = coords.row(1).array().min(1);
-  // coords.row(1) = coords.row(1).array().max(depth.rows - 1);
-
-  // Find difference between point depth and image depth
-  Eigen::VectorXf depth_diffs = Eigen::VectorXf::Zero(vertices.cols());
-  for (int i = 0; i < vertices.cols(); ++i)
-  {
-    // std::cout << "depth at " << coords(1, i) << " " << coords(0, i) << std::endl;
-    uint16_t raw_depth = depth.at<uint16_t>(coords(1, i), coords(0, i));
-    if (raw_depth != 0)
-    {
-      depth_diffs(i) = static_cast<float>(raw_depth) / 1000.0 - vertices(2, i); // unit: m
-    } else
-    {
-      depth_diffs(i) = std::numeric_limits<float>::quiet_NaN();
-    }
-  }
-  Eigen::VectorXf depth_factor = depth_diffs.array().max(0.0);
-
-
-  cv::Mat dist_img(depth.rows, depth.cols, CV_32F); // TODO should the other dist_img be this, too?
-  int maskSize = 5;
-  cv::distanceTransform(~mask, dist_img, cv::noArray(), cv::DIST_L2, maskSize);
-
-  Eigen::VectorXf dist_to_mask(vertices.cols());
-  for (int i = 0; i < vertices.cols(); ++i)
-  {
-    dist_to_mask(i) = dist_img.at<float>(coords(1, i), coords(0, i));
-  }
-  VectorXf score = (dist_to_mask.array() * depth_factor.array()).matrix();
-  // NOTE: Eq. (22) lost 1 in it
-  VectorXf prob = (1 - (-k * score).array().exp()).matrix();
-  float cost = prob.array().isNaN().select(0, prob.array()).sum();
-  cost /= prob.array().isNaN().select(0, VectorXi::Ones(prob.size())).sum();
-  return cost;
-}
 
 // NOTE: based on the implementation here:
 // https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
@@ -593,31 +414,6 @@ point_clouds_from_images(const cv::Mat &depth_image,
 
   assert(unfiltered_iter == unfiltered_cloud->end());
   return {unfiltered_cloud, filtered_cloud};
-}
-
-static void sample_X_points(const Matrix3Xf &Y,
-                            const VectorXf &Y_emit_prior,
-                            const double sigma2,
-                            PointCloud::Ptr &cloud)
-{
-  int N = 40;
-  for (int m = 0; m < Y.cols(); ++m)
-  {
-    int num_pts = int(float(N) * (1.0f - Y_emit_prior(m)));
-    std::default_random_engine generator;
-    std::normal_distribution<double> distrib_x(Y(0, m), sigma2);
-    std::normal_distribution<double> distrib_y(Y(1, m), sigma2);
-    std::normal_distribution<double> distrib_z(Y(2, m), sigma2);
-
-    for (int i = 0; i < num_pts; ++i)
-    {
-      double x = distrib_x(generator);
-      double y = distrib_y(generator);
-      double z = distrib_z(generator);
-
-      cloud->push_back(pcl::PointXYZ(x, y, z));
-    }
-  }
 }
 
 Matrix3Xf CDCPD::cpd(const Matrix3Xf &X,
@@ -911,19 +707,18 @@ CDCPD::CDCPD(ros::NodeHandle _nh,
 //                                                                                 rotation_deformability);
 }
 
-CDCPD::Output CDCPD::operator()(
-    const Mat &rgb,
-    const Mat &depth,
-    const Mat &mask,
-    const cv::Matx33d &intrinsics,
-    const PointCloud::Ptr template_cloud,
-    PointsNormals points_normals,
-    const smmap::AllGrippersSinglePoseDelta &q_dot,
-    const smmap::AllGrippersSinglePose &q_config,
-    const std::vector<bool> &is_grasped,
-    const bool self_intersection,
-    const bool interaction_constrain,
-    const int pred_choice)
+CDCPD::Output CDCPD::operator()(const Mat &rgb,
+                                const Mat &depth,
+                                const Mat &mask,
+                                const cv::Matx33d &intrinsics,
+                                const PointCloud::Ptr template_cloud,
+                                PointsNormals points_normals,
+                                const smmap::AllGrippersSinglePoseDelta &q_dot,
+                                const smmap::AllGrippersSinglePose &q_config,
+                                const std::vector<bool> &is_grasped,
+                                const bool self_intersection,
+                                const bool interaction_constrain,
+                                const int pred_choice)
 {
   std::vector<int> idx_map;
   for (auto const &[j, is_grasped_j] : enumerate(is_grasped))
@@ -1001,19 +796,18 @@ CDCPD::Output CDCPD::operator()(
 
 }
 
-CDCPD::Output CDCPD::operator()(
-    const Mat &rgb,
-    const Mat &depth,
-    const Mat &mask,
-    const cv::Matx33d &intrinsics,
-    const PointCloud::Ptr template_cloud,
-    PointsNormals points_normals,
-    const smmap::AllGrippersSinglePoseDelta &q_dot,
-    const smmap::AllGrippersSinglePose &q_config,
-    const Eigen::MatrixXi &gripper_idx,
-    const bool self_intersection,
-    const bool interaction_constrain,
-    const int pred_choice)
+CDCPD::Output CDCPD::operator()(const Mat &rgb,
+                                const Mat &depth,
+                                const Mat &mask,
+                                const cv::Matx33d &intrinsics,
+                                const PointCloud::Ptr template_cloud,
+                                PointsNormals points_normals,
+                                const smmap::AllGrippersSinglePoseDelta &q_dot,
+                                const smmap::AllGrippersSinglePose &q_config,
+                                const Eigen::MatrixXi &gripper_idx,
+                                const bool self_intersection,
+                                const bool interaction_constrain,
+                                const int pred_choice)
 {
   this->gripper_idx = gripper_idx;
   auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, points_normals, q_dot,
@@ -1022,18 +816,17 @@ CDCPD::Output CDCPD::operator()(
 
 }
 
-CDCPD::Output CDCPD::operator()(
-    const Mat &rgb,
-    const Mat &depth,
-    const Mat &mask,
-    const cv::Matx33d &intrinsics,
-    const PointCloud::Ptr template_cloud,
-    PointsNormals points_normals,
-    const smmap::AllGrippersSinglePoseDelta &q_dot,
-    const smmap::AllGrippersSinglePose &q_config,
-    const bool self_intersection,
-    const bool interaction_constrain,
-    const int pred_choice)
+CDCPD::Output CDCPD::operator()(const Mat &rgb,
+                                const Mat &depth,
+                                const Mat &mask,
+                                const cv::Matx33d &intrinsics,
+                                const PointCloud::Ptr template_cloud,
+                                PointsNormals points_normals,
+                                const smmap::AllGrippersSinglePoseDelta &q_dot,
+                                const smmap::AllGrippersSinglePose &q_config,
+                                const bool self_intersection,
+                                const bool interaction_constrain,
+                                const int pred_choice)
 {
   // rgb: CV_8U3C rgb image
   // depth: CV_16U depth image
@@ -1133,7 +926,8 @@ CDCPD::Output CDCPD::operator()(
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
   Optimizer opt(original_template, Y, 1.1);
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, points_normals, self_intersection, interaction_constrain);
+  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, points_normals, self_intersection,
+                        interaction_constrain);
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();
