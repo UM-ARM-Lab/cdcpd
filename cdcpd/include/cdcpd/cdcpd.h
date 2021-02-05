@@ -134,7 +134,7 @@ class CDCPD
                     const cv::Mat &depth,
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
-                    PointCloud::Ptr template_cloud,
+                    const PointCloud::Ptr template_cloud,
                     PointsNormals points_normals,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
@@ -162,18 +162,6 @@ class CDCPD
                                    const cv::Mat &mask,
                                    const Eigen::Matrix3f &intrinsics,
                                    float kvis);
-
-#ifdef NOUSE
-  Eigen::VectorXi is_occluded(const Eigen::Matrix3Xf& vertices,
-                              const cv::Mat& depth,
-                              const cv::Mat& mask,
-                              const Eigen::Matrix3f& intrinsics,
-              const bool is_sim);
-#endif
-
-  Eigen::Matrix3Xf blend_result(const Eigen::Matrix3Xf &Y_pred,
-                                const Eigen::Matrix3Xf &Y_cpd,
-                                const Eigen::VectorXi &is_occluded);
 
   Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X,
                        const Eigen::Matrix3Xf &Y,
