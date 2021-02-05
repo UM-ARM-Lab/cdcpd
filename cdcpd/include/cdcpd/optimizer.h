@@ -56,6 +56,10 @@ class Optimizer
                                             Objects const &objects,
                                             bool self_intersection = true,
                                             bool interation_constrain = true);
+  
+  PointsNormals test_box(const Eigen::Matrix3Xf &last_template,
+                                                            shape_msgs::SolidPrimitive const &box,
+                                                            geometry_msgs::Pose const &pose);
 
  private:
   [[nodiscard]] bool gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;

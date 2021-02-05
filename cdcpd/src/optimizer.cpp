@@ -204,7 +204,6 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
 
   Matrix4Xf tf_inv = transform.inverse();
 
-
   Vector3f box_x_dir = orientation.col(0);
   Vector3f box_y_dir = orientation.col(1);
   Vector3f box_z_dir = orientation.col(2);
@@ -226,6 +225,7 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
       normalVecs.col(i) = c_x * box_x_dir + 
 			  c_y * box_y_dir + 
 			  c_z * box_z_dir;
+      normalVecs.col(i).normalize();
       const Vector3f nearestPt_box_frame(c_x * box_x/2 + (1-abs(c_x)) * x,
                                          c_y * box_y/2 + (1-abs(c_y)) * y,
                                          c_z * box_z/2 + (1-abs(c_z)) * z);
@@ -236,19 +236,19 @@ Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template, shape_m
       Vector3f nearestPt_box_frame;
       if (abs(ratio_x) > abs(ratio_y) && abs(ratio_x) > abs(ratio_z))
       {
-	float sign_x = ratio_x > 0 ? 1.0 : -1.0;
-	normalVecs.col(i) = sign_x * box_x_dir;
-	nearestPt_box_frame(0) = sign_x * box_x/2; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = z;
+        float sign_x = ratio_x > 0 ? 1.0 : -1.0;
+        normalVecs.col(i) = sign_x * box_x_dir;
+        nearestPt_box_frame(0) = sign_x * box_x/2; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = z;
       } else if (abs(ratio_y) > abs(ratio_x) && abs(ratio_y) > abs(ratio_z))
       {
-	float sign_y = ratio_y > 0 ? 1.0 : -1.0;
-	normalVecs.col(i) = sign_y * box_y_dir;
-	nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = sign_y * box_y/2; nearestPt_box_frame(2) = z;
+        float sign_y = ratio_y > 0 ? 1.0 : -1.0;
+        normalVecs.col(i) = sign_y * box_y_dir;
+        nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = sign_y * box_y/2; nearestPt_box_frame(2) = z;
       } else
       {
-	float sign_z = ratio_z > 0 ? 1.0 : -1.0;
-	normalVecs.col(i) = sign_z * box_z_dir;
-	nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = sign_z * box_z/2;
+        float sign_z = ratio_z > 0 ? 1.0 : -1.0;
+        normalVecs.col(i) = sign_z * box_z_dir;
+        nearestPt_box_frame(0) = x; nearestPt_box_frame(1) = y; nearestPt_box_frame(2) = sign_z * box_z/2;
       }
       nearestPts.col(i) = (transform * nearestPt_box_frame.homogeneous()).head(3);
     }
@@ -494,6 +494,13 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
 
   // NOTE: this might be faster
   // PMP::build_AABB_tree(mesh, tree);
+}
+
+PointsNormals Optimizer::test_box(const Eigen::Matrix3Xf &last_template,
+                                                            shape_msgs::SolidPrimitive const &box,
+                                                            geometry_msgs::Pose const &pose)
+{
+  return nearest_points_and_normal_box(last_template, box, pose);
 }
 
 Matrix3Xf
