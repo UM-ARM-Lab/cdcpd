@@ -525,7 +525,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
   // Add interaction constraints
   if (interaction_constrain)
   {
-    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "added interaction constraint");
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << points_normals.size() << " interaction constraints");
     for (auto const &[i, point_normal_pair] : enumerate(points_normals))
     {
       auto const &[contact_point, normal] = point_normal_pair;
@@ -539,7 +539,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
 
   if (self_intersection)
   {
-    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding self intersection constrain");
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << E.cols() * E.cols() << " self intersection constraints");
     auto[startPts, endPts] = nearest_points_line_segments(last_template, E);
     for (int row = 0; row < E.cols(); ++row)
     {
@@ -639,6 +639,8 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
       }
     } else
     {
+      // TODO: with obstacle constraints, the problem can become unsolvable, in which case we should make it part of
+      //  the objective function instead of a hard constraint.
       ROS_DEBUG_STREAM_NAMED(LOGNAME, "Status: " << model.get(GRB_IntAttr_Status));
       exit(-1);
     }
