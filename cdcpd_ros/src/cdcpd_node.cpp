@@ -315,7 +315,7 @@ struct CDCPD_Moveit_Node {
       auto add_point_normal = [&](int contact_idx, int body_idx) {
         // FIXME: the contact point in moveit frame seems to be wrong
         auto const contact_point_moveit_frame = contact.pos;
-        auto const normal_moveit_frame = res.contacts.begin()->second.begin()->normal;
+        auto const normal_moveit_frame = contact.nearest_points[1] - contact.nearest_points[0];
         Eigen::Vector3d const contact_point_cdcpd_frame = cdcpd_to_moveit.inverse() * contact_point_moveit_frame;
         Eigen::Vector3d const normal_cdcpd_frame = cdcpd_to_moveit.inverse() * normal_moveit_frame;
         points_normals.emplace_back(contact_point_cdcpd_frame.cast<float>(), normal_cdcpd_frame.cast<float>());
@@ -340,13 +340,11 @@ struct CDCPD_Moveit_Node {
           arrow.color.r = 1.0;
           arrow.color.g = 0.0;
           arrow.color.b = 1.0;
-          arrow.color.a = 1.0;
+          arrow.color.a = 0.6;
           arrow.scale.x = 0.005;
           arrow.scale.y = 0.01;
-          arrow.scale.z = 0;
+          arrow.scale.z = 0.02;
           arrow.pose.orientation.w = 1;
-          auto const normal_cdcpd_frame_scaled = normal_cdcpd_frame.normalized() * 0.1;
-          Eigen::Vector3d arrow_end_point_cdcpd_frame = contact_point_cdcpd_frame + normal_cdcpd_frame;
           arrow.points.push_back(ConvertTo<geometry_msgs::Point>(contact.nearest_points[0]));
           arrow.points.push_back(ConvertTo<geometry_msgs::Point>(contact.nearest_points[1]));
 
@@ -387,8 +385,18 @@ struct CDCPD_Moveit_Node {
     }
 
     planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor);
-    planning_scene->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
-    auto robot_state = planning_scene->getCurrentStateNonConst();
+
+    // customize by excluding some objects
+    auto& world = planning_scene->getWorldNonConst();
+    std::vector<std::string> objects_to_ignore{"collision_sphere.link_1"};
+    for (auto const& object_to_ignore : objects_to_ignore) {
+      auto success = world->removeObject(object_to_ignore);
+      if (not success) {
+        ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to remove " << object_to_ignore);
+      }
+    }
+
+    auto& robot_state = planning_scene->getCurrentStateNonConst();
 
     // remove the attached "tool boxes"
     std::vector<std::string> objects_to_detach{"left_tool_box", "right_tool_box"};
@@ -401,6 +409,8 @@ struct CDCPD_Moveit_Node {
         ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to detach " << object_to_detach);
       }
     }
+
+    planning_scene->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
 
     // attach to the robot base link, sort of hacky but MoveIt only has API for checking robot vs self/world,
     // so we have to make the tracked points part of the robot, hence "attached collision objects"
@@ -419,9 +429,6 @@ struct CDCPD_Moveit_Node {
       robot_state.attachBody(collision_body_name, {sphere}, {tracked_point_pose_moveit_frame},
                              std::vector<std::string>{}, "base");
     }
-
-    // this shouldn't be necessary...!?
-    planning_scene->setCurrentState(robot_state);
 
     // visualize
     visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
