@@ -102,6 +102,7 @@ struct CDCPD_Moveit_Node {
   robot_model::RobotModelPtr model_;
   moveit_visual_tools::MoveItVisualTools visual_tools_;
   std::string moveit_frame{"robot_root"};
+  constexpr static auto const min_distance_threshold{0.10};
 
   CDCPD_Moveit_Node()
       : ph("~"),
@@ -204,10 +205,7 @@ struct CDCPD_Moveit_Node {
         pre_template_publisher.publish(tracked_points);
       }
 
-      //    auto const objects = get_moveit_planning_scene_as_mesh(scene_monitor);
       auto const points_normals = moveit_get_points_normals(scene_monitor_, tf_buffer, kinect_tf_name, tracked_points);
-
-      ros::Duration(0.5).sleep();
 
       auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config,
                              gripper_idx, true, true);
@@ -300,9 +298,14 @@ struct CDCPD_Moveit_Node {
 
       auto const contact = contacts[0];
       auto add_interaction_constraint = [&](int contact_idx, int body_idx, std::string body_name,
-                                            Eigen::Vector3d const& tracked_point, Eigen::Vector3d const& object_point) {
-        Eigen::Vector3d normal_moveit_frame = contact.nearest_points[1] - contact.nearest_points[0];
-        Eigen::Vector3d const contact_point_cdcpd_frame = cdcpd_to_moveit.inverse() * object_point;
+                                            Eigen::Vector3d const& tracked_point_moveit_frame,
+                                            Eigen::Vector3d const& object_point_moveit_frame) {
+        // NOTE: if the tracked_point is inside the object, contact.depth will be negative. In this case, the normal
+        // points in the opposite direction, starting at object_point and going _away_ from tracked_point.
+        auto const normal_direction_moveit_frame = contact.depth > 0.0 ? 1.0 : -1.0;
+        Eigen::Vector3d normal_moveit_frame =
+            (tracked_point_moveit_frame - object_point_moveit_frame) * normal_direction_moveit_frame;
+        Eigen::Vector3d const contact_point_cdcpd_frame = cdcpd_to_moveit.inverse() * object_point_moveit_frame;
         Eigen::Vector3d const normal_cdcpd_frame = cdcpd_to_moveit.inverse() * normal_moveit_frame;
         auto get_point_idx = [&]() {
           unsigned int point_idx;
@@ -310,8 +313,8 @@ struct CDCPD_Moveit_Node {
           return point_idx;
         };
         auto const point_idx = get_point_idx();
-        points_normals.emplace_back(InteractionConstraint{point_idx, contact_point_cdcpd_frame.cast<float>(),
-                                                          normal_cdcpd_frame.cast<float>()});
+//        points_normals.emplace_back(InteractionConstraint{point_idx, contact_point_cdcpd_frame.cast<float>(),
+//                                                          normal_cdcpd_frame.cast<float>()});
 
         // debug & visualize
         {
@@ -333,37 +336,48 @@ struct CDCPD_Moveit_Node {
           arrow.color.r = 1.0;
           arrow.color.g = 0.0;
           arrow.color.b = 1.0;
-          arrow.color.a = 0.6;
+          arrow.color.a = 0.2;
           arrow.scale.x = 0.001;
           arrow.scale.y = 0.002;
           arrow.scale.z = 0.002;
           arrow.pose.orientation.w = 1;
-          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(object_point));
-          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(tracked_point));
+          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_moveit_frame));
+          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(tracked_point_moveit_frame));
+
+          vm::Marker normal;
+          normal.id = 100 * contact_idx + 0;
+          normal.action = vm::Marker::ADD;
+          normal.type = vm::Marker::ARROW;
+          normal.ns = "normal";
+          normal.header.frame_id = moveit_frame;
+          normal.header.stamp = ros::Time::now();
+          normal.color.r = 0.4;
+          normal.color.g = 1.0;
+          normal.color.b = 0.7;
+          normal.color.a = 0.6;
+          normal.scale.x = 0.0015;
+          normal.scale.y = 0.0025;
+          normal.scale.z = 0.0025;
+          normal.pose.orientation.w = 1;
+          normal.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_moveit_frame));
+          Eigen::Vector3d const normal_end_point_moveit_frame =
+              object_point_moveit_frame + normal_moveit_frame.normalized() * 0.02;
+          normal.points.push_back(ConvertTo<geometry_msgs::Point>(normal_end_point_moveit_frame));
 
           contact_markers.markers.push_back(arrow);
+          contact_markers.markers.push_back(normal);
         }
       };
 
-      if (contact.depth > 0.15) {
+      if (contact.depth > min_distance_threshold) {
         continue;
       }
-      if (contact_names.first.find(collision_body_prefix) != std::string::npos) {
-        if (contact.depth < 0) {
-          add_interaction_constraint(contact_idx, 0, contact_names.first, contact.nearest_points[1],
-                                     contact.nearest_points[0]);
-        } else {
-          add_interaction_constraint(contact_idx, 0, contact_names.first, contact.nearest_points[0],
-                                     contact.nearest_points[1]);
-        }
-      } else if (contact_names.second.find(collision_body_prefix) != std::string::npos) {
-        if (contact.depth < 0) {
-          add_interaction_constraint(contact_idx, 1, contact_names.second, contact.nearest_points[0],
-                                     contact.nearest_points[1]);
-        } else {
-          add_interaction_constraint(contact_idx, 1, contact_names.second, contact.nearest_points[1],
-                                     contact.nearest_points[0]);
-        }
+      if (contact.body_name_1.find(collision_body_prefix) != std::string::npos) {
+        add_interaction_constraint(contact_idx, 0, contact.body_name_1, contact.nearest_points[0],
+                                   contact.nearest_points[1]);
+      } else if (contact.body_name_2.find(collision_body_prefix) != std::string::npos) {
+        add_interaction_constraint(contact_idx, 1, contact.body_name_2, contact.nearest_points[1],
+                                   contact.nearest_points[0]);
       } else {
         continue;
       }
@@ -373,7 +387,8 @@ struct CDCPD_Moveit_Node {
 
     vm::MarkerArray clear_array;
     vm::Marker clear_marker;
-    clear_marker.type = vm::Marker::DELETEALL;
+    clear_marker.action = vm::Marker::DELETEALL;
+    clear_array.markers.push_back(clear_marker);
     contact_marker_pub.publish(clear_array);
     contact_marker_pub.publish(contact_markers);
     return points_normals;
