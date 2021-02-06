@@ -102,7 +102,7 @@ struct CDCPD_Moveit_Node {
   robot_model::RobotModelPtr model_;
   moveit_visual_tools::MoveItVisualTools visual_tools_;
   std::string moveit_frame{"robot_root"};
-  constexpr static auto const min_distance_threshold{0.10};
+  constexpr static auto const min_distance_threshold{0.02};
 
   CDCPD_Moveit_Node()
       : ph("~"),
@@ -313,8 +313,8 @@ struct CDCPD_Moveit_Node {
           return point_idx;
         };
         auto const point_idx = get_point_idx();
-//        points_normals.emplace_back(InteractionConstraint{point_idx, contact_point_cdcpd_frame.cast<float>(),
-//                                                          normal_cdcpd_frame.cast<float>()});
+        points_normals.emplace_back(InteractionConstraint{point_idx, contact_point_cdcpd_frame.cast<float>(),
+                                                          normal_cdcpd_frame.cast<float>()});
 
         // debug & visualize
         {
@@ -413,9 +413,11 @@ struct CDCPD_Moveit_Node {
     auto& world = planning_scene->getWorldNonConst();
     std::vector<std::string> objects_to_ignore{"collision_sphere.link_1"};
     for (auto const& object_to_ignore : objects_to_ignore) {
-      auto success = world->removeObject(object_to_ignore);
-      if (not success) {
-        ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to remove " << object_to_ignore);
+      if (world->hasObject(object_to_ignore)) {
+        auto success = world->removeObject(object_to_ignore);
+        if (not success) {
+          ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to remove " << object_to_ignore);
+        }
       }
     }
 

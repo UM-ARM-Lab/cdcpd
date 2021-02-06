@@ -529,17 +529,18 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
   }
 
   // Add interaction constraints
+  GRBQuadExpr interaction_objective_fn(0);
   if (interaction_constrain)
   {
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << points_normals.size() << " interaction constraints");
     for (auto const &[i, point_normal_pair] : enumerate(points_normals))
     {
       auto const &[point_idx, contact_point, normal] = point_normal_pair;
-      auto const interaction_constraint_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) * normal(0, 0) +
-                                            (vars[point_idx * 3 + 1] - contact_point(1, 0)) * normal(1, 0) +
-                                            (vars[point_idx * 3 + 2] - contact_point(2, 0)) * normal(2, 0) >=
-                                            0.0;
-      model.addConstr(interaction_constraint_i, "interaction constraint " + std::to_string(i));
+      auto const interaction_constraint_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) +
+                                            (vars[point_idx * 3 + 1] - contact_point(1, 0)) +
+                                            (vars[point_idx * 3 + 2] - contact_point(2, 0));
+//      model.addConstr(interaction_constraint_i, "interaction constraint " + std::to_string(i));
+      interaction_objective_fn += 0.5 * -interaction_constraint_i;
     }
   }
 
@@ -604,7 +605,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
 
   // Build the objective function
   {
-    GRBQuadExpr objective_fn = gripper_objective_fn;
+    GRBQuadExpr objective_fn = gripper_objective_fn + interaction_objective_fn;
     for (ssize_t i = 0; i < num_vectors; ++i)
     {
       const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
@@ -622,11 +623,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
   {
     model.optimize();
     if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL)
-      // || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL || model.get(GRB_IntAttr_Status) == GRB_NUMERIC ||
-      // modelGRB_INF_OR_UNBD)
     {
-      // std::cout << "Y" << std::endl;
-      // std::cout << Y << std::endl;
       for (ssize_t i = 0; i < num_vectors; i++)
       {
         Y_opt(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);
