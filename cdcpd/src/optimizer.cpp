@@ -536,11 +536,11 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
     for (auto const &[i, point_normal_pair] : enumerate(points_normals))
     {
       auto const &[point_idx, contact_point, normal] = point_normal_pair;
-      auto const interaction_constraint_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) +
-                                            (vars[point_idx * 3 + 1] - contact_point(1, 0)) +
-                                            (vars[point_idx * 3 + 2] - contact_point(2, 0));
+      auto const interaction_constraint_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) * normal(0, 0) +
+                                            (vars[point_idx * 3 + 1] - contact_point(1, 0)) * normal(1, 0) +
+                                            (vars[point_idx * 3 + 2] - contact_point(2, 0)) * normal(2, 0);
 //      model.addConstr(interaction_constraint_i, "interaction constraint " + std::to_string(i));
-      interaction_objective_fn += 0.5 * -interaction_constraint_i;
+      interaction_objective_fn += 0.01 * -interaction_constraint_i;
     }
   }
 
