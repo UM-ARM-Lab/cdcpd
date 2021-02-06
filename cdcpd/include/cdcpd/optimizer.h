@@ -48,7 +48,13 @@ using Normals = Eigen::Matrix3Xf;
 using Point = Eigen::Vector3f;
 using Normal = Eigen::Vector3f;
 using PointNormal = std::tuple<Point, Normal>; // Hyperplane, for enforcing that tracked points aren't inside obstacles
-using PointsNormals = std::vector<PointNormal>;
+struct InteractionConstraint
+{
+  unsigned int point_idx;
+  Eigen::Vector3f point;
+  Eigen::Vector3f normal;
+};
+using InteractionConstraints = std::vector<InteractionConstraint>;
 
 class Optimizer
 {
@@ -58,7 +64,7 @@ class Optimizer
   [[nodiscard]] Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y,
                                             const Eigen::Matrix2Xi &E,
                                             const std::vector<FixedPoint> &fixed_points,
-                                            PointsNormals const &points_normals,
+                                            InteractionConstraints const &points_normals,
                                             bool self_intersection = true,
                                             bool interation_constrain = true);
 

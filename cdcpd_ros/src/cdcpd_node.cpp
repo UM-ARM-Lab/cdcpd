@@ -7,7 +7,6 @@
 #include <moveit/collision_detection/collision_tools.h>
 #include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
 #include <moveit/collision_detection_bullet/collision_env_bullet.h>
-#include <moveit/collision_detection_fcl/collision_common.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 #include <opencv2/imgproc/types_c.h>
@@ -129,14 +128,6 @@ struct CDCPD_Moveit_Node {
     // Moveit Visualization
     auto const viz_robot_state_topic = "cdcpd_moveit_node/robot_state";
     visual_tools_.loadRobotStatePub(viz_robot_state_topic, false);
-    //    auto const viz_planning_scene_topic = "cdcpd_moveit_node/planning_scene";
-    //    visual_tools_.setPlanningSceneTopic(viz_planning_scene_topic);
-    //    visual_tools_.setManualSceneUpdating();
-    //    auto const loaded_viz_psm = visual_tools_.loadPlanningSceneMonitor();
-    //    if (not loaded_viz_psm) {
-    //      ROS_WARN_STREAM_NAMED(LOGNAME, "Failed to load planning scene monitor on topic " <<
-    //      viz_planning_scene_topic);
-    //    }
 
     // TF objects for getting gripper positions
     auto tf_buffer = tf2_ros::Buffer();
@@ -217,10 +208,9 @@ struct CDCPD_Moveit_Node {
       auto const points_normals = moveit_get_points_normals(scene_monitor_, tf_buffer, kinect_tf_name, tracked_points);
 
       ros::Duration(0.5).sleep();
-      return;
 
       auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config,
-                             gripper_idx, false, false);
+                             gripper_idx, true, true);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids
@@ -290,37 +280,40 @@ struct CDCPD_Moveit_Node {
     ros::waitForShutdown();
   }
 
-  PointsNormals find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-                                                tf2_ros::Buffer const& tf_buffer, std::string kinect_tf_name,
-                                                Eigen::Isometry3d const& cdcpd_to_moveit) {
+  InteractionConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+                                                         tf2_ros::Buffer const& tf_buffer,
+                                                         Eigen::Isometry3d const& cdcpd_to_moveit) {
     collision_detection::CollisionRequest req;
     req.contacts = true;
-    req.verbose = true;
     req.distance = true;
     req.max_contacts_per_pair = 1;
-    req.max_contacts = 1;
     collision_detection::CollisionResult res;
     planning_scene->checkCollisionUnpadded(req, res);
 
     vm::MarkerArray contact_markers;
-    PointsNormals points_normals;
+    InteractionConstraints points_normals;
     auto contact_idx = 0u;
     for (auto const& [contact_names, contacts] : res.contacts) {
-      // FIXME: is this correct?
       if (contacts.empty()) {
         continue;
       }
 
       auto const contact = contacts[0];
-      auto add_point_normal = [&](int contact_idx, int body_idx) {
-        // FIXME: the contact point in moveit frame seems to be wrong
-        auto const contact_point_moveit_frame = contact.pos;
-        auto const normal_moveit_frame = contact.nearest_points[1] - contact.nearest_points[0];
-        Eigen::Vector3d const contact_point_cdcpd_frame = cdcpd_to_moveit.inverse() * contact_point_moveit_frame;
+      auto add_interaction_constraint = [&](int contact_idx, int body_idx, std::string body_name,
+                                            Eigen::Vector3d const& tracked_point, Eigen::Vector3d const& object_point) {
+        Eigen::Vector3d normal_moveit_frame = contact.nearest_points[1] - contact.nearest_points[0];
+        Eigen::Vector3d const contact_point_cdcpd_frame = cdcpd_to_moveit.inverse() * object_point;
         Eigen::Vector3d const normal_cdcpd_frame = cdcpd_to_moveit.inverse() * normal_moveit_frame;
-        points_normals.emplace_back(contact_point_cdcpd_frame.cast<float>(), normal_cdcpd_frame.cast<float>());
+        auto get_point_idx = [&]() {
+          unsigned int point_idx;
+          sscanf(body_name.c_str(), (collision_body_prefix + "%u").c_str(), &point_idx);
+          return point_idx;
+        };
+        auto const point_idx = get_point_idx();
+        points_normals.emplace_back(InteractionConstraint{point_idx, contact_point_cdcpd_frame.cast<float>(),
+                                                          normal_cdcpd_frame.cast<float>()});
 
-        // NOTE: debug & visualize
+        // debug & visualize
         {
           ROS_DEBUG_STREAM_NAMED(
               LOGNAME, "nearest point: " << contact.nearest_points[0].x() << ", " << contact.nearest_points[0].y()
@@ -341,21 +334,36 @@ struct CDCPD_Moveit_Node {
           arrow.color.g = 0.0;
           arrow.color.b = 1.0;
           arrow.color.a = 0.6;
-          arrow.scale.x = 0.005;
-          arrow.scale.y = 0.01;
-          arrow.scale.z = 0.02;
+          arrow.scale.x = 0.001;
+          arrow.scale.y = 0.002;
+          arrow.scale.z = 0.002;
           arrow.pose.orientation.w = 1;
-          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(contact.nearest_points[0]));
-          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(contact.nearest_points[1]));
+          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(object_point));
+          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(tracked_point));
 
           contact_markers.markers.push_back(arrow);
         }
       };
 
+      if (contact.depth > 0.15) {
+        continue;
+      }
       if (contact_names.first.find(collision_body_prefix) != std::string::npos) {
-        add_point_normal(contact_idx, 0);
+        if (contact.depth < 0) {
+          add_interaction_constraint(contact_idx, 0, contact_names.first, contact.nearest_points[1],
+                                     contact.nearest_points[0]);
+        } else {
+          add_interaction_constraint(contact_idx, 0, contact_names.first, contact.nearest_points[0],
+                                     contact.nearest_points[1]);
+        }
       } else if (contact_names.second.find(collision_body_prefix) != std::string::npos) {
-        add_point_normal(contact_idx, 1);
+        if (contact.depth < 0) {
+          add_interaction_constraint(contact_idx, 1, contact_names.second, contact.nearest_points[0],
+                                     contact.nearest_points[1]);
+        } else {
+          add_interaction_constraint(contact_idx, 1, contact_names.second, contact.nearest_points[1],
+                                     contact.nearest_points[0]);
+        }
       } else {
         continue;
       }
@@ -371,9 +379,9 @@ struct CDCPD_Moveit_Node {
     return points_normals;
   }
 
-  PointsNormals moveit_get_points_normals(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor,
-                                          tf2_ros::Buffer const& tf_buffer, std::string kinect_tf_name,
-                                          PointCloud::ConstPtr tracked_points) {
+  InteractionConstraints moveit_get_points_normals(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor,
+                                                   tf2_ros::Buffer const& tf_buffer, std::string kinect_tf_name,
+                                                   PointCloud::ConstPtr tracked_points) {
     Eigen::Isometry3d cdcpd_to_moveit;
     try {
       auto const cdcpd_to_moveit_msg = tf_buffer.lookupTransform(moveit_frame, kinect_tf_name, ros::Time(0));
@@ -433,7 +441,7 @@ struct CDCPD_Moveit_Node {
     // visualize
     visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
 
-    return find_nearest_points_and_normals(planning_scene, tf_buffer, kinect_tf_name, cdcpd_to_moveit);
+    return find_nearest_points_and_normals(planning_scene, tf_buffer, cdcpd_to_moveit);
   }
 };
 

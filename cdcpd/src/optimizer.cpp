@@ -394,8 +394,7 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_mesh(const Matr
   return {nearestPts, normalVecs};
 }
 
-std::tuple<MatrixXf, MatrixXf>
-nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
+std::tuple<MatrixXf, MatrixXf> nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
 {
   // find the nearest points on the line segments
   // refer to the website https://math.stackexchange.com/questions/846054/closest-points-on-two-line-segments
@@ -465,12 +464,11 @@ nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E)
 }
 
 std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_template,
-                                  shape_msgs::SolidPrimitive const &box,
-                                  geometry_msgs::Pose const &pose)
+                                                shape_msgs::SolidPrimitive const &box,
+                                                geometry_msgs::Pose const &pose)
 {
   return nearest_points_and_normal_box(last_template, box, pose);
 }
-
 
 Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
     : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
@@ -489,7 +487,7 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _
 }
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
-                                PointsNormals const &points_normals, const bool self_intersection,
+                                InteractionConstraints const &points_normals, const bool self_intersection,
                                 const bool interaction_constrain)
 {
   // Y: Y^t in Eq. (21)
@@ -536,12 +534,12 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << points_normals.size() << " interaction constraints");
     for (auto const &[i, point_normal_pair] : enumerate(points_normals))
     {
-      auto const &[contact_point, normal] = point_normal_pair;
-      model.addConstr((vars[i * 3 + 0] - contact_point(0)) * normal(0) +
-                      (vars[i * 3 + 1] - contact_point(1)) * normal(1) +
-                      (vars[i * 3 + 2] - contact_point(2)) * normal(2) >=
-                      0.0,
-                      "interaction constraint " + std::to_string(i));
+      auto const &[point_idx, contact_point, normal] = point_normal_pair;
+      auto const interaction_constraint_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) * normal(0, 0) +
+                                            (vars[point_idx * 3 + 1] - contact_point(1, 0)) * normal(1, 0) +
+                                            (vars[point_idx * 3 + 2] - contact_point(2, 0)) * normal(2, 0) >=
+                                            0.0;
+      model.addConstr(interaction_constraint_i, "interaction constraint " + std::to_string(i));
     }
   }
 
@@ -639,8 +637,10 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
     {
       // TODO: with obstacle constraints, the problem can become unsolvable, in which case we should make it part of
       //  the objective function instead of a hard constraint.
-      ROS_DEBUG_STREAM_NAMED(LOGNAME, "Status: " << model.get(GRB_IntAttr_Status));
-      exit(-1);
+      std::stringstream error_msg;
+      error_msg << "Gruobi Status: " << model.get(GRB_IntAttr_Status);
+      ROS_FATAL_STREAM_NAMED(LOGNAME, error_msg.str());
+      throw std::runtime_error(error_msg.str());
     }
   }
 
