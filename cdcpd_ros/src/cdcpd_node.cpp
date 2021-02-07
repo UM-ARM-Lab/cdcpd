@@ -103,7 +103,7 @@ struct CDCPD_Moveit_Node {
   moveit_visual_tools::MoveItVisualTools visual_tools_;
   std::string moveit_frame{"robot_root"};
   std::string kinect_tf_name = "kinect2_rgb_optical_frame";
-  constexpr static auto const min_distance_threshold{0.10};
+  double min_distance_threshold{0.01};
 
   CDCPD_Moveit_Node()
       : ph("~"),
@@ -149,6 +149,7 @@ struct CDCPD_Moveit_Node {
     auto const k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     auto const beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
     auto const zeta = ROSHelpers::GetParam<double>(ph, "zeta", 10.0);
+    min_distance_threshold = ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01);
     auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001);
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
     auto const kinect_name = ROSHelpers::GetParam<std::string>(ph, "kinect_name", "kinect2");
