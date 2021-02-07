@@ -28,7 +28,7 @@ int main()
   orien.x = 0.3826834; orien.y = 0; orien.z = 0; orien.w = 0.9238795;
   pose.orientation = orien;
 
-  Optimizer opt(init_temp, last_temp, 1.0);
+  Optimizer opt(init_temp, last_temp, 1.0, 1.0);
   auto res = opt.test_box(init_temp, box, pose);
 
   std::cout << std::get<0>(res) << std::endl;

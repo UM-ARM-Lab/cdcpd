@@ -105,7 +105,7 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal(const Matrix3Xf
           auto const transformed_vertex = transform * ConvertTo<Eigen::Vector3d>(vertex);
           vertex = ConvertTo<geometry_msgs::Point>(transformed_vertex);
         }
-        auto const points_normals = nearest_points_and_normal_mesh(last_template, mesh_transformed);
+        auto const obstacle_constraints = nearest_points_and_normal_mesh(last_template, mesh_transformed);
       }
     }
 
@@ -130,7 +130,7 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal(const Matrix3Xf
         plane.coef[0] = transformed_coef[0];
         plane.coef[1] = transformed_coef[1];
         plane.coef[2] = transformed_coef[2];
-        auto const points_normals = nearest_points_and_normal_plane(last_template, plane_transformed);
+        auto const obstacle_constraints = nearest_points_and_normal_plane(last_template, plane_transformed);
       }
     }
 
@@ -152,17 +152,19 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal(const Matrix3Xf
         {
           case shape_msgs::SolidPrimitive::BOX:
           {
-            auto const points_normals = nearest_points_and_normal_box(last_template, primitive, primitive_pose);
+            auto const obstacle_constraints = nearest_points_and_normal_box(last_template, primitive, primitive_pose);
             break;
           }
           case shape_msgs::SolidPrimitive::CYLINDER:
           {
-            auto const points_normals = nearest_points_and_normal_cylinder(last_template, primitive, primitive_pose);
+            auto const obstacle_constraints = nearest_points_and_normal_cylinder(last_template, primitive,
+                                                                                 primitive_pose);
             break;
           }
           case shape_msgs::SolidPrimitive::SPHERE:
           {
-            auto const points_normals = nearest_points_and_normal_sphere(last_template, primitive, primitive_pose);
+            auto const obstacle_constraints = nearest_points_and_normal_sphere(last_template, primitive,
+                                                                               primitive_pose);
             break;
           }
           default:
@@ -470,25 +472,13 @@ std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_tem
   return nearest_points_and_normal_box(last_template, box, pose);
 }
 
-Optimizer::Optimizer(const Eigen::Matrix3Xf _init_temp, const Eigen::Matrix3Xf _last_temp, const float _stretch_lambda)
-    : initial_template(_init_temp), last_template(_last_temp), stretch_lambda(_stretch_lambda)
+Optimizer::Optimizer(const Eigen::Matrix3Xf init_temp, const Eigen::Matrix3Xf last_temp, const float stretch_lambda, const float obstacle_cost_weight)
+    : initial_template(init_temp), last_template(last_temp), stretch_lambda(stretch_lambda), obstacle_cost_weight(obstacle_cost_weight)
 {
-  // NOTE: simplifying the mesh?
-  // typedef boost::property_map<Mesh, CGAL::edge_is_feature_t>::type EIFMap;
-  // EIFMap eif = get(CGAL::edge_is_feature, mesh);
-  // PMP::detect_sharp_edges(mesh, 30, eif);
-  // PMP::smooth_mesh(mesh, PMP::parameters::number_of_iterations(3)
-  //                                      .use_safety_constraints(false) // authorize all moves
-  //                                      .edge_is_constrained_map(eif));
-  // CGAL::Subdivision_method_3::CatmullClark_subdivision(mesh, CGAL::parameters::number_of_iterations(4));
-
-  // NOTE: this might be faster
-  // PMP::build_AABB_tree(mesh, tree);
 }
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
-                                InteractionConstraints const &points_normals, const bool self_intersection,
-                                const bool interaction_constrain)
+                                InteractionConstraints const &obstacle_constraints)
 {
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
@@ -528,23 +518,21 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
     model.update();
   }
 
-  // Add interaction constraints
-  GRBQuadExpr interaction_objective_fn(0);
-  if (interaction_constrain)
+  // Add obstacle constraints
+  GRBLinExpr obstacle_objective_fn(0);
   {
-    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << points_normals.size() << " interaction constraints");
-    for (auto const &[i, point_normal_pair] : enumerate(points_normals))
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << obstacle_constraints.size() << " obstacle constraints " << obstacle_cost_weight);
+    for (auto const &[i, obstacle_constraint] : enumerate(obstacle_constraints))
     {
-      auto const &[point_idx, contact_point, normal] = point_normal_pair;
-      auto const interaction_constraint_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) * normal(0, 0) +
-                                            (vars[point_idx * 3 + 1] - contact_point(1, 0)) * normal(1, 0) +
-                                            (vars[point_idx * 3 + 2] - contact_point(2, 0)) * normal(2, 0);
-//      model.addConstr(interaction_constraint_i, "interaction constraint " + std::to_string(i));
-      interaction_objective_fn += 0.01 * -interaction_constraint_i;
+      auto const &[point_idx, contact_point, normal] = obstacle_constraint;
+      auto const obstacle_cost_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) * normal(0, 0) +
+                                   (vars[point_idx * 3 + 1] - contact_point(1, 0)) * normal(1, 0) +
+                                   (vars[point_idx * 3 + 2] - contact_point(2, 0)) * normal(2, 0);
+      obstacle_objective_fn += obstacle_cost_weight * -obstacle_cost_i;
     }
   }
 
-  if (self_intersection)
+  // Self-intersection constraints
   {
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << E.cols() * E.cols() << " self intersection constraints");
     auto[startPts, endPts] = nearest_points_line_segments(last_template, E);
@@ -605,7 +593,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
 
   // Build the objective function
   {
-    GRBQuadExpr objective_fn = gripper_objective_fn + interaction_objective_fn;
+    GRBQuadExpr objective_fn = gripper_objective_fn + obstacle_objective_fn;
     for (ssize_t i = 0; i < num_vectors; ++i)
     {
       const auto expr0 = vars[i * 3 + 0] - Y_copy(0, i);
@@ -624,6 +612,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
     model.optimize();
     if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL)
     {
+      ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "obstacle cost " << obstacle_objective_fn.getValue());
       for (ssize_t i = 0; i < num_vectors; i++)
       {
         Y_opt(0, i) = vars[i * 3 + 0].get(GRB_DoubleAttr_X);

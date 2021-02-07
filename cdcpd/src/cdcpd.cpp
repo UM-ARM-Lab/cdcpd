@@ -324,8 +324,7 @@ point_clouds_from_images(const cv::Mat &depth_image,
                          const cv::Mat &mask,
                          const Eigen::Matrix3f &intrinsics,
                          const Eigen::Vector3f &lower_bounding_box,
-                         const Eigen::Vector3f &upper_bounding_box,
-                         const bool is_sim)
+                         const Eigen::Vector3f &upper_bounding_box)
 {
   // depth_image: CV_16U depth image
   // rgb_image: CV_8U3C rgb image
@@ -337,21 +336,10 @@ point_clouds_from_images(const cv::Mat &depth_image,
   // lower_bounding_box_vec: bounding for mask
   // upper_bounding_box_vec: bounding for mask
 
-  // class T;
   float pixel_len;
   cv::Mat local_depth_image;
-  if (is_sim)
-  {
-    // using T = float;
-    local_depth_image = depth_image.clone();
-    pixel_len = 0.0000222222;
-  } else
-  {
-    // using T = uint16_t;
-    depth_image.convertTo(local_depth_image, CV_32F);
-    pixel_len = 0.0002645833;
-  }
-  // using DepthTraits = cdcpd::DepthTraits<T>;
+  depth_image.convertTo(local_depth_image, CV_32F);
+  pixel_len = 0.0002645833;
 
   // Use correct principal point from calibration
   auto const center_x = intrinsics(0, 2);
@@ -621,7 +609,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud, // this needs a different data
              const double lambda,
              const double k,
              const float zeta,
-             const bool is_sim) :
+             const float obstacle_cost_weight) :
     CDCPD(ros::NodeHandle(),
           ros::NodeHandle("~"),
           template_cloud,
@@ -632,22 +620,22 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud, // this needs a different data
           lambda,
           k,
           zeta,
-          is_sim)
+          obstacle_cost_weight)
 {}
 
-CDCPD::CDCPD(ros::NodeHandle _nh,
-             ros::NodeHandle _ph,
+CDCPD::CDCPD(ros::NodeHandle nh,
+             ros::NodeHandle ph,
              PointCloud::ConstPtr template_cloud,
              const Matrix2Xi &_template_edges,
-             const bool _use_recovery,
-             const double _alpha,
-             const double _beta,
-             const double _lambda,
-             const double _k,
-             const float _zeta,
-             const bool _is_sim) :
-    nh(_nh),
-    ph(_ph),
+             const bool use_recovery,
+             const double alpha,
+             const double beta,
+             const double lambda,
+             const double k,
+             const float zeta,
+             const float obstacle_cost_weight) :
+    nh(nh),
+    ph(ph),
     original_template(template_cloud->getMatrixXfMap().topRows(3)),
     template_edges(_template_edges),
     last_lower_bounding_box(original_template.rowwise().minCoeff()), // TODO make configurable?
@@ -655,19 +643,18 @@ CDCPD::CDCPD(ros::NodeHandle _nh,
     lle_neighbors(8), // TODO make configurable?
     m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)), // TODO make configurable?
     tolerance(1e-4), // TODO make configurable?
-    alpha(_alpha), // TODO make configurable?
-    beta(_beta), // TODO make configurable?
+    alpha(alpha), // TODO make configurable?
+    beta(beta), // TODO make configurable?
     w(0.1), // TODO make configurable?
     initial_sigma_scale(1.0 / 8), // TODO make configurable?
-    start_lambda(_lambda), // TODO make configurable?
-    annealing_factor(0.6), // TODO make configurable?
-    k(_k),
+    start_lambda(lambda),
+    k(k),
     max_iterations(100), // TODO make configurable?
     kvis(1e3),
-    zeta(_zeta),
-    use_recovery(_use_recovery),
-    last_grasp_status({false, false}),
-    is_sim(_is_sim)
+    zeta(zeta),
+    obstacle_cost_weight(obstacle_cost_weight),
+    use_recovery(use_recovery),
+    last_grasp_status({false, false})
 {
   Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
   last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
@@ -712,12 +699,10 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                 const Mat &mask,
                                 const cv::Matx33d &intrinsics,
                                 const PointCloud::Ptr template_cloud,
-                                InteractionConstraints points_normals,
+                                InteractionConstraints obstacle_constraints,
                                 const smmap::AllGrippersSinglePoseDelta &q_dot,
                                 const smmap::AllGrippersSinglePose &q_config,
                                 const std::vector<bool> &is_grasped,
-                                const bool self_intersection,
-                                const bool interaction_constrain,
                                 const int pred_choice)
 {
   std::vector<int> idx_map;
@@ -787,8 +772,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
     }
   }
 
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, points_normals, q_dot,
-                                    q_config, self_intersection, interaction_constrain, pred_choice);
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints, q_dot,
+                                    q_config, pred_choice);
 
   last_grasp_status = is_grasped;
 
@@ -801,17 +786,15 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                 const Mat &mask,
                                 const cv::Matx33d &intrinsics,
                                 const PointCloud::Ptr template_cloud,
-                                InteractionConstraints points_normals,
+                                InteractionConstraints obstacle_constraints,
                                 const smmap::AllGrippersSinglePoseDelta &q_dot,
                                 const smmap::AllGrippersSinglePose &q_config,
                                 const Eigen::MatrixXi &gripper_idx,
-                                const bool self_intersection,
-                                const bool interaction_constrain,
                                 const int pred_choice)
 {
   this->gripper_idx = gripper_idx;
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, points_normals, q_dot,
-                                    q_config, self_intersection, interaction_constrain, pred_choice);
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints, q_dot,
+                                    q_config, pred_choice);
   return cdcpd_out;
 
 }
@@ -821,11 +804,9 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                 const Mat &mask,
                                 const cv::Matx33d &intrinsics,
                                 const PointCloud::Ptr template_cloud,
-                                InteractionConstraints points_normals,
+                                InteractionConstraints obstacle_constraints,
                                 const smmap::AllGrippersSinglePoseDelta &q_dot,
                                 const smmap::AllGrippersSinglePose &q_config,
-                                const bool self_intersection,
-                                const bool interaction_constrain,
                                 const int pred_choice)
 {
   // rgb: CV_8U3C rgb image
@@ -835,13 +816,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
   // template_edges: (2, K) matrix corresponding to E in the paper
 
   assert(rgb.type() == CV_8UC3);
-  if (is_sim)
-  {
-    assert(depth.type() == CV_32F);
-  } else
-  {
-    assert(depth.type() == CV_16U);
-  }
+  assert(depth.type() == CV_16U);
   assert(mask.type() == CV_8U);
   assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
@@ -866,8 +841,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                                        mask,
                                                        intrinsics_eigen,
                                                        last_lower_bounding_box - bounding_box_extend,
-                                                       last_upper_bounding_box + bounding_box_extend,
-                                                       is_sim);
+                                                       last_upper_bounding_box + bounding_box_extend);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
@@ -925,9 +899,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
 
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
-  Optimizer opt(original_template, Y, 1.1);
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, points_normals, self_intersection,
-                        interaction_constrain);
+  Optimizer opt(original_template, Y, 1.1, obstacle_cost_weight);
+  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, obstacle_constraints);
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();

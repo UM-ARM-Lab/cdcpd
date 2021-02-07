@@ -102,7 +102,8 @@ struct CDCPD_Moveit_Node {
   robot_model::RobotModelPtr model_;
   moveit_visual_tools::MoveItVisualTools visual_tools_;
   std::string moveit_frame{"robot_root"};
-  constexpr static auto const min_distance_threshold{0.02};
+  std::string kinect_tf_name = "kinect2_rgb_optical_frame";
+  constexpr static auto const min_distance_threshold{0.10};
 
   CDCPD_Moveit_Node()
       : ph("~"),
@@ -147,12 +148,14 @@ struct CDCPD_Moveit_Node {
     auto const lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     auto const k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     auto const beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
+    auto const zeta = ROSHelpers::GetParam<double>(ph, "zeta", 10.0);
+    auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001);
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
     auto const kinect_name = ROSHelpers::GetParam<std::string>(ph, "kinect_name", "kinect2");
     auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
 
     // For use with TF and "fixed points" for the constrain step
-    auto const kinect_tf_name = kinect_name + "_rgb_optical_frame";
+    kinect_tf_name = kinect_name + "_rgb_optical_frame";
     auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
     auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
     auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
@@ -160,7 +163,8 @@ struct CDCPD_Moveit_Node {
     Eigen::MatrixXi gripper_idx(1, 2);
     gripper_idx << left_node_idx, right_node_idx;
 
-    auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring);
+    auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring, zeta,
+                       obstacle_cost_weight);
 
     // TODO: Make these const references? Does this matter for CV types?
     auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
@@ -207,8 +211,8 @@ struct CDCPD_Moveit_Node {
 
       auto const points_normals = moveit_get_points_normals(scene_monitor_, tf_buffer, kinect_tf_name, tracked_points);
 
-      auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config,
-                             gripper_idx, true, true);
+      auto const out =
+          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config, gripper_idx);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids
@@ -302,19 +306,19 @@ struct CDCPD_Moveit_Node {
                                             Eigen::Vector3d const& object_point_moveit_frame) {
         // NOTE: if the tracked_point is inside the object, contact.depth will be negative. In this case, the normal
         // points in the opposite direction, starting at object_point and going _away_ from tracked_point.
-        auto const normal_direction_moveit_frame = contact.depth > 0.0 ? 1.0 : -1.0;
-        Eigen::Vector3d normal_moveit_frame =
-            (tracked_point_moveit_frame - object_point_moveit_frame) * normal_direction_moveit_frame;
-        Eigen::Vector3d const contact_point_cdcpd_frame = cdcpd_to_moveit.inverse() * object_point_moveit_frame;
-        Eigen::Vector3d const normal_cdcpd_frame = cdcpd_to_moveit.inverse() * normal_moveit_frame;
+        auto const normal_dir = contact.depth > 0.0 ? 1.0 : -1.0;
+        Eigen::Vector3d const object_point_cdcpd_frame = cdcpd_to_moveit.inverse() * object_point_moveit_frame;
+        Eigen::Vector3d const tracked_point_cdcpd_frame = cdcpd_to_moveit.inverse() * tracked_point_moveit_frame;
+        Eigen::Vector3d const normal_cdcpd_frame =
+            ((tracked_point_cdcpd_frame - object_point_cdcpd_frame) * normal_dir).normalized();
         auto get_point_idx = [&]() {
           unsigned int point_idx;
           sscanf(body_name.c_str(), (collision_body_prefix + "%u").c_str(), &point_idx);
           return point_idx;
         };
         auto const point_idx = get_point_idx();
-        points_normals.emplace_back(InteractionConstraint{point_idx, contact_point_cdcpd_frame.cast<float>(),
-                                                          normal_cdcpd_frame.cast<float>()});
+        points_normals.emplace_back(
+            ObstacleConstraint{point_idx, object_point_cdcpd_frame.cast<float>(), normal_cdcpd_frame.cast<float>()});
 
         // debug & visualize
         {
@@ -349,7 +353,7 @@ struct CDCPD_Moveit_Node {
           normal.action = vm::Marker::ADD;
           normal.type = vm::Marker::ARROW;
           normal.ns = "normal";
-          normal.header.frame_id = moveit_frame;
+          normal.header.frame_id = kinect_tf_name;
           normal.header.stamp = ros::Time::now();
           normal.color.r = 0.4;
           normal.color.g = 1.0;
@@ -359,10 +363,9 @@ struct CDCPD_Moveit_Node {
           normal.scale.y = 0.0025;
           normal.scale.z = 0.0025;
           normal.pose.orientation.w = 1;
-          normal.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_moveit_frame));
-          Eigen::Vector3d const normal_end_point_moveit_frame =
-              object_point_moveit_frame + normal_moveit_frame.normalized() * 0.02;
-          normal.points.push_back(ConvertTo<geometry_msgs::Point>(normal_end_point_moveit_frame));
+          normal.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_cdcpd_frame));
+          Eigen::Vector3d const normal_end_point_cdcpd_frame = object_point_cdcpd_frame + normal_cdcpd_frame * 0.02;
+          normal.points.push_back(ConvertTo<geometry_msgs::Point>(normal_end_point_cdcpd_frame));
 
           contact_markers.markers.push_back(arrow);
           contact_markers.markers.push_back(normal);

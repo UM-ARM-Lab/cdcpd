@@ -85,35 +85,35 @@ class CDCPD
  public:
   struct Output
   {
-    PointCloudRGB::Ptr original_cloud;
-    PointCloud::Ptr masked_point_cloud;
-    PointCloud::Ptr downsampled_cloud;
-    PointCloud::Ptr cpd_output;
-    PointCloud::Ptr cpd_predict;
-    PointCloud::Ptr gurobi_output;
+    [[maybe_unused]] PointCloudRGB::Ptr original_cloud;
+    [[maybe_unused]] PointCloud::Ptr masked_point_cloud;
+    [[maybe_unused]] PointCloud::Ptr downsampled_cloud;
+    [[maybe_unused]] PointCloud::Ptr cpd_output;
+    [[maybe_unused]] PointCloud::Ptr cpd_predict;
+    [[maybe_unused]] PointCloud::Ptr gurobi_output;
   };
 
   CDCPD(PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
-        bool _use_recovery = true,
+        bool use_recovery = false,
         double alpha = 0.5,
         double beta = 1.0,
         double lambda = 1.0,
         double k = 100.0,
         float zeta = 10.0,
-        bool is_sim = false);
+        float obstacle_cost_weight = 1.0);
 
   CDCPD(ros::NodeHandle nh,
         ros::NodeHandle ph,
         PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
-        bool _use_recovery = true,
+        bool use_recovery = false,
         double alpha = 0.5,
         double beta = 1.0,
         double lambda = 1.0,
         double k = 100.0,
         float zeta = 10.0,
-        bool is_sim = false);
+        float obstacle_cost_weight = 1.0);
 
   // If you have want gripper constraints to be added & removed automatically based on is_grasped & distance
   Output operator()(const cv::Mat &rgb,
@@ -125,8 +125,6 @@ class CDCPD
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const std::vector<bool> &is_grasped = {},
-                    bool self_intersection = true,
-                    bool interaction_constrain = true,
                     int pred_choice = 0);
 
   // If you want to used a known correspondence between grippers and node indices (gripper_idx)
@@ -139,8 +137,6 @@ class CDCPD
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const Eigen::MatrixXi &gripper_idx = {},
-                    bool self_intersection = true,
-                    bool interaction_constrain = true,
                     int pred_choice = 0);
 
   // The common implementation that the above overloads call
@@ -152,8 +148,6 @@ class CDCPD
                     InteractionConstraints points_normals,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {}, // TODO: this should be one data structure
                     const smmap::AllGrippersSinglePose &q_config = {},
-                    bool self_intersection = true,
-                    bool interaction_constrain = true,
                     int pred_choice = 0);
 
  private:
@@ -196,17 +190,15 @@ class CDCPD
   double w;
   double initial_sigma_scale;
   double start_lambda;
-  double annealing_factor;
   double k;
   int max_iterations;
   float kvis;
   float zeta;
-  bool use_recovery;
-  double last_sigma2;
+  float obstacle_cost_weight;
+  bool use_recovery = false;
   Eigen::MatrixXi gripper_idx;
   std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
   std::vector<bool> last_grasp_status;
-  bool is_sim;
 };
 
 #endif
