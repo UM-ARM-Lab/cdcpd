@@ -1,6 +1,5 @@
 #include <arc_utilities/enumerate.h>
 #include <cdcpd/cdcpd.h>
-#include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <moveit/collision_detection/collision_common.h>
@@ -23,16 +22,31 @@
 #include "cdcpd_ros/kinect_sub.h"
 
 constexpr auto const LOGNAME = "cdcpd_node";
+constexpr auto const PERF_LOGGER = "perf";
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace ehc = EigenHelpersConversions;
 
+std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, float const length);
+std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, Eigen::Vector3f start_position,
+                                                               Eigen::Vector3f end_position);
+
 std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, float const length) {
-  Eigen::Matrix3Xf template_vertices = Eigen::Matrix3Xf::Zero(3, num_points);  // Y^0 in the paper
-  template_vertices.row(0).setLinSpaced(num_points, -length / 2, length / 2);
-  template_vertices.row(2).array() += 1.0f;
+  Eigen::Vector3f start_position(-length / 2, 0, 1.0);
+  Eigen::Vector3f end_position(length / 2, 0, 1.0);
+  return makeRopeTemplate(num_points, start_position, end_position);
+}
+
+std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, Eigen::Vector3f start_position,
+                                                               Eigen::Vector3f end_position) {
+  Eigen::Matrix3Xf template_vertices(3, num_points);  // Y^0 in the paper
+  Eigen::VectorXf thetas = Eigen::VectorXf::LinSpaced(num_points, 0, 1);
+  for (auto i = 0u; i < num_points; ++i) {
+    auto const theta = thetas.row(i);
+    template_vertices.col(i) = (end_position - start_position) * theta + start_position;
+  }
   Eigen::Matrix2Xi template_edges(2, num_points - 1);
   template_edges(0, 0) = 0;
   template_edges(1, template_edges.cols() - 1) = num_points - 1;
@@ -90,7 +104,7 @@ void print_bodies(robot_state::RobotState const& state) {
   for (auto const& b : bs) {
     std::cout << b->getName() << '\n';
   }
-};
+}
 
 struct CDCPD_Moveit_Node {
   std::string collision_body_prefix{"cdcpd_tracked_point_"};
@@ -104,18 +118,26 @@ struct CDCPD_Moveit_Node {
   std::string moveit_frame{"robot_root"};
   std::string kinect_tf_name = "kinect2_rgb_optical_frame";
   double min_distance_threshold{0.01};
+  bool moveit_ready{false};
+
+  tf2_ros::Buffer tf_buffer_;
+  tf2_ros::TransformListener tf_listener_;
 
   CDCPD_Moveit_Node()
       : ph("~"),
         scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description")),
         model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>()),
         model_(model_loader_->getModel()),
-        visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_) {
+        visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
+        tf_listener_(tf_buffer_) {
     std::string robot_namespace{"hdt_michigan"};
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
     scene_monitor_->startSceneMonitor(scene_topic);
-    scene_monitor_->requestPlanningSceneState(service_name);
+    moveit_ready = scene_monitor_->requestPlanningSceneState(service_name);
+    if (not moveit_ready) {
+      ROS_WARN_NAMED(LOGNAME, "Could not get the moveit planning scene. This means no obstacle constraints.");
+    }
 
     // Publsihers for the data, some visualizations, others consumed by other nodes
     auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 1);
@@ -131,10 +153,6 @@ struct CDCPD_Moveit_Node {
     auto const viz_robot_state_topic = "cdcpd_moveit_node/robot_state";
     visual_tools_.loadRobotStatePub(viz_robot_state_topic, false);
 
-    // TF objects for getting gripper positions
-    auto tf_buffer = tf2_ros::Buffer();
-    auto tf_listener = tf2_ros::TransformListener(tf_buffer);
-
     // Initial connectivity model of rope
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
     auto const length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
@@ -143,7 +161,7 @@ struct CDCPD_Moveit_Node {
     auto tracked_points = makeCloud(template_vertices);
 
     // CDCPD parameters
-    // ENHANCE: describe each parameter in words (and a pointer to an equation/section of paper)
+    // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
     auto const alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     auto const lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     auto const k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
@@ -167,13 +185,13 @@ struct CDCPD_Moveit_Node {
     auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring, zeta,
                        obstacle_cost_weight);
 
-    // TODO: Make these const references? Does this matter for CV types?
-    auto const callback = [&](cv::Mat rgb, cv::Mat depth, cv::Matx33d intrinsics) {
+    auto const callback = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics) {
+      auto const t0 = ros::Time::now();
       smmap::AllGrippersSinglePose q_config;
       // Left Gripper
       if (not left_tf_name.empty()) {
         try {
-          auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
+          auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
           auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
           ROS_DEBUG_STREAM("left gripper: " << config.translation());
           q_config.push_back(config);
@@ -186,7 +204,7 @@ struct CDCPD_Moveit_Node {
       // Right Gripper
       if (not right_tf_name.empty()) {
         try {
-          auto const gripper = tf_buffer.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
+          auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
           auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
           ROS_DEBUG_STREAM("right gripper: " << config.translation());
           q_config.push_back(config);
@@ -210,10 +228,13 @@ struct CDCPD_Moveit_Node {
         pre_template_publisher.publish(tracked_points);
       }
 
-      auto const points_normals = moveit_get_points_normals(scene_monitor_, tf_buffer, kinect_tf_name, tracked_points);
+      ObstacleConstraints obstacle_constraints;
+      if (moveit_ready) {
+        obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
+      }
 
       auto const out =
-          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, points_normals, q_dot, q_config, gripper_idx);
+          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, q_dot, q_config, gripper_idx);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids
@@ -272,6 +293,10 @@ struct CDCPD_Moveit_Node {
         auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
         order_pub.publish(rope_marker);
       }
+
+      auto const t1 = ros::Time::now();
+      auto const dt = t1 - t0;
+      ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
     };
 
     auto const options = KinectSub::SubscriptionOptions(kinect_name + "/" + kinect_channel);
@@ -283,9 +308,8 @@ struct CDCPD_Moveit_Node {
     ros::waitForShutdown();
   }
 
-  InteractionConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-                                                         tf2_ros::Buffer const& tf_buffer,
-                                                         Eigen::Isometry3d const& cdcpd_to_moveit) {
+  ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+                                                      Eigen::Isometry3d const& cdcpd_to_moveit) {
     collision_detection::CollisionRequest req;
     req.contacts = true;
     req.distance = true;
@@ -294,7 +318,7 @@ struct CDCPD_Moveit_Node {
     planning_scene->checkCollisionUnpadded(req, res);
 
     vm::MarkerArray contact_markers;
-    InteractionConstraints points_normals;
+    ObstacleConstraints obstacle_constraints;
     auto contact_idx = 0u;
     for (auto const& [contact_names, contacts] : res.contacts) {
       if (contacts.empty()) {
@@ -318,7 +342,7 @@ struct CDCPD_Moveit_Node {
           return point_idx;
         };
         auto const point_idx = get_point_idx();
-        points_normals.emplace_back(
+        obstacle_constraints.emplace_back(
             ObstacleConstraint{point_idx, object_point_cdcpd_frame.cast<float>(), normal_cdcpd_frame.cast<float>()});
 
         // debug & visualize
@@ -395,15 +419,13 @@ struct CDCPD_Moveit_Node {
     clear_array.markers.push_back(clear_marker);
     contact_marker_pub.publish(clear_array);
     contact_marker_pub.publish(contact_markers);
-    return points_normals;
+    return obstacle_constraints;
   }
 
-  InteractionConstraints moveit_get_points_normals(planning_scene_monitor::PlanningSceneMonitorPtr const& scene_monitor,
-                                                   tf2_ros::Buffer const& tf_buffer, std::string kinect_tf_name,
-                                                   PointCloud::ConstPtr tracked_points) {
+  ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points) {
     Eigen::Isometry3d cdcpd_to_moveit;
     try {
-      auto const cdcpd_to_moveit_msg = tf_buffer.lookupTransform(moveit_frame, kinect_tf_name, ros::Time(0));
+      auto const cdcpd_to_moveit_msg = tf_buffer_.lookupTransform(moveit_frame, kinect_tf_name, ros::Time(0));
       cdcpd_to_moveit = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit_msg.transform);
     } catch (tf2::TransformException const& ex) {
       ROS_WARN_STREAM_THROTTLE(
@@ -411,7 +433,7 @@ struct CDCPD_Moveit_Node {
       return {};
     }
 
-    planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor);
+    planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor_);
 
     // customize by excluding some objects
     auto& world = planning_scene->getWorldNonConst();
@@ -462,7 +484,7 @@ struct CDCPD_Moveit_Node {
     // visualize
     visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
 
-    return find_nearest_points_and_normals(planning_scene, tf_buffer, cdcpd_to_moveit);
+    return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
   }
 };
 

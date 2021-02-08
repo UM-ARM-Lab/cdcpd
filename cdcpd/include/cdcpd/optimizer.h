@@ -54,7 +54,7 @@ struct ObstacleConstraint
   Eigen::Vector3f point;
   Eigen::Vector3f normal;
 };
-using InteractionConstraints = std::vector<ObstacleConstraint>;
+using ObstacleConstraints = std::vector<ObstacleConstraint>;
 
 class Optimizer
 {
@@ -64,7 +64,7 @@ class Optimizer
   [[nodiscard]] Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y,
                                             const Eigen::Matrix2Xi &E,
                                             const std::vector<FixedPoint> &fixed_points,
-                                            InteractionConstraints const &points_normals);
+                                            ObstacleConstraints const &points_normals);
 
   std::tuple<Points, Normals> test_box(const Eigen::Matrix3Xf &last_template,
                                        shape_msgs::SolidPrimitive const &box,

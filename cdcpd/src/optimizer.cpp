@@ -478,7 +478,7 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf init_temp, const Eigen::Matrix3Xf la
 }
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
-                                InteractionConstraints const &obstacle_constraints)
+                                ObstacleConstraints const &obstacle_constraints)
 {
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
