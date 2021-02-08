@@ -85,12 +85,12 @@ class CDCPD
  public:
   struct Output
   {
-    [[maybe_unused]] PointCloudRGB::Ptr original_cloud;
-    [[maybe_unused]] PointCloud::Ptr masked_point_cloud;
-    [[maybe_unused]] PointCloud::Ptr downsampled_cloud;
-    [[maybe_unused]] PointCloud::Ptr cpd_output;
-    [[maybe_unused]] PointCloud::Ptr cpd_predict;
-    [[maybe_unused]] PointCloud::Ptr gurobi_output;
+    PointCloudRGB::Ptr original_cloud;
+    PointCloud::Ptr masked_point_cloud;
+    PointCloud::Ptr downsampled_cloud;
+    PointCloud::Ptr cpd_output;
+    PointCloud::Ptr cpd_predict;
+    PointCloud::Ptr gurobi_output;
   };
 
   CDCPD(PointCloud::ConstPtr template_cloud,

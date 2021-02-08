@@ -47,19 +47,8 @@ catkin_package(
         INCLUDE_DIRS include
         LIBRARIES cdcpd
         CATKIN_DEPENDS ${CATKIN_PACKAGES}
-        DEPENDS
+        DEPENDS OpenCV Eigen3 GUROBI FIASS Qt5 PCL # NOTE: adding CGAL errors, but it's working so whatever
 )
-
-include_directories(include PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>)
-include_directories(include SYSTEM PUBLIC
-        ${PCL_INCLUDE_DIRS}
-        ${OpenCV_INCLUDE_DIRS})
-include_directories(include SYSTEM PRIVATE
-        ${catkin_INCLUDE_DIRS}
-        ${GUROBI_INCLUDE_DIRS}
-        ${FAISS_INCLUDE_DIRS})
 
 ### The library itself
 add_library(cdcpd SHARED
@@ -68,7 +57,15 @@ add_library(cdcpd SHARED
         src/obs_util.cpp
         src/past_template_matcher.cpp
         )
-
+target_include_directories(cdcpd PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>)
+target_include_directories(cdcpd SYSTEM PUBLIC
+        ${PCL_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
+        ${catkin_INCLUDE_DIRS}
+        ${GUROBI_INCLUDE_DIRS}
+        ${FAISS_INCLUDE_DIRS})
 target_link_libraries(cdcpd PUBLIC
         lapack
         ${PCL_LIBRARIES}
