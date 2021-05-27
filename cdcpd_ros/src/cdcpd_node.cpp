@@ -25,6 +25,14 @@
 constexpr auto const LOGNAME = "cdcpd_node";
 constexpr auto const PERF_LOGGER = "perf";
 
+Eigen::Vector3f extent_to_env_size(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
+  return (bbox_upper - bbox_lower).cwiseAbs() + 2 * bounding_box_extend;
+};
+
+Eigen::Vector3f extent_to_center(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
+  return (bbox_upper + bbox_lower) / 2;
+};
+
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
@@ -245,16 +253,6 @@ struct CDCPD_Moveit_Node {
         bbox_msg.header.stamp = ros::Time::now();
         bbox_msg.header.frame_id = kinect_tf_name;
 
-        auto extent_to_env_size = [](Eigen::Vector3f const& bbox_lower,
-                                     Eigen::Vector3f const& bbox_upper) -> Eigen::Vector3f {
-          return (bbox_upper - bbox_lower).cwiseAbs() + Eigen::Vector3f(0.2, 0.2, 0.2);
-        };
-
-        auto extent_to_center = [](Eigen::Vector3f const& bbox_lower,
-                                   Eigen::Vector3f const& bbox_upper) -> Eigen::Vector3f {
-          return (bbox_upper + bbox_lower) / 2;
-        };
-
         auto const bbox_size = extent_to_env_size(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
         auto const bbox_center = extent_to_center(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
         bbox_msg.pose.position.x = bbox_center.x();
@@ -281,7 +279,7 @@ struct CDCPD_Moveit_Node {
       }
 
       auto const out =
-          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, q_dot, q_config, gripper_idx);
+          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, length, q_dot, q_config, gripper_idx);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids

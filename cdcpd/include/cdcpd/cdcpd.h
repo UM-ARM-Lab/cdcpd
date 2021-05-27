@@ -51,6 +51,8 @@
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
 
+inline Eigen::Vector3f const bounding_box_extend(0.1, 0.2, 0.1);
+
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::FT FT;
 typedef K::Point_3 Point_3;
@@ -121,6 +123,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
+                    double rope_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const std::vector<bool> &is_grasped = {},
@@ -132,6 +135,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
+                    double rope_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const Eigen::MatrixXi &gripper_idx = {},
@@ -143,6 +147,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
+                    double rope_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {}, // TODO: this should be one data structure
                     const smmap::AllGrippersSinglePose &q_config = {},
                     int pred_choice = 0);

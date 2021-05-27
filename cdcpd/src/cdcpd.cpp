@@ -26,8 +26,6 @@
 
 auto constexpr const LOGNAME = "cdcpd";
 
-Eigen::Vector3f const bounding_box_extend(0.1, 0.1, 0.1);
-
 using cv::Mat;
 using cv::Vec3b;
 using Eigen::ArrayXf;
@@ -658,7 +656,6 @@ CDCPD::CDCPD(ros::NodeHandle nh,
     use_recovery(use_recovery),
     last_grasp_status({false, false})
 {
-  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
   last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
   last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 
@@ -701,6 +698,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                 const Mat &mask,
                                 const cv::Matx33d &intrinsics,
                                 const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
+                                const double rope_length,
                                 const smmap::AllGrippersSinglePoseDelta &q_dot,
                                 const smmap::AllGrippersSinglePose &q_config,
                                 const std::vector<bool> &is_grasped,
@@ -773,7 +771,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
     }
   }
 
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints, q_dot,
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints, rope_length, q_dot,
                                     q_config, pred_choice);
 
   last_grasp_status = is_grasped;
@@ -787,13 +785,14 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                 const Mat &mask,
                                 const cv::Matx33d &intrinsics,
                                 const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
+                                const double rope_length,
                                 const smmap::AllGrippersSinglePoseDelta &q_dot,
                                 const smmap::AllGrippersSinglePose &q_config,
                                 const Eigen::MatrixXi &gripper_idx,
                                 const int pred_choice)
 {
   this->gripper_idx = gripper_idx;
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints, q_dot,
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints, rope_length, q_dot,
                                     q_config, pred_choice);
   return cdcpd_out;
 
@@ -804,6 +803,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                 const Mat &mask,
                                 const cv::Matx33d &intrinsics,
                                 const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
+                                const double rope_length,
                                 const smmap::AllGrippersSinglePoseDelta &q_dot,
                                 const smmap::AllGrippersSinglePose &q_config,
                                 const int pred_choice)
@@ -839,7 +839,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                                        intrinsics_eigen,
                                                        last_lower_bounding_box - bounding_box_extend,
                                                        last_upper_bounding_box + bounding_box_extend);
-  ROS_INFO_STREAM_NAMED(LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
@@ -848,11 +848,11 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
-  ROS_DEBUG_STREAM_NAMED(LOGNAME, "Points in cloud before leaf: " << cloud->width);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in cloud before leaf: " << cloud->width);
   sor.setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
   sor.filter(*cloud_downsampled);
-  ROS_INFO_STREAM_NAMED(LOGNAME, "Points in fully filtered: " << cloud_downsampled->width);
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in fully filtered: " << cloud_downsampled->width);
   if (cloud_downsampled->width == 0)
   {
     ROS_ERROR_STREAM_NAMED(LOGNAME, "No point in the filtered point cloud");
@@ -897,7 +897,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
   Optimizer opt(original_template, Y, 1.1, obstacle_cost_weight);
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, obstacle_constraints);
+  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, obstacle_constraints, rope_length);
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();

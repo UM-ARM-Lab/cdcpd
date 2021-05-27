@@ -34,6 +34,8 @@ using std::max;
 using std::min;
 constexpr auto const LOGNAME = "optimizer";
 
+static Eigen::Vector3f const bounding_box_extend;
+
 // Builds the quadratic term ||point_a - point_b||^2
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
 // where Q is [ I, -I
@@ -478,7 +480,7 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf init_temp, const Eigen::Matrix3Xf la
 }
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
-                                ObstacleConstraints const &obstacle_constraints)
+                                ObstacleConstraints const &obstacle_constraints, const double rope_length)
 {
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
@@ -511,8 +513,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
     for (ssize_t i = 0; i < E.cols(); ++i)
     {
       model.addQConstr(buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3), GRB_LESS_EQUAL,
-                       stretch_lambda * stretch_lambda *
-                       (initial_template.col(E(0, i)) - initial_template.col(E(1, i))).squaredNorm(),
+                       stretch_lambda * stretch_lambda * rope_length,
                        "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
     }
     model.update();
