@@ -32,7 +32,7 @@ class KinectSub {
         : nh(),
           pnh("~"),
           hints("raw", ros::TransportHints(), pnh),
-          queue_size(1),
+          queue_size(10),
           topic_prefix(prefix),
           rgb_topic(topic_prefix + "/image_color_rect"),
           depth_topic(topic_prefix + "/image_depth_rect"),
