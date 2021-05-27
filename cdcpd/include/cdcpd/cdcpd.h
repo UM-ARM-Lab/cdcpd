@@ -147,7 +147,6 @@ class CDCPD
                     const smmap::AllGrippersSinglePose &q_config = {},
                     int pred_choice = 0);
 
- private:
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices,
                                    const cv::Mat &depth,
                                    const cv::Mat &mask,

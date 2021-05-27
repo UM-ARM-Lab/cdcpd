@@ -2,6 +2,7 @@
 #include <cdcpd/cdcpd.h>
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <jsk_recognition_msgs/BoundingBox.h>
 #include <moveit/collision_detection/collision_common.h>
 #include <moveit/collision_detection/collision_tools.h>
 #include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
@@ -29,9 +30,10 @@ namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace ehc = EigenHelpersConversions;
 
-std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, float const length);
-std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, Eigen::Vector3f start_position,
-                                                               Eigen::Vector3f end_position);
+std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int num_points, float length);
+
+std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int num_points, const Eigen::Vector3f& start_position,
+                                                               const Eigen::Vector3f& end_position);
 
 std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, float const length) {
   Eigen::Vector3f start_position(-length / 2, 0, 1.0);
@@ -39,8 +41,9 @@ std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_poi
   return makeRopeTemplate(num_points, start_position, end_position);
 }
 
-std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, Eigen::Vector3f start_position,
-                                                               Eigen::Vector3f end_position) {
+std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points,
+                                                               const Eigen::Vector3f& start_position,
+                                                               const Eigen::Vector3f& end_position) {
   Eigen::Matrix3Xf template_vertices(3, num_points);  // Y^0 in the paper
   Eigen::VectorXf thetas = Eigen::VectorXf::LinSpaced(num_points, 0, 1);
   for (auto i = 0u; i < num_points; ++i) {
@@ -111,6 +114,7 @@ struct CDCPD_Moveit_Node {
   ros::NodeHandle nh;
   ros::NodeHandle ph;
   ros::Publisher contact_marker_pub;
+  ros::Publisher bbox_pub;
   planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
   robot_model_loader::RobotModelLoaderPtr model_loader_;
   robot_model::RobotModelPtr model_;
@@ -119,6 +123,7 @@ struct CDCPD_Moveit_Node {
   std::string kinect_tf_name = "kinect2_rgb_optical_frame";
   double min_distance_threshold{0.01};
   bool moveit_ready{false};
+  bool moveit_enabled{false};
 
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
@@ -139,24 +144,49 @@ struct CDCPD_Moveit_Node {
       ROS_WARN_NAMED(LOGNAME, "Could not get the moveit planning scene. This means no obstacle constraints.");
     }
 
-    // Publsihers for the data, some visualizations, others consumed by other nodes
-    auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 1);
-    auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 1);
-    auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 1);
-    auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 1);
-    auto pre_template_publisher = nh.advertise<PointCloud>("cdcpd/pre_template", 1);
-    auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 1);
+    // Publishers for the data, some visualizations, others consumed by other nodes
+    auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 10);
+    auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 10);
+    auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 10);
+    auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 10);
+    auto pre_template_publisher = nh.advertise<PointCloud>("cdcpd/pre_template", 10);
+    auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 10);
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
+    bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("cdcpd/bbox", 10);
 
     // Moveit Visualization
     auto const viz_robot_state_topic = "cdcpd_moveit_node/robot_state";
     visual_tools_.loadRobotStatePub(viz_robot_state_topic, false);
 
-    // Initial connectivity model of rope
+    auto const kinect_name = ROSHelpers::GetParam<std::string>(ph, "kinect_name", "kinect2");
+
+    // For use with TF and "fixed points" for the constrain step
+    kinect_tf_name = kinect_name + "_rgb_optical_frame";
+    auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
+    auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
+    auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
+    auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
+    Eigen::MatrixXi gripper_idx(1, 2);
+    gripper_idx << left_node_idx, right_node_idx;
+
+    // Initial connectivity model of rope
     auto const length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
-    auto const [template_vertices, template_edges] = makeRopeTemplate(num_points, length);
+    ROS_INFO_NAMED(LOGNAME, "Waiting for TF...");
+    while (true) {
+      if (tf_buffer_.canTransform(kinect_tf_name, left_tf_name, ros::Time(0)) and
+          tf_buffer_.canTransform(kinect_tf_name, right_tf_name, ros::Time(0))) {
+        break;
+      }
+    }
+    auto const left_gripper = tf_buffer_.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
+    auto const right_gripper = tf_buffer_.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
+    Eigen::Vector3f const start_position =
+        ehc::GeometryVector3ToEigenVector3d(left_gripper.transform.translation).cast<float>();
+    Eigen::Vector3f const end_position =
+        ehc::GeometryVector3ToEigenVector3d(right_gripper.transform.translation).cast<float>();
+    auto const [template_vertices, template_edges] = makeRopeTemplate(num_points, start_position, end_position);
     // Construct the initial template as a PCL cloud
     auto tracked_points = makeCloud(template_vertices);
 
@@ -170,18 +200,7 @@ struct CDCPD_Moveit_Node {
     min_distance_threshold = ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01);
     auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001);
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
-    auto const kinect_name = ROSHelpers::GetParam<std::string>(ph, "kinect_name", "kinect2");
     auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
-
-    // For use with TF and "fixed points" for the constrain step
-    kinect_tf_name = kinect_name + "_rgb_optical_frame";
-    auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
-    auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
-    auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
-    auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
-    Eigen::MatrixXi gripper_idx(1, 2);
-    gripper_idx << left_node_idx, right_node_idx;
-
     auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring, zeta,
                        obstacle_cost_weight);
 
@@ -220,6 +239,34 @@ struct CDCPD_Moveit_Node {
       auto const n_grippers = q_config.size();
       const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
 
+      // publish bbox
+      {
+        jsk_recognition_msgs::BoundingBox bbox_msg;
+        bbox_msg.header.stamp = ros::Time::now();
+        bbox_msg.header.frame_id = kinect_tf_name;
+
+        auto extent_to_env_size = [](Eigen::Vector3f const& bbox_lower,
+                                     Eigen::Vector3f const& bbox_upper) -> Eigen::Vector3f {
+          return (bbox_upper - bbox_lower).cwiseAbs() + Eigen::Vector3f(0.2, 0.2, 0.2);
+        };
+
+        auto extent_to_center = [](Eigen::Vector3f const& bbox_lower,
+                                   Eigen::Vector3f const& bbox_upper) -> Eigen::Vector3f {
+          return (bbox_upper + bbox_lower) / 2;
+        };
+
+        auto const bbox_size = extent_to_env_size(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
+        auto const bbox_center = extent_to_center(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
+        bbox_msg.pose.position.x = bbox_center.x();
+        bbox_msg.pose.position.y = bbox_center.y();
+        bbox_msg.pose.position.z = bbox_center.z();
+        bbox_msg.pose.orientation.w = 1;
+        bbox_msg.dimensions.x = bbox_size.x();
+        bbox_msg.dimensions.y = bbox_size.y();
+        bbox_msg.dimensions.z = bbox_size.z();
+        bbox_pub.publish(bbox_msg);
+      }
+
       // publish the template before processing
       {
         auto time = ros::Time::now();
@@ -229,7 +276,7 @@ struct CDCPD_Moveit_Node {
       }
 
       ObstacleConstraints obstacle_constraints;
-      if (moveit_ready) {
+      if (moveit_ready and moveit_enabled) {
         obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
       }
 
@@ -437,11 +484,16 @@ struct CDCPD_Moveit_Node {
 
     // customize by excluding some objects
     auto& world = planning_scene->getWorldNonConst();
-    std::vector<std::string> objects_to_ignore{"collision_sphere.link_1"};
+    std::vector<std::string> objects_to_ignore{
+        "collision_sphere.link_1",
+        "ground_plane.link",
+    };
     for (auto const& object_to_ignore : objects_to_ignore) {
       if (world->hasObject(object_to_ignore)) {
         auto success = world->removeObject(object_to_ignore);
-        if (not success) {
+        if (success) {
+          ROS_DEBUG_STREAM_NAMED(LOGNAME, "Successfully removed " << object_to_ignore);
+        } else {
           ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to remove " << object_to_ignore);
         }
       }

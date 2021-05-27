@@ -26,6 +26,8 @@
 
 auto constexpr const LOGNAME = "cdcpd";
 
+Eigen::Vector3f const bounding_box_extend(0.1, 0.1, 0.1);
+
 using cv::Mat;
 using cv::Vec3b;
 using Eigen::ArrayXf;
@@ -829,8 +831,6 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
   cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
   Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
 
-  Eigen::Vector3f const bounding_box_extend = Vector3f(0.1, 0.1, 0.1);
-
   // entire_cloud: pointer to the entire point cloud
   // cloud: pointer to the point clouds selected
   auto[entire_cloud, cloud] = point_clouds_from_images(depth,
@@ -839,7 +839,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
                                                        intrinsics_eigen,
                                                        last_lower_bounding_box - bounding_box_extend,
                                                        last_upper_bounding_box + bounding_box_extend);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
+  ROS_INFO_STREAM_NAMED(LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
@@ -848,11 +848,11 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in cloud before leaf: " << cloud->width);
+  ROS_DEBUG_STREAM_NAMED(LOGNAME, "Points in cloud before leaf: " << cloud->width);
   sor.setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
   sor.filter(*cloud_downsampled);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in fully filtered: " << cloud_downsampled->width);
+  ROS_INFO_STREAM_NAMED(LOGNAME, "Points in fully filtered: " << cloud_downsampled->width);
   if (cloud_downsampled->width == 0)
   {
     ROS_ERROR_STREAM_NAMED(LOGNAME, "No point in the filtered point cloud");
@@ -892,7 +892,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
 
   // Next step: optimization.
 
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "fixed points" << pred_fixed_points);
+  ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
 
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
