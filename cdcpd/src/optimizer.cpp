@@ -480,7 +480,7 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf init_temp, const Eigen::Matrix3Xf la
 }
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
-                                ObstacleConstraints const &obstacle_constraints, const double rope_length)
+                                ObstacleConstraints const &obstacle_constraints, const double max_segment_length)
 {
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
@@ -513,7 +513,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
     for (ssize_t i = 0; i < E.cols(); ++i)
     {
       model.addQConstr(buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3), GRB_LESS_EQUAL,
-                       stretch_lambda * stretch_lambda * rope_length,
+                       stretch_lambda * stretch_lambda * max_segment_length,
                        "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
     }
     model.update();

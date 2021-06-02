@@ -65,7 +65,7 @@ class Optimizer
                                             const Eigen::Matrix2Xi &E,
                                             const std::vector<FixedPoint> &fixed_points,
                                             ObstacleConstraints const &points_normals,
-                                            double rope_length);
+                                            double max_segment_length);
 
   std::tuple<Points, Normals> test_box(const Eigen::Matrix3Xf &last_template,
                                        shape_msgs::SolidPrimitive const &box,

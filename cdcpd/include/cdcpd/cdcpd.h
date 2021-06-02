@@ -123,7 +123,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
-                    double rope_length,
+                    double max_segment_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const std::vector<bool> &is_grasped = {},
@@ -135,7 +135,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
-                    double rope_length,
+                    double max_segment_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {},
                     const Eigen::MatrixXi &gripper_idx = {},
@@ -147,7 +147,7 @@ class CDCPD
                     const cv::Mat &mask,
                     const cv::Matx33d &intrinsics,
                     const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
-                    double rope_length,
+                    double max_segment_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {}, // TODO: this should be one data structure
                     const smmap::AllGrippersSinglePose &q_config = {},
                     int pred_choice = 0);

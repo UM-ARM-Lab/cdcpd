@@ -180,7 +180,8 @@ struct CDCPD_Moveit_Node {
     gripper_idx << left_node_idx, right_node_idx;
 
     // Initial connectivity model of rope
-    auto const length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
+    auto const rope_length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
+    auto const max_segment_length = rope_length / num_points;
     ROS_INFO_NAMED(LOGNAME, "Waiting for TF...");
     while (true) {
       if (tf_buffer_.canTransform(kinect_tf_name, left_tf_name, ros::Time(0)) and
@@ -279,7 +280,7 @@ struct CDCPD_Moveit_Node {
       }
 
       auto const out =
-          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, length, q_dot, q_config, gripper_idx);
+          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_idx);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids
