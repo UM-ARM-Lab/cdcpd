@@ -5,13 +5,20 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CATKIN_PACKAGES
+        geometric_shapes
+        geometry_msgs
+        image_geometry
+        image_transport
+        moveit_msgs
+        moveit_ros_planning
+        moveit_visual_tools
+        pybind11_catkin
+        pyrosmsg
+        sdf_tools
+        sensor_msgs
         smmap_models
         smmap_utilities
-        sdf_tools
-        moveit_msgs
-        geometric_shapes
-        pyrosmsg
-        pybind11_catkin
+        std_msgs
         )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/
