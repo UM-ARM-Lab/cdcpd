@@ -110,3 +110,10 @@ install(FILES
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 
 install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
+
+add_executable(cdcpd_node
+        src/cdcpd_ros/kinect_sub.cpp
+        src/cdcpd_node.cpp
+        )
+add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
