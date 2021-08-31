@@ -898,7 +898,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb,
 
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
-  Optimizer opt(original_template, Y, 1.1, obstacle_cost_weight);
+  Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight);
   Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
 
   // NOTE: set stateful member variables for next time

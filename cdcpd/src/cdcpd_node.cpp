@@ -181,7 +181,8 @@ struct CDCPD_Moveit_Node {
 
     // Initial connectivity model of rope
     auto const rope_length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
-    auto const max_segment_length = rope_length / num_points;
+    auto const max_segment_length = rope_length / static_cast<float>(num_points);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
     ROS_INFO_NAMED(LOGNAME, "Waiting for TF...");
     while (true) {
       if (tf_buffer_.canTransform(kinect_tf_name, left_tf_name, ros::Time(0)) and

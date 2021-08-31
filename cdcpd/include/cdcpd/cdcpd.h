@@ -190,7 +190,7 @@ class CDCPD
   double beta;
   double w;
   double initial_sigma_scale;
-  double start_lambda;
+  float start_lambda;
   double k;
   int max_iterations;
   float kvis;
