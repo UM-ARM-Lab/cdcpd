@@ -546,7 +546,13 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
 
   // Find the optimal solution, and extract it
   {
-    model.optimize();
+    try{
+      model.optimize();
+    }
+    catch( const GRBException &e ) {
+      ROS_ERROR_STREAM_NAMED(LOGNAME, env.getErrorMsg());
+      throw GRBException();
+    }
     if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL) {
       ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "obstacle cost " << obstacle_objective_fn.getValue());
       for (ssize_t i = 0; i < num_vectors; i++) {
