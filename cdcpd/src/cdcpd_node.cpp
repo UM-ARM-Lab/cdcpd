@@ -119,6 +119,8 @@ void print_bodies(robot_state::RobotState const& state) {
 
 struct CDCPD_Moveit_Node {
   std::string collision_body_prefix{"cdcpd_tracked_point_"};
+  std::string robot_namespace_;
+  std::string robot_description_;
   ros::NodeHandle nh;
   ros::NodeHandle ph;
   ros::Publisher contact_marker_pub;
@@ -136,14 +138,16 @@ struct CDCPD_Moveit_Node {
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
 
-  CDCPD_Moveit_Node()
-      : ph("~"),
-        scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description")),
-        model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>()),
+  explicit CDCPD_Moveit_Node(std::string const &robot_namespace)
+      : robot_namespace_(robot_namespace),
+        robot_description_(robot_namespace + "/robot_description"),
+        ph("~"),
+        scene_monitor_(
+            std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
+        model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
         model_(model_loader_->getModel()),
         visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
         tf_listener_(tf_buffer_) {
-    std::string robot_namespace{"hdt_michigan"};
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
     scene_monitor_->startSceneMonitor(scene_topic);
@@ -192,6 +196,7 @@ struct CDCPD_Moveit_Node {
     }
     auto const left_gripper = tf_buffer_.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
     auto const right_gripper = tf_buffer_.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
+
     Eigen::Vector3f const start_position =
         ehc::GeometryVector3ToEigenVector3d(left_gripper.transform.translation).cast<float>();
     Eigen::Vector3f const end_position =
@@ -544,7 +549,7 @@ struct CDCPD_Moveit_Node {
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "cdcpd_node");
 
-  CDCPD_Moveit_Node cmn;
+  CDCPD_Moveit_Node cmn("hdt_michigan");
 
   return EXIT_SUCCESS;
 }

@@ -56,8 +56,13 @@ static GRBQuadExpr buildDifferencingQuadraticTerm(GRBVar *point_a, GRBVar *point
 }
 
 static GRBEnv &getGRBEnv() {
-  static GRBEnv env;
-  return env;
+  try {
+    static GRBEnv env;
+    return env;
+  } catch (const GRBException &e) {
+    ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to create gurobi env. Is your license valid? test with gruobi.sh");
+    throw GRBException();
+  }
 }
 
 static Vector3f cgalVec2EigenVec(Vector cgal_v) { return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]); }
