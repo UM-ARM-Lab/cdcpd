@@ -62,17 +62,6 @@ static GRBEnv &getGRBEnv() {
 
 static Vector3f cgalVec2EigenVec(Vector cgal_v) { return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]); }
 
-static Matrix3Xf force_pts(const Matrix3Xf &nearest, const Matrix3Xf &normal, const Matrix3Xf &Y) {
-  Matrix3Xf Y_force = Y;
-  MatrixXf dist_to_obs = ((Y - nearest).array() * normal.array()).colwise().sum();
-  for (int idx = 0; idx < Y.cols(); idx++) {
-    if (dist_to_obs(0, idx) < 0) {
-      Y_force.col(idx) = nearest.col(idx);
-    }
-  }
-  return Y_force;
-}
-
 static Vector3f Pt3toVec(const Point_3 pt) { return Vector3f(float(pt.x()), float(pt.y()), float(pt.z())); }
 
 std::tuple<Points, Normals> Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template,
@@ -417,7 +406,7 @@ std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_tem
   return nearest_points_and_normal_box(last_template, box, pose);
 }
 
-Optimizer::Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template,
+Optimizer::Optimizer(const Eigen::Matrix3Xf initial_templatn, const Eigen::Matrix3Xf last_template,
                      const float stretch_lambda, const float obstacle_cost_weight)
     : initial_template_(initial_template),
       last_template_(last_template),
