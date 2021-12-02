@@ -406,7 +406,7 @@ std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_tem
   return nearest_points_and_normal_box(last_template, box, pose);
 }
 
-Optimizer::Optimizer(const Eigen::Matrix3Xf initial_templatn, const Eigen::Matrix3Xf last_template,
+Optimizer::Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template,
                      const float stretch_lambda, const float obstacle_cost_weight)
     : initial_template_(initial_template),
       last_template_(last_template),

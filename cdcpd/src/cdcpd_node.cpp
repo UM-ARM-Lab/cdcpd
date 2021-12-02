@@ -280,8 +280,8 @@ struct CDCPD_Moveit_Node {
         obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
       }
 
-      auto const out =
-          cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_idx);
+      auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
+                             q_dot, q_config, gripper_idx);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids
@@ -529,8 +529,9 @@ struct CDCPD_Moveit_Node {
 
       // FIXME: not moveit frame, but the base link_frame, could those be different?
       auto sphere = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
-      robot_state.attachBody(collision_body_name, {sphere}, {tracked_point_pose_moveit_frame},
-                             std::vector<std::string>{}, "base");
+
+      robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {sphere},
+                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{}, "base");
     }
 
     // visualize

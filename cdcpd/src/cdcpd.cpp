@@ -79,8 +79,6 @@ static MatrixXf gaussian_kernel(const MatrixXf &Y, double beta) {
   return kernel;
 }
 
-static std::vector<smmap::CollisionData> fake_collision_check(const smmap::AllGrippersSinglePose &) { return {}; }
-
 MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree, int lle_neighbors, double reg) {
   // calculate L in Eq. (15) and Eq. (16)
   // ENHANCE: use tapkee lib to accelarate
@@ -464,9 +462,9 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     for (auto g_idx = 0u; g_idx < num_gripper; g_idx++) {
       Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
       MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
-      MatrixXf::Index minRow, minCol;
+      MatrixXf::Index minCol;
+      grippers(0, g_idx) = static_cast<int>(minCol);
       ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
-      grippers(0, g_idx) = int(minCol);
     }
 
     gripper_idx = grippers;
@@ -523,13 +521,6 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   assert(depth.type() == CV_16U);
   assert(mask.type() == CV_8U);
   assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
-
-  Eigen::IOFormat np_fmt(Eigen::FullPrecision, 0, " ", "\n", "", "", "");
-
-  // Useful utility for outputting an Eigen matrix to a file
-  auto to_file = [&np_fmt](const std::string &fname, const MatrixXf &mat) {
-    std::ofstream(fname, std::ofstream::app) << mat.format(np_fmt) << "\n\n";
-  };
 
   Eigen::Matrix3d intrinsics_eigen_tmp;
   cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
