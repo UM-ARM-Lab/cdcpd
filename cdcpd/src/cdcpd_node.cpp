@@ -208,7 +208,7 @@ struct CDCPD_Moveit_Node {
     auto const beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
     auto const zeta = ROSHelpers::GetParam<double>(ph, "zeta", 10.0);
     min_distance_threshold = ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01);
-    auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001);
+    auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight_", 0.001);
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
     auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
     auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring, zeta,

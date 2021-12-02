@@ -232,15 +232,15 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_box(const Matri
 }
 
 std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_sphere(const Matrix3Xf &last_template,
-                                                                        shape_msgs::SolidPrimitive const &sphere,
-                                                                        geometry_msgs::Pose const &pose) {
+                                                                        shape_msgs::SolidPrimitive const &,
+                                                                        geometry_msgs::Pose const &) {
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
   return {nearestPts, normalVecs};
 }
 
 std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_plane(const Matrix3Xf &last_template,
-                                                                       shape_msgs::Plane const &plane) {
+                                                                       shape_msgs::Plane const &) {
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
   return {nearestPts, normalVecs};
@@ -417,12 +417,12 @@ std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_tem
   return nearest_points_and_normal_box(last_template, box, pose);
 }
 
-Optimizer::Optimizer(const Eigen::Matrix3Xf init_temp, const Eigen::Matrix3Xf last_temp, const float stretch_lambda,
-                     const float obstacle_cost_weight)
-    : initial_template(init_temp),
-      last_template(last_temp),
-      stretch_lambda(stretch_lambda),
-      obstacle_cost_weight(obstacle_cost_weight) {}
+Optimizer::Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template,
+                     const float stretch_lambda, const float obstacle_cost_weight)
+    : initial_template_(initial_template),
+      last_template_(last_template),
+      stretch_lambda_(stretch_lambda),
+      obstacle_cost_weight_(obstacle_cost_weight) {}
 
 Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
                                 ObstacleConstraints const &obstacle_constraints, const double max_segment_length) {
@@ -453,11 +453,11 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
   }
 
   // Add the edge constraints
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "stretch lambda " << stretch_lambda);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "stretch lambda " << stretch_lambda_);
   {
     for (ssize_t i = 0; i < E.cols(); ++i) {
       model.addQConstr(buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3), GRB_LESS_EQUAL,
-                       stretch_lambda * stretch_lambda * max_segment_length * max_segment_length,
+                       stretch_lambda_ * stretch_lambda_ * max_segment_length * max_segment_length,
                        "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
     }
     model.update();
@@ -467,28 +467,28 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
   GRBLinExpr obstacle_objective_fn(0);
   {
     ROS_DEBUG_STREAM_THROTTLE_NAMED(
-        1, LOGNAME, "adding " << obstacle_constraints.size() << " obstacle constraints " << obstacle_cost_weight);
+        1, LOGNAME, "adding " << obstacle_constraints.size() << " obstacle constraints " << obstacle_cost_weight_);
     for (auto const &[i, obstacle_constraint] : enumerate(obstacle_constraints)) {
       auto const &[point_idx, contact_point, normal] = obstacle_constraint;
       auto const obstacle_cost_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) * normal(0, 0) +
                                    (vars[point_idx * 3 + 1] - contact_point(1, 0)) * normal(1, 0) +
                                    (vars[point_idx * 3 + 2] - contact_point(2, 0)) * normal(2, 0);
-      obstacle_objective_fn += obstacle_cost_weight * -obstacle_cost_i;
+      obstacle_objective_fn += obstacle_cost_weight_ * -obstacle_cost_i;
     }
   }
 
   // Self-intersection constraints
   {
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "adding " << E.cols() * E.cols() << " self intersection constraints");
-    auto [startPts, endPts] = nearest_points_line_segments(last_template, E);
+    auto [startPts, endPts] = nearest_points_line_segments(last_template_, E);
     for (int row = 0; row < E.cols(); ++row) {
-      Vector3f P1 = last_template.col(E(0, row));
-      Vector3f P2 = last_template.col(E(1, row));
+      Vector3f P1 = last_template_.col(E(0, row));
+      Vector3f P2 = last_template_.col(E(1, row));
       for (int col = 0; col < E.cols(); ++col) {
         float s = startPts(3, row * E.cols() + col);
         float t = endPts(3, row * E.cols() + col);
-        Vector3f P3 = last_template.col(E(0, col));
-        Vector3f P4 = last_template.col(E(1, col));
+        Vector3f P3 = last_template_.col(E(0, col));
+        Vector3f P4 = last_template_.col(E(1, col));
         float l = (endPts.col(row * E.cols() + col).topRows(3) - startPts.col(row * E.cols() + col).topRows(3)).norm();
         if (!P1.isApprox(P3) && !P1.isApprox(P4) && !P2.isApprox(P3) && !P2.isApprox(P4) && l <= 0.02) {
           model.addConstr(((vars[E(0, col) * 3 + 0] * (1 - t) + vars[E(1, col) * 3 + 0] * t) -
@@ -546,10 +546,9 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
 
   // Find the optimal solution, and extract it
   {
-    try{
+    try {
       model.optimize();
-    }
-    catch( const GRBException &e ) {
+    } catch (const GRBException &e) {
       ROS_ERROR_STREAM_NAMED(LOGNAME, env.getErrorMsg());
       throw GRBException();
     }
@@ -579,9 +578,9 @@ bool Optimizer::gripper_constraints_satisfiable(const std::vector<FixedPoint> &f
     for (auto const &p2 : fixed_points) {
       float const current_distance = (p1.position - p2.position).squaredNorm();
       float const original_distance =
-          (initial_template.col(p1.template_index) - initial_template.col(p2.template_index)).squaredNorm();
+          (initial_template_.col(p1.template_index) - initial_template_.col(p2.template_index)).squaredNorm();
 
-      if (current_distance > original_distance * stretch_lambda * stretch_lambda) {
+      if (current_distance > original_distance * stretch_lambda_ * stretch_lambda_) {
         return false;
       }
     }
