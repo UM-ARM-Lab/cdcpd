@@ -22,7 +22,7 @@
 
 #include "cdcpd_ros/kinect_sub.h"
 
-constexpr auto const LOGNAME = "cdcpd_node";
+std::string const LOGNAME = "cdcpd_node";
 constexpr auto const PERF_LOGGER = "perf";
 
 Eigen::Vector3f extent_to_env_size(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
@@ -138,12 +138,11 @@ struct CDCPD_Moveit_Node {
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
 
-  explicit CDCPD_Moveit_Node(std::string const &robot_namespace)
+  explicit CDCPD_Moveit_Node(std::string const& robot_namespace)
       : robot_namespace_(robot_namespace),
         robot_description_(robot_namespace + "/robot_description"),
         ph("~"),
-        scene_monitor_(
-            std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
+        scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
         model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
         model_(model_loader_->getModel()),
         visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
@@ -329,7 +328,9 @@ struct CDCPD_Moveit_Node {
           order.pose.orientation.w = 1.0;
           order.id = 1;
           order.scale.x = 0.01;
-          order.color.r = 1.0;
+          order.color.r = 0.1;
+          order.color.g = 0.6;
+          order.color.b = 0.9;
           order.color.a = 1.0;
 
           for (auto pc_iter : *cloud) {
@@ -345,6 +346,15 @@ struct CDCPD_Moveit_Node {
         auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
         order_pub.publish(rope_marker);
       }
+
+      // compute length and print that for debugging purposes
+      auto output_length{0.0};
+      for (auto point_idx{0}; point_idx < tracked_points->size() - 1; ++point_idx) {
+        Eigen::Vector3f const p = tracked_points->at(point_idx + 1).getVector3fMap();
+        Eigen::Vector3f const p_next = tracked_points->at(point_idx).getVector3fMap();
+        output_length += (p_next - p).norm();
+      }
+      ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " desired length = " << rope_length);
 
       auto const t1 = ros::Time::now();
       auto const dt = t1 - t0;
