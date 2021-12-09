@@ -12,34 +12,28 @@
 #include <memory>
 #include <string>
 
+using SyncPolicy =
+    message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo>;
+using DepthTraits = depth_image_proc::DepthTraits<uint16_t>;
+
+struct KinectSubSetup {
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh;
+  image_transport::TransportHints hints;
+  int queue_size;
+  std::string topic_prefix;
+  std::string rgb_topic;
+  std::string depth_topic;
+  std::string cam_topic;
+  ros::CallbackQueue queue;
+  ros::AsyncSpinner spinner;
+
+  explicit KinectSubSetup(const std::string& prefix = "kinect2_victor_head/qhd");
+};
+
 class KinectSub {
  public:
-  using SyncPolicy =
-      message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo>;
-  using DepthTraits = depth_image_proc::DepthTraits<uint16_t>;
-
-  struct SubscriptionOptions {
-    ros::NodeHandle nh;
-    ros::NodeHandle pnh;
-    image_transport::TransportHints hints;
-    int queue_size;
-    std::string topic_prefix;
-    std::string rgb_topic;
-    std::string depth_topic;
-    std::string cam_topic;
-
-    explicit SubscriptionOptions(const std::string& prefix = "kinect2_victor_head/hd")
-        : nh(),
-          pnh("~"),
-          hints("raw", ros::TransportHints(), pnh),
-          queue_size(10),
-          topic_prefix(prefix),
-          rgb_topic(topic_prefix + "/image_color_rect"),
-          depth_topic(topic_prefix + "/image_depth_rect"),
-          cam_topic(topic_prefix + "/camera_info") {}
-  };
-
-  SubscriptionOptions options;
+  KinectSubSetup& options;
   image_transport::ImageTransport it;
   image_transport::SubscriberFilter rgb_sub;
   image_transport::SubscriberFilter depth_sub;
@@ -47,12 +41,10 @@ class KinectSub {
   message_filters::Synchronizer<SyncPolicy> sync;
 
   std::function<void(cv::Mat, cv::Mat, cv::Matx33d)> externCallback;
-  ros::CallbackQueue callbackQueue;
-  ros::AsyncSpinner spinner;
 
   // Callback is in the form (rbg, depth, cameraIntrinsics)
   explicit KinectSub(const std::function<void(cv::Mat, cv::Mat, cv::Matx33d)>& _externCallback,
-                     const SubscriptionOptions _options = SubscriptionOptions());
+                     KinectSubSetup& _options);
 
   void imageCb(const sensor_msgs::ImageConstPtr& rgb_msg, const sensor_msgs::ImageConstPtr& depth_msg,
                const sensor_msgs::CameraInfoConstPtr& cam_msg);

@@ -147,8 +147,6 @@ struct CDCPD_Moveit_Node {
         model_(model_loader_->getModel()),
         visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
         tf_listener_(tf_buffer_) {
-    static bool needs_restart = false;
-
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
     scene_monitor_->startSceneMonitor(scene_topic);
@@ -202,9 +200,12 @@ struct CDCPD_Moveit_Node {
         ehc::GeometryVector3ToEigenVector3d(left_gripper.transform.translation).cast<float>();
     Eigen::Vector3f const end_position =
         ehc::GeometryVector3ToEigenVector3d(right_gripper.transform.translation).cast<float>();
-    auto const [template_vertices, template_edges] = makeRopeTemplate(num_points, start_position, end_position);
+    auto const& initial_template_pair = makeRopeTemplate(num_points, start_position, end_position);
+    auto const& initial_template_vertices = initial_template_pair.first;
+    auto const& initial_template_edges = initial_template_pair.second;
     // Construct the initial template as a PCL cloud
-    auto tracked_points = makeCloud(template_vertices);
+    auto const& initial_tracked_points = makeCloud(initial_template_vertices);
+    PointCloud::Ptr tracked_points = initial_tracked_points;  // non-const, modified each time
 
     // CDCPD parameters
     // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
@@ -217,8 +218,10 @@ struct CDCPD_Moveit_Node {
     auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight_", 0.001);
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
     auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
-    auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring, zeta,
-                       obstacle_cost_weight);
+    auto const kinect_prefix = kinect_name + "/" + kinect_channel;
+
+    auto cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, use_recovery, alpha, beta, lambda,
+                       k_spring, zeta, obstacle_cost_weight);
 
     auto const callback = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics) {
       auto const t0 = ros::Time::now();
@@ -363,25 +366,19 @@ struct CDCPD_Moveit_Node {
       ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
 
       if (out.status == OutputStatus::NoPointInFilteredCloud) {
-        needs_restart = true;
+        // recreating
+        cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, use_recovery, alpha, beta, lambda,
+                      k_spring, zeta, obstacle_cost_weight);
       }
     };
 
-    auto const options = KinectSub::SubscriptionOptions(kinect_name + "/" + kinect_channel);
+    auto kinect_sub_setup = KinectSubSetup(kinect_prefix);
     // wait a second so the TF buffer can fill
     ros::Duration(0.5).sleep();
 
-    KinectSub sub(callback, options);
+    KinectSub sub(callback, kinect_sub_setup);
 
-    ROS_INFO("Spinning...");
-    auto r = ros::Rate(1);
-    while (ros::ok()) {
-      r.sleep();
-      if (needs_restart) {
-        ROS_WARN("restarting");
-        break;
-      }
-    }
+    ros::waitForShutdown();
   }
 
   ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
@@ -572,12 +569,6 @@ struct CDCPD_Moveit_Node {
 
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "cdcpd_node");
-
-  // hack for restarting when something goes wrong
-  while (true) {
-    CDCPD_Moveit_Node cmn("hdt_michigan");
-    ROS_WARN("restarting");
-  }
-
+  CDCPD_Moveit_Node cmn("hdt_michigan");
   return EXIT_SUCCESS;
 }
