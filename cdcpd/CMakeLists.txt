@@ -73,6 +73,7 @@ target_include_directories(cdcpd SYSTEM PUBLIC
         ${catkin_INCLUDE_DIRS}
         ${GUROBI_INCLUDE_DIRS}
         ${FAISS_INCLUDE_DIRS})
+# message("catkin_include_DIRS:", ${catkin_INCLUDE_DIRS})
 target_link_libraries(cdcpd PUBLIC
         lapack
         ${PCL_LIBRARIES}
@@ -97,10 +98,10 @@ target_link_libraries(cdcpd PRIVATE OpenMP::OpenMP_CXX)
 
 add_library(cdcpd::cdcpd ALIAS cdcpd)
 
-if (pybind11_catkin_FOUND)
-    pybind_add_module(pycdcpd src/bindings.cpp)
-    target_link_libraries(pycdcpd PUBLIC cdcpd)
-endif()
+# if (pybind11_catkin_FOUND)
+#     pybind_add_module(pycdcpd src/bindings.cpp)
+#     target_link_libraries(pycdcpd PUBLIC cdcpd)
+# endif()
 
 add_subdirectory(tests)
 
@@ -116,7 +117,7 @@ install(FILES
         include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
 
-install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
+# install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
 
 add_executable(cdcpd_node
         src/cdcpd_ros/kinect_sub.cpp

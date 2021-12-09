@@ -22,10 +22,6 @@ Requirements
   * other dependencies
     * [Gurobi](https://www.gurobi.com/)
     * [faiss-1.6.3](https://github.com/facebookresearch/faiss)
-    * [kuka_iiwa_interface](https://github.com/UM-ARM-Lab/kuka_iiwa_interface)
-      * [robotiq](https://github.com/UM-ARM-Lab/robotiq) (needed by kuka_iiwa_interface)
-    * [arc_utilities](https://github.com/UM-ARM-Lab/arc_utilities)
-
 
 Installation
 ------------
@@ -38,7 +34,9 @@ Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu
 
 Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME ./install_dep.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
 
-NOTE: `source ~/.bashrc` inside `install_dep.sh` might not run successfully according to the platform. If you encounter the problem like `catkinonfig.cmake` not found, please run `source ~/.bashrc` and run `./install_pybind11_catkin.sh`.
+NOTE1: `source ~/.bashrc` inside `install_dep.sh` might not run successfully according to the platform. If you encounter the problem like `catkinonfig.cmake` not found, please run `source ~/.bashrc` and run `./install_pybind11_catkin.sh`.
+
+NOTE2: run `git clone https://github.com/UM-ARM-Lab/arc_utilities.git` inside `cdcpd/external` if you don't have [arc_utilities](https://github.com/UM-ARM-Lab/arc_utilities) installed.
 
 #### Create catkin workspace
 
@@ -51,12 +49,11 @@ Gurobi is a proprietary optimization package that we use. Please obtain a [free 
 #### Building
 
 ```
-# in the src directory
-git clone https://github.com/UM-ARM-Lab/cdcpd.git
+cd ~/catkin_ws/src/
+mv ~/cdcpd ~/catkin_ws/src
 ```
 
-Once you've cloned, it might be a good idea to `rosdep install -r --from-paths cdcpd -y` to get any ROS packages you might be depending on.
-
+Once you've cloned, it might be a good idea to `rosdep install -r --from-paths cdcpd -y` to get any ROS packages you might be depending on. Then run `catkin build` at any folder inside `catkin_ws`.
 
 Demo
 ------------
