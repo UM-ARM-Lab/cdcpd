@@ -82,6 +82,11 @@ static std::ostream &operator<<(std::ostream &out, FixedPoint const &p)
   return out;
 }
 
+enum OutputStatus {
+  NoPointInFilteredCloud,
+  Success,
+};
+
 class CDCPD
 {
  public:
@@ -93,6 +98,7 @@ class CDCPD
     PointCloud::Ptr cpd_output;
     PointCloud::Ptr cpd_predict;
     PointCloud::Ptr gurobi_output;
+    OutputStatus status;
   };
 
   CDCPD(PointCloud::ConstPtr template_cloud,

@@ -39,13 +39,12 @@ class KinectSub {
           cam_topic(topic_prefix + "/camera_info") {}
   };
 
-  std::unique_ptr<image_transport::ImageTransport> it;
-  std::unique_ptr<image_transport::SubscriberFilter> rgb_sub;
-  std::unique_ptr<image_transport::SubscriberFilter> depth_sub;
-  std::unique_ptr<message_filters::Subscriber<sensor_msgs::CameraInfo>> cam_sub;
-  std::unique_ptr<message_filters::Synchronizer<SyncPolicy>> sync;
-
   SubscriptionOptions options;
+  image_transport::ImageTransport it;
+  image_transport::SubscriberFilter rgb_sub;
+  image_transport::SubscriberFilter depth_sub;
+  message_filters::Subscriber<sensor_msgs::CameraInfo> cam_sub;
+  message_filters::Synchronizer<SyncPolicy> sync;
 
   std::function<void(cv::Mat, cv::Mat, cv::Matx33d)> externCallback;
   ros::CallbackQueue callbackQueue;

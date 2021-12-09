@@ -8,29 +8,25 @@ namespace sm = sensor_msgs;
 
 KinectSub::KinectSub(const std::function<void(cv::Mat, cv::Mat, cv::Matx33d)>& _externCallback,
                      const SubscriptionOptions _options)
-    : options(_options), externCallback(_externCallback), callbackQueue(), spinner(1, &callbackQueue) {
+    : options(_options),
+      externCallback(_externCallback),
+      callbackQueue(),
+      spinner(1, &callbackQueue),
+      it(options.nh),
+      rgb_sub(it, options.rgb_topic, options.queue_size, options.hints),
+      depth_sub(it, options.depth_topic, options.queue_size, options.hints),
+      cam_sub(options.nh, options.cam_topic, options.queue_size),
+      sync(SyncPolicy(options.queue_size), rgb_sub, depth_sub, cam_sub) {
   options.nh.setCallbackQueue(&callbackQueue);
   options.pnh.setCallbackQueue(&callbackQueue);
 
   if (_options.hints.getTransport() == "compressed") {
-    // TODO: when creating these subscribers, both the rgb and depth try to
-    //       create a `cdcpd_node/compressed/set_parameters` service, this is
-    //       presumably not an issue for now, but it is messy
-    ROS_INFO(
-        "Ignore the 'Tried to advertise a service that is already advertised'"
-        " ... message, see cpp file.");
+    // TODO: when creating these subscribers, both the rgb and depth try to create a
+    // `cdcpd_node/compressed/set_parameters` service, this is presumably not an issue for now, but it is messy
+    ROS_INFO("Ignore the 'Tried to advertise a service that is already advertised' ... message, see cpp file.");
   }
-  it = std::make_unique<image_transport::ImageTransport>(options.nh);
-  rgb_sub =
-      std::make_unique<image_transport::SubscriberFilter>(*it, options.rgb_topic, options.queue_size, options.hints);
-  depth_sub =
-      std::make_unique<image_transport::SubscriberFilter>(*it, options.depth_topic, options.queue_size, options.hints);
-  cam_sub =
-      std::make_unique<message_filters::Subscriber<sm::CameraInfo>>(options.nh, options.cam_topic, options.queue_size);
 
-  sync = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(options.queue_size), *rgb_sub,
-                                                                     *depth_sub, *cam_sub);
-  sync->registerCallback(boost::bind(&KinectSub::imageCb, this, _1, _2, _3));
+  sync.registerCallback(boost::bind(&KinectSub::imageCb, this, _1, _2, _3));
 
   spinner.start();
 }

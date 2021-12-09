@@ -11,7 +11,6 @@
 #include <chrono>
 #include <cmath>
 #include <fgt.hpp>
-#include <fstream>
 #include <iostream>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -551,7 +550,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
 
-    return CDCPD::Output{entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out};
+    return CDCPD::Output{
+        entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, OutputStatus::NoPointInFilteredCloud};
   }
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
   // Add points to X according to the previous template
@@ -590,5 +590,5 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
   PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
 
-  return CDCPD::Output{entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out};
+  return CDCPD::Output{entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, OutputStatus::Success};
 }

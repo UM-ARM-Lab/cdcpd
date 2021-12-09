@@ -147,6 +147,8 @@ struct CDCPD_Moveit_Node {
         model_(model_loader_->getModel()),
         visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
         tf_listener_(tf_buffer_) {
+    static bool needs_restart = false;
+
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
     scene_monitor_->startSceneMonitor(scene_topic);
@@ -359,15 +361,27 @@ struct CDCPD_Moveit_Node {
       auto const t1 = ros::Time::now();
       auto const dt = t1 - t0;
       ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
+
+      if (out.status == OutputStatus::NoPointInFilteredCloud) {
+        needs_restart = true;
+      }
     };
 
     auto const options = KinectSub::SubscriptionOptions(kinect_name + "/" + kinect_channel);
     // wait a second so the TF buffer can fill
     ros::Duration(0.5).sleep();
+
     KinectSub sub(callback, options);
 
     ROS_INFO("Spinning...");
-    ros::waitForShutdown();
+    auto r = ros::Rate(1);
+    while (ros::ok()) {
+      r.sleep();
+      if (needs_restart) {
+        ROS_WARN("restarting");
+        break;
+      }
+    }
   }
 
   ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
@@ -559,7 +573,11 @@ struct CDCPD_Moveit_Node {
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "cdcpd_node");
 
-  CDCPD_Moveit_Node cmn("hdt_michigan");
+  // hack for restarting when something goes wrong
+  while (true) {
+    CDCPD_Moveit_Node cmn("hdt_michigan");
+    ROS_WARN("restarting");
+  }
 
   return EXIT_SUCCESS;
 }
