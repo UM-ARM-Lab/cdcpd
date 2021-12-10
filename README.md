@@ -14,8 +14,8 @@ Quick Demo
 Requirements
 ------------
   * Environment:
-    * Ubuntu 18 or 20
-    * ROS Melodic or Noetic
+    * Ubuntu 20
+    * ROS Noetic
   * apt dependencies
     * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
     * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
@@ -28,19 +28,17 @@ Installation
 
 #### Installing ROS (ignore it if you already have it)
 
-Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo -u USER_NAME install_scripts/install_ros_noetic.sh` if you use Ubuntu 20.04
+Please refer to [ROS installation](http://wiki.ros.org/ROS/Installation)
 
 #### Installing dependency
 
-Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME ./install_dep.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
+Run `sudo -u USER_NAME ./install_for_noetic_20.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
 
-NOTE1: `source ~/.bashrc` inside `install_dep.sh` might not run successfully according to the platform. If you encounter the problem like `catkinonfig.cmake` not found, please run `source ~/.bashrc` and run `./install_pybind11_catkin.sh`.
-
-NOTE2: run `git clone https://github.com/UM-ARM-Lab/arc_utilities.git` inside `cdcpd/external` if you don't have [arc_utilities](https://github.com/UM-ARM-Lab/arc_utilities) installed.
+NOTE: remove packages you have had under `external`.
 
 #### Create catkin workspace
 
-We assume you have created a catkin workspace. Now clone this repo to that worksace. See `install_scripts/create_ws_ROS_Version.sh` or the ROS wiki on how to setup a catkin workspace.
+Please refer to [catkin](http://wiki.ros.org/catkin#Installing_catkin)
 
 #### Gurobi Licence
 

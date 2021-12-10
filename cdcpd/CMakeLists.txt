@@ -54,7 +54,7 @@ catkin_package(
         INCLUDE_DIRS include
         LIBRARIES cdcpd
         CATKIN_DEPENDS ${CATKIN_PACKAGES}
-        DEPENDS OpenCV Eigen3 GUROBI FIASS Qt5 PCL # NOTE: adding CGAL errors, but it's working so whatever
+	DEPENDS OpenCV Eigen3 GUROBI FAISS Qt5 PCL # NOTE: adding CGAL errors, but it's working so whatever
 )
 
 ### The library itself
@@ -73,7 +73,6 @@ target_include_directories(cdcpd SYSTEM PUBLIC
         ${catkin_INCLUDE_DIRS}
         ${GUROBI_INCLUDE_DIRS}
         ${FAISS_INCLUDE_DIRS})
-# message("catkin_include_DIRS:", ${catkin_INCLUDE_DIRS})
 target_link_libraries(cdcpd PUBLIC
         lapack
         ${PCL_LIBRARIES}
@@ -85,6 +84,8 @@ target_link_libraries(cdcpd PUBLIC
         CGAL::CGAL
         CGAL::CGAL_Qt5
         )
+message(STATUS "GUROBI LIB ${GUROBI_LIBRARIES}")
+message(STATUS "GUROBI INCLUDE ${GUROBI_INCLUDE_DIRS}")
 
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})
 target_compile_definitions(cdcpd PUBLIC ${PCL_DEFINITIONS})
