@@ -17,8 +17,10 @@
 
   <depend>geometry_msgs</depend>
   <depend>geometric_shapes</depend>
+  <depend>jsk_recognition_msgs</depend>
   <depend>image_geometry</depend>
   <depend>image_transport</depend>
+  <depend>moveit</depend>
   <depend>moveit_msgs</depend>
   <depend>moveit_ros_planning</depend>
   <depend>moveit_visual_tools</depend>
