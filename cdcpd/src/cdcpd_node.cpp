@@ -179,6 +179,7 @@ struct CDCPD_Moveit_Node {
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
     auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
     auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
+    auto const use_gripper_constraints = ROSHelpers::GetParam<bool>(ph, "use_gripper_constraints", true);
     Eigen::MatrixXi gripper_idx(1, 2);
     gripper_idx << left_node_idx, right_node_idx;
 
@@ -186,13 +187,9 @@ struct CDCPD_Moveit_Node {
     auto const rope_length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
     auto const max_segment_length = rope_length / static_cast<float>(num_points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
-    ROS_INFO_NAMED(LOGNAME, "Waiting for TF...");
-    while (true) {
-      if (tf_buffer_.canTransform(kinect_tf_name, left_tf_name, ros::Time(0)) and
-          tf_buffer_.canTransform(kinect_tf_name, right_tf_name, ros::Time(0))) {
-        break;
-      }
-    }
+
+    wait_for_tf(left_tf_name, right_tf_name);
+
     auto const left_gripper = tf_buffer_.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
     auto const right_gripper = tf_buffer_.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
 
@@ -200,28 +197,32 @@ struct CDCPD_Moveit_Node {
         ehc::GeometryVector3ToEigenVector3d(left_gripper.transform.translation).cast<float>();
     Eigen::Vector3f const end_position =
         ehc::GeometryVector3ToEigenVector3d(right_gripper.transform.translation).cast<float>();
+
     auto const& initial_template_pair = makeRopeTemplate(num_points, start_position, end_position);
     auto const& initial_template_vertices = initial_template_pair.first;
     auto const& initial_template_edges = initial_template_pair.second;
+
     // Construct the initial template as a PCL cloud
     auto const& initial_tracked_points = makeCloud(initial_template_vertices);
     PointCloud::Ptr tracked_points = initial_tracked_points;  // non-const, modified each time
 
-    // CDCPD parameters
     // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
+    auto const objective_value_threshold = ROSHelpers::GetParam<double>(ph, "objective_value_threshold", 1.0);
     auto const alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
     auto const lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
     auto const k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     auto const beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
     auto const zeta = ROSHelpers::GetParam<double>(ph, "zeta", 10.0);
     min_distance_threshold = ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01);
-    auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight_", 0.001);
+    auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001);
+    auto const fixed_points_weight = ROSHelpers::GetParam<double>(ph, "fixed_points_weight", 10.0);
+    // NOTE: original cdcpd recovery not implemented
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
     auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
     auto const kinect_prefix = kinect_name + "/" + kinect_channel;
 
-    auto cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, use_recovery, alpha, beta, lambda,
-                       k_spring, zeta, obstacle_cost_weight);
+    auto cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
+                       alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
 
     auto const callback = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics) {
       auto const t0 = ros::Time::now();
@@ -289,6 +290,10 @@ struct CDCPD_Moveit_Node {
         obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
       }
 
+      if (not use_gripper_constraints) {
+        q_config = {};
+        gripper_idx = {};
+      }
       auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
                              q_dot, q_config, gripper_idx);
       tracked_points = out.gurobi_output;
@@ -365,10 +370,10 @@ struct CDCPD_Moveit_Node {
       auto const dt = t1 - t0;
       ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
 
-      if (out.status == OutputStatus::NoPointInFilteredCloud) {
+      if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
         // recreating
-        cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, use_recovery, alpha, beta, lambda,
-                      k_spring, zeta, obstacle_cost_weight);
+        cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
+                      alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
       }
     };
 
@@ -379,6 +384,15 @@ struct CDCPD_Moveit_Node {
     KinectSub sub(callback, kinect_sub_setup);
 
     ros::waitForShutdown();
+  }
+  void wait_for_tf(const std::string& left_tf_name, const std::string& right_tf_name) const {
+    ROS_INFO_NAMED(LOGNAME, "Waiting for TF...");
+    while (true) {
+      if (tf_buffer_.canTransform(kinect_tf_name, left_tf_name, ros::Time(0)) and
+          tf_buffer_.canTransform(kinect_tf_name, right_tf_name, ros::Time(0))) {
+        break;
+      }
+    }
   }
 
   ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,

@@ -54,11 +54,12 @@ using ObstacleConstraints = std::vector<ObstacleConstraint>;
 class Optimizer {
  public:
   Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template, float stretch_lambda,
-            float obstacle_cost_weight);
+            float obstacle_cost_weight, float fixed_points_weight);
 
-  [[nodiscard]] Eigen::Matrix3Xf operator()(const Eigen::Matrix3Xf &Y, const Eigen::Matrix2Xi &E,
-                                            const std::vector<FixedPoint> &fixed_points,
-                                            ObstacleConstraints const &points_normals, double max_segment_length);
+  [[nodiscard]] std::pair<Eigen::Matrix3Xf, double> operator()(const Eigen::Matrix3Xf &Y, const Eigen::Matrix2Xi &E,
+                                                               const std::vector<FixedPoint> &fixed_points,
+                                                               ObstacleConstraints const &points_normals,
+                                                               double max_segment_length);
 
   std::tuple<Points, Normals> test_box(const Eigen::Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &box,
                                        geometry_msgs::Pose const &pose);
@@ -91,6 +92,7 @@ class Optimizer {
   Eigen::Matrix3Xf last_template_;
   float stretch_lambda_;
   float obstacle_cost_weight_;
+  float fixed_points_weight_;
 };
 
 #endif

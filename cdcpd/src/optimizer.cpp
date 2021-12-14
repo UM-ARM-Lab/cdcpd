@@ -412,14 +412,17 @@ std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_tem
 }
 
 Optimizer::Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template,
-                     const float stretch_lambda, const float obstacle_cost_weight)
+                     const float stretch_lambda, const float obstacle_cost_weight, const float fixed_points_weight)
     : initial_template_(initial_template),
       last_template_(last_template),
       stretch_lambda_(stretch_lambda),
-      obstacle_cost_weight_(obstacle_cost_weight) {}
+      obstacle_cost_weight_(obstacle_cost_weight),
+      fixed_points_weight_(fixed_points_weight) {}
 
-Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
-                                ObstacleConstraints const &obstacle_constraints, const double max_segment_length) {
+std::pair<Matrix3Xf, double> Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E,
+                                                   const std::vector<FixedPoint> &fixed_points,
+                                                   ObstacleConstraints const &obstacle_constraints,
+                                                   const double max_segment_length) {
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
   Matrix3Xf Y_opt(Y.rows(), Y.cols());
@@ -461,7 +464,7 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
   GRBLinExpr obstacle_objective_fn(0);
   {
     ROS_DEBUG_STREAM_THROTTLE_NAMED(
-        1, LOGNAME, "adding " << obstacle_constraints.size() << " obstacle constraints " << obstacle_cost_weight_);
+        1, LOGNAME, "adding " << obstacle_constraints.size() << " obstacle constraints, w=" << obstacle_cost_weight_);
     for (auto const &[i, obstacle_constraint] : enumerate(obstacle_constraints)) {
       auto const &[point_idx, contact_point, normal] = obstacle_constraint;
       auto const obstacle_cost_i = (vars[point_idx * 3 + 0] - contact_point(0, 0)) * normal(0, 0) +
@@ -502,25 +505,23 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
 
   Matrix3Xd Y_copy = Y.cast<double>();  // TODO is this exactly what we want?
 
-  // Next, add the fixed point constraints that we might have.
-  // TODO make this more
-  // First, make sure that the constraints can be satisfied
+  //  if (gripper_constraints_satisfiable(fixed_points)) {
+  //    // If that's possible, we'll require that all constraints are equal
+  //    for (const auto &fixed_point : fixed_points) {
+  //      model.addConstr(vars[3 * fixed_point.template_index + 0], GRB_EQUAL, fixed_point.position(0), "fixed_point");
+  //      model.addConstr(vars[3 * fixed_point.template_index + 1], GRB_EQUAL, fixed_point.position(1), "fixed_point");
+  //      model.addConstr(vars[3 * fixed_point.template_index + 2], GRB_EQUAL, fixed_point.position(2), "fixed_point");
+  //    }
+  //  } else {
+  //    ROS_WARN_STREAM_NAMED(LOGNAME, "Gripper constraint cannot be satisfied.");
+  //  }
+
   GRBQuadExpr gripper_objective_fn(0);
-  if (gripper_constraints_satisfiable(fixed_points)) {
-    // If that's possible, we'll require that all constraints are equal
-    for (const auto &fixed_point : fixed_points) {
-      model.addConstr(vars[3 * fixed_point.template_index + 0], GRB_EQUAL, fixed_point.position(0), "fixed_point");
-      model.addConstr(vars[3 * fixed_point.template_index + 1], GRB_EQUAL, fixed_point.position(1), "fixed_point");
-      model.addConstr(vars[3 * fixed_point.template_index + 2], GRB_EQUAL, fixed_point.position(2), "fixed_point");
-    }
-  } else {
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "Gripper constraint cannot be satisfied.");
-    for (const auto &fixed_point : fixed_points) {
-      const auto expr0 = vars[fixed_point.template_index + 0] - Y_copy(0, fixed_point.template_index);
-      const auto expr1 = vars[fixed_point.template_index + 1] - Y_copy(1, fixed_point.template_index);
-      const auto expr2 = vars[fixed_point.template_index + 2] - Y_copy(2, fixed_point.template_index);
-      gripper_objective_fn += 100.0 * (expr0 * expr0 + expr1 * expr1 + expr2 * expr2);
-    }
+  for (const auto &fixed_point : fixed_points) {
+    auto const dx = vars[3 * fixed_point.template_index + 0] - fixed_point.position(0);
+    auto const dy = vars[3 * fixed_point.template_index + 1] - fixed_point.position(1);
+    auto const dz = vars[3 * fixed_point.template_index + 2] - fixed_point.position(2);
+    gripper_objective_fn += fixed_points_weight_ * (dx * dx + dy * dy + dz * dz);
   }
 
   // Build the objective function
@@ -564,7 +565,8 @@ Matrix3Xf Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E, const st
   }
 
   delete[] vars;
-  return Y_opt;
+  auto const final_objective_value = model.getObjective().getValue();
+  return {Y_opt, final_objective_value};
 }
 
 bool Optimizer::gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const {

@@ -84,6 +84,7 @@ static std::ostream &operator<<(std::ostream &out, FixedPoint const &p)
 
 enum OutputStatus {
   NoPointInFilteredCloud,
+  ObjectiveTooHigh,
   Success,
 };
 
@@ -103,25 +104,31 @@ class CDCPD
 
   CDCPD(PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
+        float objective_value_threshold,
         bool use_recovery = false,
         double alpha = 0.5,
         double beta = 1.0,
         double lambda = 1.0,
         double k = 100.0,
         float zeta = 10.0,
-        float obstacle_cost_weight = 1.0);
+        float obstacle_cost_weight = 1.0,
+        float fixed_points_weight = 10.0
+        );
 
   CDCPD(ros::NodeHandle nh,
         ros::NodeHandle ph,
         PointCloud::ConstPtr template_cloud,
         const Eigen::Matrix2Xi &_template_edges,
+        float objective_value_threshold,
         bool use_recovery = false,
         double alpha = 0.5,
         double beta = 1.0,
         double lambda = 1.0,
         double k = 100.0,
         float zeta = 10.0,
-        float obstacle_cost_weight = 1.0);
+        float obstacle_cost_weight = 1.0,
+        float fixed_points_weight = 10.0
+        );
 
   // If you have want gripper constraints to be added & removed automatically based on is_grasped & distance
   Output operator()(const cv::Mat &rgb,
@@ -202,10 +209,13 @@ class CDCPD
   float kvis;
   float zeta;
   float obstacle_cost_weight;
+  float fixed_points_weight;
   bool use_recovery = false;
   Eigen::MatrixXi gripper_idx;
   std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
   std::vector<bool> last_grasp_status;
+  float objective_value_threshold_;
+  int total_frames_ = 0;
 };
 
 #endif
