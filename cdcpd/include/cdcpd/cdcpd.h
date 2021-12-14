@@ -1,36 +1,33 @@
 #ifndef CDCPD_H
 #define CDCPD_H
 
-#include <opencv2/core.hpp>
-#include <pcl/point_types.h>
-#include <pcl/kdtree/kdtree_flann.h>
+#include <CGAL/AABB_face_graph_triangle_primitive.h>
+#include <CGAL/AABB_traits.h>
+#include <CGAL/AABB_tree.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/Polygon_mesh_processing/detect_features.h>
+#include <CGAL/Polygon_mesh_processing/locate.h>
+#include <CGAL/Polygon_mesh_processing/refine.h>
+#include <CGAL/Polygon_mesh_processing/smooth_mesh.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/convex_hull_3.h>
+#include <CGAL/draw_surface_mesh.h>
+#include <CGAL/subdivision_method_3.h>
 #include <pcl/io/pcd_io.h>
-
-#include <arc_utilities/ros_helpers.hpp>
-#include <arc_utilities/ostream_operators.hpp>
-
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/point_types.h>
 #include <smmap_models/constraint_jacobian_model.h>
 #include <smmap_models/diminishing_rigidity_model.h>
 #include <smmap_utilities/grippers.h>
 
-#include "cdcpd/past_template_matcher.h"
+#include <arc_utilities/ostream_operators.hpp>
+#include <arc_utilities/ros_helpers.hpp>
+#include <opencv2/core.hpp>
+
 #include "cdcpd/obs_util.h"
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/draw_surface_mesh.h>
-#include <CGAL/convex_hull_3.h>
-#include <CGAL/subdivision_method_3.h>
-
-#include <CGAL/Polygon_mesh_processing/locate.h>
-#include <CGAL/Polygon_mesh_processing/smooth_mesh.h>
-#include <CGAL/Polygon_mesh_processing/detect_features.h>
-#include <CGAL/Polygon_mesh_processing/compute_normal.h>
-#include <CGAL/Polygon_mesh_processing/refine.h>
-#include <CGAL/AABB_face_graph_triangle_primitive.h>
-#include <CGAL/AABB_tree.h>
-#include <CGAL/AABB_traits.h>
-
 #include "cdcpd/optimizer.h"
+#include "cdcpd/past_template_matcher.h"
 
 // #ifndef COMP
 // #define COMP
@@ -68,16 +65,12 @@ namespace PMP = CGAL::Polygon_mesh_processing;
 
 typedef PMP::Face_location<Mesh, FT> Face_location;
 
-Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree,
-                                            int lle_neighbors,
+Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree, int lle_neighbors,
                                             double reg);
 
-Eigen::MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud,
-                                         int lle_neighbors,
-                                         double reg);
+Eigen::MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_neighbors, double reg);
 
-static std::ostream &operator<<(std::ostream &out, FixedPoint const &p)
-{
+static std::ostream &operator<<(std::ostream &out, FixedPoint const &p) {
   out << "[" << p.template_index << "] " << p.position;
   return out;
 }
@@ -88,11 +81,9 @@ enum OutputStatus {
   Success,
 };
 
-class CDCPD
-{
+class CDCPD {
  public:
-  struct Output
-  {
+  struct Output {
     PointCloudRGB::Ptr original_cloud;
     PointCloud::Ptr masked_point_cloud;
     PointCloud::Ptr downsampled_cloud;
@@ -102,86 +93,43 @@ class CDCPD
     OutputStatus status;
   };
 
-  CDCPD(PointCloud::ConstPtr template_cloud,
-        const Eigen::Matrix2Xi &_template_edges,
-        float objective_value_threshold,
-        bool use_recovery = false,
-        double alpha = 0.5,
-        double beta = 1.0,
-        double lambda = 1.0,
-        double k = 100.0,
-        float zeta = 10.0,
-        float obstacle_cost_weight = 1.0,
-        float fixed_points_weight = 10.0
-        );
+  CDCPD(PointCloud::ConstPtr template_cloud, const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold,
+        bool use_recovery = false, double alpha = 0.5, double beta = 1.0, double lambda = 1.0, double k = 100.0,
+        float zeta = 10.0, float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
-  CDCPD(ros::NodeHandle nh,
-        ros::NodeHandle ph,
-        PointCloud::ConstPtr template_cloud,
-        const Eigen::Matrix2Xi &_template_edges,
-        float objective_value_threshold,
-        bool use_recovery = false,
-        double alpha = 0.5,
-        double beta = 1.0,
-        double lambda = 1.0,
-        double k = 100.0,
-        float zeta = 10.0,
-        float obstacle_cost_weight = 1.0,
-        float fixed_points_weight = 10.0
-        );
+  CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
+        const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold, bool use_recovery = false,
+        double alpha = 0.5, double beta = 1.0, double lambda = 1.0, double k = 100.0, float zeta = 10.0,
+        float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
   // If you have want gripper constraints to be added & removed automatically based on is_grasped & distance
-  Output operator()(const cv::Mat &rgb,
-                    const cv::Mat &depth,
-                    const cv::Mat &mask,
-                    const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
-                    double max_segment_length,
+  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
+                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
-                    const smmap::AllGrippersSinglePose &q_config = {},
-                    const std::vector<bool> &is_grasped = {},
+                    const smmap::AllGrippersSinglePose &q_config = {}, const std::vector<bool> &is_grasped = {},
                     int pred_choice = 0);
 
   // If you want to used a known correspondence between grippers and node indices (gripper_idx)
-  Output operator()(const cv::Mat &rgb,
-                    const cv::Mat &depth,
-                    const cv::Mat &mask,
-                    const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
-                    double max_segment_length,
+  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
+                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
-                    const smmap::AllGrippersSinglePose &q_config = {},
-                    const Eigen::MatrixXi &gripper_idx = {},
+                    const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
                     int pred_choice = 0);
 
   // The common implementation that the above overloads call
-  Output operator()(const cv::Mat &rgb,
-                    const cv::Mat &depth,
-                    const cv::Mat &mask,
-                    const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals,
-                    double max_segment_length,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {}, // TODO: this should be one data structure
-                    const smmap::AllGrippersSinglePose &q_config = {},
-                    int pred_choice = 0);
+  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
+                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
+                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
+                    const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
 
-  Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices,
-                                   const cv::Mat &depth,
-                                   const cv::Mat &mask,
-                                   const Eigen::Matrix3f &intrinsics,
-                                   float kvis);
+  Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices, const cv::Mat &depth, const cv::Mat &mask,
+                                   const Eigen::Matrix3f &intrinsics, float kvis);
 
-  Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X,
-                       const Eigen::Matrix3Xf &Y,
-                       const Eigen::Matrix3Xf &Y_pred,
-                       const cv::Mat &depth,
-                       const cv::Mat &mask,
-                       const Eigen::Matrix3f &intr);
+  Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X, const Eigen::Matrix3Xf &Y, const Eigen::Matrix3Xf &Y_pred,
+                       const cv::Mat &depth, const cv::Mat &mask, const Eigen::Matrix3f &intr);
 
-  Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P,
-                           const smmap::AllGrippersSinglePoseDelta &q_dot,
-                           const smmap::AllGrippersSinglePose &q_config,
-                           int pred_choice);
+  Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P, const smmap::AllGrippersSinglePoseDelta &q_dot,
+                           const smmap::AllGrippersSinglePose &q_config, int pred_choice);
 
   ros::NodeHandle nh;
   ros::NodeHandle ph;
