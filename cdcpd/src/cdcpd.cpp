@@ -12,6 +12,7 @@
 #include <cmath>
 #include <fgt.hpp>
 #include <iostream>
+#include <memory>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <sdf_tools/sdf.hpp>
@@ -393,16 +394,12 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseD
   }
 }
 
-// This is for the case where the gripper indices are unknown (in real experiment)
-CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different data-type for python
-             const Matrix2Xi &template_edges, const float objective_value_threshold, const bool use_recovery, const double alpha, const double beta,
-             const double lambda, const double k, const float zeta, const float obstacle_cost_weight, const float fixed_points_weight)
-    : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges, objective_value_threshold, use_recovery, alpha, beta, lambda,
-            k, zeta, obstacle_cost_weight, fixed_points_weight) {}
-
 CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-             const Matrix2Xi &_template_edges, const float objective_value_threshold, const bool use_recovery, const double alpha, const double beta,
-             const double lambda, const double k, const float zeta, const float obstacle_cost_weight, const float fixed_points_weight)
+             const Matrix2Xi &_template_edges, const float objective_value_threshold, const bool use_recovery,
+             const double alpha, const double beta, const double lambda, const double k, const float zeta,
+             const float obstacle_cost_weight, const float fixed_points_weight,
+             const double translation_dir_deformability, const double translation_dis_deformability,
+             const double rotation_deformability)
     : nh(nh),
       ph(ph),
       original_template(template_cloud->getMatrixXfMap().topRows(3)),
@@ -425,8 +422,7 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
       fixed_points_weight(fixed_points_weight),
       use_recovery(use_recovery),
       last_grasp_status({false, false}),
-      objective_value_threshold_(objective_value_threshold)
-{
+      objective_value_threshold_(objective_value_threshold) {
   last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
   last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 
@@ -434,6 +430,15 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
   kdtree.setInputCloud(template_cloud);
   // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
   L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+
+  //  constraint_jacobian_model = std::make_unique<smmap::ConstraintJacobianModel>(
+  //      std::make_shared<ros::NodeHandle>(nh), translation_dir_deformability, translation_dis_deformability,
+  //      rotation_deformability);
+  DeformableModel::SetCallbackFunctions(fake_collision_check);
+  DeformableModel::SetCallbackFunctions(fake_collision_check);
+
+  diminishing_rigidity_model = std::make_unique<smmap::DiminishingRigidityModel>(
+      std::make_shared<ros::NodeHandle>(nh), translation_dir_deformability, rotation_deformability);
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
@@ -536,7 +541,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   auto [entire_cloud, cloud] =
       point_clouds_from_images(depth, rgb, mask, intrinsics_eigen, last_lower_bounding_box - bounding_box_extend,
                                last_upper_bounding_box + bounding_box_extend);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
+                                 "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
@@ -549,7 +555,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   sor.setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
   sor.filter(*cloud_downsampled);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in filtered point cloud: " << cloud_downsampled->width);
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
+                                 "Points in filtered point cloud: " << cloud_downsampled->width);
   if (cloud_downsampled->width == 0) {
     ROS_ERROR_STREAM_NAMED(LOGNAME, "No points in the filtered point cloud");
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
@@ -574,6 +581,18 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     pt.position(2) = q_config[col](2, 3);
     pred_fixed_points.push_back(pt);
   }
+
+  std::vector<smmap::GripperData> grippers_data;
+
+  // format grippers_data
+  for (int g_idx = 0; g_idx < gripper_idx.cols(); g_idx++) {
+    std::string gripper_name;
+    gripper_name = "gripper" + std::to_string(g_idx);
+    smmap::GripperData gripper(gripper_name, {gripper_idx(0, g_idx)});
+    grippers_data.push_back(gripper);
+  }
+
+  smmap::DeformableModel::SetGrippersData(grippers_data);
 
   Matrix3Xf TY, TY_pred;
   TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();

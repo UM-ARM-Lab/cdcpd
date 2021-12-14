@@ -213,6 +213,8 @@ struct CDCPD_Moveit_Node {
     auto const k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
     auto const beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
     auto const zeta = ROSHelpers::GetParam<double>(ph, "zeta", 10.0);
+    auto const translation_deformability = ROSHelpers::GetParam<double>(ph, "translation_deformablity", 1.0);
+    auto const rotation_deformability = ROSHelpers::GetParam<double>(ph, "rotation_deformablity", 10.0);
     min_distance_threshold = ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01);
     auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001);
     auto const fixed_points_weight = ROSHelpers::GetParam<double>(ph, "fixed_points_weight", 10.0);
@@ -295,7 +297,7 @@ struct CDCPD_Moveit_Node {
         gripper_idx = {};
       }
       auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
-                             q_dot, q_config, gripper_idx);
+                             q_dot, q_config, gripper_idx, 2);
       tracked_points = out.gurobi_output;
 
       // Update the frame ids
