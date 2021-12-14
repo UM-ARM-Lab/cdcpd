@@ -19,7 +19,7 @@
 
 #include "cdcpd/obs_util.h"
 
-auto constexpr const LOGNAME = "cdcpd";
+std::string const LOGNAME = "cdcpd";
 
 using cv::Mat;
 using cv::Vec3b;
@@ -395,14 +395,14 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseD
 
 // This is for the case where the gripper indices are unknown (in real experiment)
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different data-type for python
-             const Matrix2Xi &template_edges, const bool use_recovery, const double alpha, const double beta,
-             const double lambda, const double k, const float zeta, const float obstacle_cost_weight)
-    : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges, use_recovery, alpha, beta, lambda,
-            k, zeta, obstacle_cost_weight) {}
+             const Matrix2Xi &template_edges, const float objective_value_threshold, const bool use_recovery, const double alpha, const double beta,
+             const double lambda, const double k, const float zeta, const float obstacle_cost_weight, const float fixed_points_weight)
+    : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges, objective_value_threshold, use_recovery, alpha, beta, lambda,
+            k, zeta, obstacle_cost_weight, fixed_points_weight) {}
 
 CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-             const Matrix2Xi &_template_edges, const bool use_recovery, const double alpha, const double beta,
-             const double lambda, const double k, const float zeta, const float obstacle_cost_weight)
+             const Matrix2Xi &_template_edges, const float objective_value_threshold, const bool use_recovery, const double alpha, const double beta,
+             const double lambda, const double k, const float zeta, const float obstacle_cost_weight, const float fixed_points_weight)
     : nh(nh),
       ph(ph),
       original_template(template_cloud->getMatrixXfMap().topRows(3)),
@@ -422,8 +422,11 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
       kvis(1e3),
       zeta(zeta),
       obstacle_cost_weight(obstacle_cost_weight),
+      fixed_points_weight(fixed_points_weight),
       use_recovery(use_recovery),
-      last_grasp_status({false, false}) {
+      last_grasp_status({false, false}),
+      objective_value_threshold_(objective_value_threshold)
+{
   last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
   last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 
@@ -461,6 +464,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     for (auto g_idx = 0u; g_idx < num_gripper; g_idx++) {
       Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
       MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
+      // FIXME: this is missing a "min" of some kind
       MatrixXf::Index minCol;
       grippers(0, g_idx) = static_cast<int>(minCol);
       ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
@@ -521,6 +525,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   assert(mask.type() == CV_8U);
   assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
 
+  total_frames_ += 1;
+
   Eigen::Matrix3d intrinsics_eigen_tmp;
   cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
   Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
@@ -530,7 +536,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   auto [entire_cloud, cloud] =
       point_clouds_from_images(depth, rgb, mask, intrinsics_eigen, last_lower_bounding_box - bounding_box_extend,
                                last_upper_bounding_box + bounding_box_extend);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
@@ -539,13 +545,13 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in cloud before leaf: " << cloud->width);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: " << cloud->width);
   sor.setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
   sor.filter(*cloud_downsampled);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME, "Points in fully filtered: " << cloud_downsampled->width);
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in filtered point cloud: " << cloud_downsampled->width);
   if (cloud_downsampled->width == 0) {
-    ROS_ERROR_STREAM_NAMED(LOGNAME, "No point in the filtered point cloud");
+    ROS_ERROR_STREAM_NAMED(LOGNAME, "No points in the filtered point cloud");
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
@@ -579,8 +585,12 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
-  Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight);
-  Matrix3Xf Y_opt = opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
+  Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
+  auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
+  Matrix3Xf Y_opt = opt_out.first;
+  double objective_value = opt_out.second;
+
+  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();
@@ -590,5 +600,11 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
   PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
 
-  return CDCPD::Output{entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, OutputStatus::Success};
+  auto status = OutputStatus::Success;
+  if (total_frames_ > 10 and objective_value > objective_value_threshold_) {
+    ROS_WARN_STREAM_NAMED(LOGNAME + ".objective", "Objective too high!");
+    status = OutputStatus::ObjectiveTooHigh;
+  }
+
+  return CDCPD::Output{entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
 }
