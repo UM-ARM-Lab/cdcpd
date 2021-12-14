@@ -184,8 +184,8 @@ struct CDCPD_Moveit_Node {
     gripper_idx << left_node_idx, right_node_idx;
 
     // Initial connectivity model of rope
-    auto const rope_length = ROSHelpers::GetParam<float>(nh, "rope_length", 1.0);
-    auto const max_segment_length = rope_length / static_cast<float>(num_points);
+    auto const max_rope_length = ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0);
+    auto const max_segment_length = max_rope_length / static_cast<float>(num_points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
 
     wait_for_tf(left_tf_name, right_tf_name);
@@ -364,7 +364,7 @@ struct CDCPD_Moveit_Node {
         Eigen::Vector3f const p_next = tracked_points->at(point_idx).getVector3fMap();
         output_length += (p_next - p).norm();
       }
-      ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " desired length = " << rope_length);
+      ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = " << max_rope_length);
 
       auto const t1 = ros::Time::now();
       auto const dt = t1 - t0;
