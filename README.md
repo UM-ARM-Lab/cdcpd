@@ -38,7 +38,7 @@ NOTE: remove packages you have had under `external`.
 
 #### Create catkin workspace
 
-Please refer to [catkin](http://wiki.ros.org/catkin#Installing_catkin)
+Please refer to [catkin](http://wiki.ros.org/catkin#Installing_catkin). NOTE: using `catkin build` instead of `catkin_make`
 
 #### Gurobi Licence
 
