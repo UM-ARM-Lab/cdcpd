@@ -600,7 +600,8 @@ int main(int argc, char* argv[]) {
   ros::init(argc, argv, "cdcpd_node");
   
   // user-specified variable
-  std::string data_dir = "/home/yixuan/blender_data/rope_simple";
+  std::string data_dir = "/home/yixuan/blender_data/rope_simple/";
+  std::string frame_id = "kinect2_rgb_optical_frame";
   int num_points = 11;
   double rope_length = 1.0;
   int frame_num = 251;
@@ -641,9 +642,12 @@ int main(int argc, char* argv[]) {
     std::stringstream idx_ss;
     idx_ss << std::setw(3) << std::setfill('0') << i;
     std::string idx_str = idx_ss.str();
-    cv::Mat rgb = cv::imread(data_dir+"/rgb_"+idx_str+".png");
-    cv::Mat depth = cv::imread(data_dir+"/depth_"+idx_str+".png");
+    cv::Mat rgb = cv::imread(data_dir+"render/rgb_"+idx_str+".png");
+    cvtColor(rgb, rgb, CV_BGR2RGB);
+    cv::Mat depth = cv::imread(data_dir+"render/depth_"+idx_str+".png");
     auto const hsv_mask = getHsvMask(ph, rgb);
+
+    tracked_points->header.frame_id = frame_id;
 
     // gripper information
     // cuurent no motion model
@@ -656,6 +660,35 @@ int main(int argc, char* argv[]) {
     auto out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
                              q_dot, q_config, gripper_idx);
     tracked_points = out.gurobi_output;
+
+    // publish
+    // Update the frame ids
+    {
+      out.original_cloud->header.frame_id = frame_id;
+      out.masked_point_cloud->header.frame_id = frame_id;
+      out.downsampled_cloud->header.frame_id = frame_id;
+      out.cpd_output->header.frame_id = frame_id;
+      out.gurobi_output->header.frame_id = frame_id;
+    }
+
+    // Add timestamp information
+    {
+      auto time = ros::Time::now();
+      pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
+      pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
+      pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
+      pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
+      pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
+    }
+
+    // Publish the point clouds
+    {
+      original_publisher.publish(out.original_cloud);
+      masked_publisher.publish(out.masked_point_cloud);
+      downsampled_publisher.publish(out.downsampled_cloud);
+      template_publisher.publish(out.cpd_output);
+      output_publisher.publish(out.gurobi_output);
+    }
   }
 
   return EXIT_SUCCESS;
