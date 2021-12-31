@@ -126,3 +126,10 @@ add_executable(cdcpd_node
         )
 add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
+
+add_executable(cdcpd_offline
+        src/cdcpd_ros/kinect_sub.cpp
+        src/cdcpd_offline.cpp
+        )
+add_dependencies(cdcpd_offline ${catkin_EXPORTED_TARGETS})
+target_link_libraries(cdcpd_offline PRIVATE cdcpd ${catkin_LIBRARIES})

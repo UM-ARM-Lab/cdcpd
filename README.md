@@ -55,7 +55,9 @@ Once you've cloned, it might be a good idea to `rosdep install -r --from-paths c
 
 Demo
 ------------
-To run the demo, you will need to download some [dataset](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing). Then run the corresponding scripts under `cdcpd/scripts`. You need to specify `.bag` file path in the shell script.
+To run the demo, you will need to download some [dataset](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing).
+
+Then run `roscore`, `rosrun cdcpd cdcpd_node`, `rosbag play $BAG_NAME`, and `rviz` concurrently.
 
 My own running result is [here](https://drive.google.com/drive/folders/1MZTR-hEaU5czsxzUIKvPnCCAEd29aM4u?usp=sharing), which includes MP4 files.
 
