@@ -552,7 +552,7 @@ struct CDCPD_Moveit_Node {
   }
 };
 
-Eigen::MatrixXf eigen_from_file(std::string filename) {
+Eigen::MatrixXd eigen_from_file(std::string filename) {
   int MAXBUFSIZE = 1e6;
   // read Eigen matrix from a numpy-style txt
   int cols = 0, rows = 0;
@@ -570,8 +570,10 @@ Eigen::MatrixXf eigen_from_file(std::string filename) {
     while(! stream.eof()){
       std::string temp;
       stream >> temp;
-      float temp_db = stod(temp);
-      buff[cols*rows+temp_cols++] = temp_db;
+      if (temp != "") {
+        double temp_db = std::stod(temp);
+        buff[cols*rows+temp_cols++] = temp_db;
+      }
     }
 
     if (temp_cols == 0)
@@ -586,7 +588,7 @@ Eigen::MatrixXf eigen_from_file(std::string filename) {
   infile.close();
 
   // Populate matrix with numbers.
-  Eigen::MatrixXf result(rows,cols);
+  Eigen::MatrixXd result(rows,cols);
   for (int i = 0; i < rows; i++)
       for (int j = 0; j < cols; j++)
           result(i,j) = buff[ cols*i+j ];
@@ -621,7 +623,7 @@ int main(int argc, char* argv[]) {
   auto cdcpd = CDCPD(nh, ph, tracked_points, template_edges, use_recovery, alpha, beta, lambda, k_spring, zeta,
                        obstacle_cost_weight);
   cv::Matx33d intrinsics;
-  Eigen::MatrixXf intri_eigen = eigen_from_file(data_dir+"/cam_info.txt");
+  Eigen::MatrixXd intri_eigen = eigen_from_file(data_dir+"/cam_info.txt");
   cv::eigen2cv(intri_eigen, intrinsics);
   double max_segment_length = rope_length/static_cast<float>(num_points-1);
   ObstacleConstraints obstacle_constraints; // currently void
@@ -642,9 +644,6 @@ int main(int argc, char* argv[]) {
     cv::Mat rgb = cv::imread(data_dir+"/rgb_"+idx_str+".png");
     cv::Mat depth = cv::imread(data_dir+"/depth_"+idx_str+".png");
     auto const hsv_mask = getHsvMask(ph, rgb);
-    cv::Matx33d intrinsics;
-    Eigen::MatrixXf intri_eigen = eigen_from_file(data_dir+"/cam_info.txt");
-    cv::eigen2cv(intri_eigen, intrinsics);
 
     // gripper information
     // cuurent no motion model
