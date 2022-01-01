@@ -605,8 +605,8 @@ int main(int argc, char* argv[]) {
   int num_points = 11;
   double rope_length = 1.0;
   int frame_num = 251;
-  Eigen::Vector3f const start_position(-0.5, 0.5, 3.0);
-  Eigen::Vector3f const end_position(0.5, 0.5, 3.0);
+  Eigen::Vector3f const start_position(-1.0, 0.0, 3.0);
+  Eigen::Vector3f const end_position(0.0, 0.0, 3.0);
   bool use_recovery = false;
   double alpha = 0.5;
   double beta = 1.0;
@@ -644,7 +644,7 @@ int main(int argc, char* argv[]) {
     std::string idx_str = idx_ss.str();
     cv::Mat rgb = cv::imread(data_dir+"render/rgb_"+idx_str+".png");
     cvtColor(rgb, rgb, CV_BGR2RGB);
-    cv::Mat depth = cv::imread(data_dir+"render/depth_"+idx_str+".png");
+    cv::Mat depth = cv::imread(data_dir+"render/depth_"+idx_str+".png", cv::IMREAD_ANYDEPTH);
     auto const hsv_mask = getHsvMask(ph, rgb);
 
     tracked_points->header.frame_id = frame_id;
