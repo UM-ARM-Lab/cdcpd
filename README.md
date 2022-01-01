@@ -55,9 +55,14 @@ Once you've cloned, it might be a good idea to `rosdep install -r --from-paths c
 
 Demo
 ------------
-To run the demo, you will need to download some [dataset](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing).
+To run the demo on offline data, you will need to download some [dataset](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing).
 
-Then run `roscore`, `rosrun cdcpd cdcpd_node`, `rosbag play $BAG_NAME`, and `rviz` concurrently.
+Then run `roscore`, `rosrun cdcpd cdcpd_offline`, `rosrun tf static_transform_publisher 0 0 0 0 0 0 map kinect2_rgb_optical_frame 50`, and `rviz` concurrently.
+
+NOTE: for now it only supports running CDCPD2 on offline zip files. There are still TODOs as below
+- enable easy switch between CDCPD and CDCPD2
+- switch between real and simulation dataset easily
+- add more zip data and support offline bag file
 
 My own running result is [here](https://drive.google.com/drive/folders/1MZTR-hEaU5czsxzUIKvPnCCAEd29aM4u?usp=sharing), which includes MP4 files.
 
