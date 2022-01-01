@@ -221,18 +221,16 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
   // lower_bounding_box_vec: bounding for mask
   // upper_bounding_box_vec: bounding for mask
 
-  float pixel_len;
   cv::Mat local_depth_image;
   depth_image.convertTo(local_depth_image, CV_32F);
-  pixel_len = 0.0002645833;
 
   // Use correct principal point from calibration
   auto const center_x = intrinsics(0, 2);
   auto const center_y = intrinsics(1, 2);
 
   auto const unit_scaling = 0.001;
-  auto const constant_x = 1.0f / (intrinsics(0, 0) * pixel_len);
-  auto const constant_y = 1.0f / (intrinsics(1, 1) * pixel_len);
+  auto const constant_x = 1.0f / (intrinsics(0, 0));
+  auto const constant_y = 1.0f / (intrinsics(1, 1));
   auto constexpr bad_point = std::numeric_limits<float>::quiet_NaN();
 
   PointCloud::Ptr filtered_cloud(new PointCloud);
@@ -245,8 +243,8 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
 
       // Assume depth = 0 is the standard was to note invalid
       if (std::isfinite(depth)) {
-        float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x;
-        float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y;
+        float x = (float(u) - center_x) * float(depth) * unit_scaling * constant_x;
+        float y = (float(v) - center_y) * float(depth) * unit_scaling * constant_y;
         float z = float(depth) * unit_scaling;
         // Add to unfiltered cloud
         // ENHANCE: be more concise
