@@ -373,6 +373,9 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
     error = std::abs(sigma2 - qprev);
     iterations++;
   }
+
+  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".cpd", "cpd error: " << error << " itr: " << iterations);
+
   return TY;
 }
 
