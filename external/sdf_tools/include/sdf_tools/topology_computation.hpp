@@ -60,35 +60,16 @@ int64_t MarkConnectedComponent(
     // Mark the connected component
     mark_component_fn(current_index, connected_component);
     // Go through the possible neighbors and enqueue as needed
-    // We are assuming an 8-connected world, so 26 possible neighbours
+    // Since there are only six cases
+    // (voxels must share a face to be considered connected),
+    // we handle each explicitly
     const std::vector<GRID_INDEX> neighbor_indices
-        = {GRID_INDEX(current_index.x - 1, current_index.y - 1, current_index.z - 1),
-           GRID_INDEX(current_index.x - 1, current_index.y - 1, current_index.z    ),
-           GRID_INDEX(current_index.x - 1, current_index.y - 1, current_index.z + 1),
-           GRID_INDEX(current_index.x - 1, current_index.y,     current_index.z - 1),
-           GRID_INDEX(current_index.x - 1, current_index.y,     current_index.z    ),
-           GRID_INDEX(current_index.x - 1, current_index.y,     current_index.z + 1),
-           GRID_INDEX(current_index.x - 1, current_index.y + 1, current_index.z - 1),
-           GRID_INDEX(current_index.x - 1, current_index.y + 1, current_index.z    ),
-           GRID_INDEX(current_index.x - 1, current_index.y + 1, current_index.z + 1),
-           GRID_INDEX(current_index.x    , current_index.y - 1, current_index.z - 1),
-           GRID_INDEX(current_index.x    , current_index.y - 1, current_index.z    ),
-           GRID_INDEX(current_index.x    , current_index.y - 1, current_index.z + 1),
-           GRID_INDEX(current_index.x    , current_index.y,     current_index.z - 1),
-//           GRID_INDEX(current_index.x    , current_index.y,     current_index.z    ),
-           GRID_INDEX(current_index.x    , current_index.y,     current_index.z + 1),
-           GRID_INDEX(current_index.x    , current_index.y + 1, current_index.z - 1),
-           GRID_INDEX(current_index.x    , current_index.y + 1, current_index.z    ),
-           GRID_INDEX(current_index.x    , current_index.y + 1, current_index.z + 1),
-           GRID_INDEX(current_index.x + 1, current_index.y - 1, current_index.z - 1),
-           GRID_INDEX(current_index.x + 1, current_index.y - 1, current_index.z    ),
-           GRID_INDEX(current_index.x + 1, current_index.y - 1, current_index.z + 1),
-           GRID_INDEX(current_index.x + 1, current_index.y,     current_index.z - 1),
-           GRID_INDEX(current_index.x + 1, current_index.y,     current_index.z    ),
-           GRID_INDEX(current_index.x + 1, current_index.y,     current_index.z + 1),
-           GRID_INDEX(current_index.x + 1, current_index.y + 1, current_index.z - 1),
-           GRID_INDEX(current_index.x + 1, current_index.y + 1, current_index.z    ),
-           GRID_INDEX(current_index.x + 1, current_index.y + 1, current_index.z + 1)};
+        = {GRID_INDEX(current_index.x - 1, current_index.y, current_index.z),
+           GRID_INDEX(current_index.x + 1, current_index.y, current_index.z),
+           GRID_INDEX(current_index.x, current_index.y - 1, current_index.z),
+           GRID_INDEX(current_index.x, current_index.y + 1, current_index.z),
+           GRID_INDEX(current_index.x, current_index.y, current_index.z - 1),
+           GRID_INDEX(current_index.x, current_index.y, current_index.z + 1)};
     for (size_t idx = 0; idx < neighbor_indices.size(); idx++)
     {
       const GRID_INDEX& neighbor_index = neighbor_indices[idx];

@@ -15,8 +15,8 @@ IF (FAISS_INCLUDE_DIRS)
   SET(FAISS_FIND_QUIETLY TRUE)
 ENDIF (FAISS_INCLUDE_DIRS)
 
-FIND_PATH( FAISS_INCLUDE_DIR faiss/IndexFlat.h
-           PATHS "external/" "/usr/include" "../")
+FIND_PATH( FAISS_INCLUDE_DIRS faiss/IndexFlat.h
+           PATHS "external/" "/usr/include" "../" "~/.local/include")
 
 if( WIN32 )
 
@@ -26,24 +26,24 @@ else (WIN32)
 
 FIND_LIBRARY( FAISS_LIBRARY
                NAMES faiss
-               PATHS external/faiss ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib)
+               PATHS external/faiss ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib ~/.local/lib)
 
 FIND_LIBRARY( GPU_FAISS_LIBRARY
                NAMES gpufaiss
-               PATHS external/faiss/gpu ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib)
+               PATHS external/faiss/gpu ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib ~/.local/lib)
 
 endif( WIN32)
 
 
-IF (FAISS_INCLUDE_DIR AND FAISS_LIBRARY)
+IF (FAISS_INCLUDE_DIRS AND FAISS_LIBRARY)
   SET(FAISS_FOUND TRUE)
-ELSE (FAISS_INCLUDE_DIR AND FAISS_LIBRARY)
+ELSE (FAISS_INCLUDE_DIRS AND FAISS_LIBRARY)
   SET( FAISS_FOUND FALSE )
-ENDIF (FAISS_INCLUDE_DIR AND FAISS_LIBRARY)
+ENDIF (FAISS_INCLUDE_DIRS AND FAISS_LIBRARY)
 
-IF (FAISS_INCLUDE_DIR AND GPU_FAISS_LIBRARY)
+IF (FAISS_INCLUDE_DIRS AND GPU_FAISS_LIBRARY)
   SET(GPU_FAISS_FOUND TRUE)
-ELSE (FAISS_INCLUDE_DIR AND GPU_FAISS_LIBRARY)
+ELSE (FAISS_INCLUDE_DIRS AND GPU_FAISS_LIBRARY)
   SET( GPU_FAISS_FOUND FALSE )
-ENDIF (FAISS_INCLUDE_DIR AND GPU_FAISS_LIBRARY)
+ENDIF (FAISS_INCLUDE_DIRS AND GPU_FAISS_LIBRARY)
 

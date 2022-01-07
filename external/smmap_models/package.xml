@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+    <name>smmap_models</name>
+    <version>0.0.0</version>
+    <description>The smmap_models package</description>
+
+    <maintainer email="peter@umich.edu">peter</maintainer>
+    <maintainer email="dale.mcconachie@ssengineering.ca">Dale McConachie</maintainer>
+
+    <license>BSD</license>
+
+    <buildtool_depend>catkin</buildtool_depend>
+
+    <depend>smmap_utilities</depend>
+    <depend>arc_utilities</depend>
+    <depend>sdf_tools</depend>
+    <depend>deformable_manipulation_msgs</depend>
+
+</package>

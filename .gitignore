@@ -1,3 +1,4 @@
 .idea
 .qglviewer.xml
-
+data/
+.vscode/

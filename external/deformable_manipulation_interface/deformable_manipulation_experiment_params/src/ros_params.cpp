@@ -205,6 +205,8 @@ namespace smmap
                 throw_arc_exception(std::invalid_argument, std::string("Unknown deformable type for ") + __func__);
                 assert(false && "This code should be unreachable");
         }
+        // NO USE HERE, just for compilation
+        return ROSHelpers::GetParamDebugLog(nh, "rope_gripper_apperture", 0.03f);
     }
 
     // TODO: where is this still used? Is it being used correctly vs ControllerMinDistToObstacles?
@@ -713,6 +715,8 @@ namespace smmap
                 throw_arc_exception(std::invalid_argument, std::string("Unknown deformable type for ") + __func__);
                 assert(false && "This code should be unreachable");
         }
+        // NO USE HERE, just for compilation
+        return ROSHelpers::GetParam(nh, "world_x_step", 0.05);
     }
 
     double GetWorldXMinBulletFrame(ros::NodeHandle& nh)     // METERS
@@ -765,6 +769,8 @@ namespace smmap
                 throw_arc_exception(std::invalid_argument, std::string("Unknown deformable type for ") + __func__);
                 assert(false && "This code should be unreachable");
         }
+        // NO USE HERE, just for compilation
+        return ROSHelpers::GetParam(nh, "world_y_step", 0.05);
     }
 
     double GetWorldYMinBulletFrame(ros::NodeHandle& nh)     // METERS
@@ -835,6 +841,8 @@ namespace smmap
                 throw_arc_exception(std::invalid_argument, std::string("Unknown deformable type for ") + __func__);
                 assert(false && "This code should be unreachable");
         }
+        // NO USE HERE, just for compilation
+        return ROSHelpers::GetParam(nh, "world_z_step", 0.05);
     }
 
     double GetWorldZMinBulletFrame(ros::NodeHandle& nh)     // METERS
@@ -1743,6 +1751,7 @@ namespace smmap
         {
             assert(false && "This should not be possible");
         }
+        return "no use here, just for compilation";
     }
 
     std::string GetGripper1TFName(ros::NodeHandle& nh)
@@ -1764,6 +1773,7 @@ namespace smmap
         {
             assert(false && "This should not be possible");
         }
+        return "no use here, just for compilation";
     }
 
     size_t GetGripperAttachedIdx(ros::NodeHandle& nh, const std::string& gripper_name)
