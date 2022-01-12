@@ -80,7 +80,7 @@ PointCloud::Ptr makeCloud(Eigen::Matrix3Xf const& points) {
 
 cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
   auto const hue_min = ROSHelpers::GetParamDebugLog<double>(ph, "hue_min", 340.0);
-  auto const sat_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.4);
+  auto const sat_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.3);
   auto const val_min = ROSHelpers::GetParamDebugLog<double>(ph, "value_min", 0.4);
   auto const hue_max = ROSHelpers::GetParamDebugLog<double>(ph, "hue_max", 20.0);
   auto const sat_max = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_max", 1.0);
