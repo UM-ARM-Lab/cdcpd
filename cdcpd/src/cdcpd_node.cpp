@@ -23,6 +23,7 @@
 #include "cdcpd_ros/kinect_sub.h"
 
 std::string const LOGNAME = "cdcpd_node";
+constexpr auto const MAX_CONTACTS_VIZ = 25;
 constexpr auto const PERF_LOGGER = "perf";
 
 Eigen::Vector3f extent_to_env_size(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
@@ -133,7 +134,6 @@ struct CDCPD_Moveit_Node {
   std::string kinect_tf_name = "kinect2_rgb_optical_frame";
   double min_distance_threshold{0.01};
   bool moveit_ready{false};
-  bool moveit_enabled{false};
 
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
@@ -164,7 +164,7 @@ struct CDCPD_Moveit_Node {
     auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 10);
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
-    bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("cdcpd/bbox", 10);
+    bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
 
     // Moveit Visualization
     auto const viz_robot_state_topic = "cdcpd_moveit_node/robot_state";
@@ -218,6 +218,7 @@ struct CDCPD_Moveit_Node {
     auto const fixed_points_weight = ROSHelpers::GetParam<double>(ph, "fixed_points_weight", 10.0);
     // NOTE: original cdcpd recovery not implemented
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
+    auto const moveit_enabled = ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false);
     auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
     auto const kinect_prefix = kinect_name + "/" + kinect_channel;
 
@@ -287,6 +288,7 @@ struct CDCPD_Moveit_Node {
 
       ObstacleConstraints obstacle_constraints;
       if (moveit_ready and moveit_enabled) {
+         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Getting moveit obstacle constraints");
         obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
       }
 
@@ -404,7 +406,16 @@ struct CDCPD_Moveit_Node {
     collision_detection::CollisionResult res;
     planning_scene->checkCollisionUnpadded(req, res);
 
+    // first fill up the contact markers with "zero" markers
+    // rviz makes deleting markers hard, so it's easier to just publish a fixed number of markers in the array
     vm::MarkerArray contact_markers;
+    for (auto i{0}; i < MAX_CONTACTS_VIZ; ++i) {
+      auto const [arrow, normal] = arrow_and_normal(i, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(),
+                                                    Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+      contact_markers.markers.push_back(arrow);
+      contact_markers.markers.push_back(normal);
+    }
+
     ObstacleConstraints obstacle_constraints;
     auto contact_idx = 0u;
     for (auto const& [contact_names, contacts] : res.contacts) {
@@ -435,52 +446,19 @@ struct CDCPD_Moveit_Node {
         // debug & visualize
         {
           ROS_DEBUG_STREAM_NAMED(
-              LOGNAME, "nearest point: " << contact.nearest_points[0].x() << ", " << contact.nearest_points[0].y()
-                                         << ", " << contact.nearest_points[0].z() << " on " << contact.body_name_1
-                                         << " and " << contact.nearest_points[1].x() << ", "
-                                         << contact.nearest_points[1].y() << ", " << contact.nearest_points[1].z()
-                                         << " on " << contact.body_name_2 << " depth " << contact.depth
-                                         << " (in moveit frame)");
-
-          vm::Marker arrow;
-          arrow.id = 100 * contact_idx + 0;
-          arrow.action = vm::Marker::ADD;
-          arrow.type = vm::Marker::ARROW;
-          arrow.ns = "arrow";
-          arrow.header.frame_id = moveit_frame;
-          arrow.header.stamp = ros::Time::now();
-          arrow.color.r = 1.0;
-          arrow.color.g = 0.0;
-          arrow.color.b = 1.0;
-          arrow.color.a = 0.2;
-          arrow.scale.x = 0.001;
-          arrow.scale.y = 0.002;
-          arrow.scale.z = 0.002;
-          arrow.pose.orientation.w = 1;
-          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_moveit_frame));
-          arrow.points.push_back(ConvertTo<geometry_msgs::Point>(tracked_point_moveit_frame));
-
-          vm::Marker normal;
-          normal.id = 100 * contact_idx + 0;
-          normal.action = vm::Marker::ADD;
-          normal.type = vm::Marker::ARROW;
-          normal.ns = "normal";
-          normal.header.frame_id = kinect_tf_name;
-          normal.header.stamp = ros::Time::now();
-          normal.color.r = 0.4;
-          normal.color.g = 1.0;
-          normal.color.b = 0.7;
-          normal.color.a = 0.6;
-          normal.scale.x = 0.0015;
-          normal.scale.y = 0.0025;
-          normal.scale.z = 0.0025;
-          normal.pose.orientation.w = 1;
-          normal.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_cdcpd_frame));
-          Eigen::Vector3d const normal_end_point_cdcpd_frame = object_point_cdcpd_frame + normal_cdcpd_frame * 0.02;
-          normal.points.push_back(ConvertTo<geometry_msgs::Point>(normal_end_point_cdcpd_frame));
-
-          contact_markers.markers.push_back(arrow);
-          contact_markers.markers.push_back(normal);
+              LOGNAME + ".moveit",
+              "nearest point: " << contact.nearest_points[0].x() << ", " << contact.nearest_points[0].y() << ", "
+                                << contact.nearest_points[0].z() << " on " << contact.body_name_1 << " and "
+                                << contact.nearest_points[1].x() << ", " << contact.nearest_points[1].y() << ", "
+                                << contact.nearest_points[1].z() << " on " << contact.body_name_2 << " depth "
+                                << contact.depth << " (in moveit frame)");
+          auto const [arrow, normal] =
+              arrow_and_normal(contact_idx, tracked_point_moveit_frame, object_point_moveit_frame,
+                               object_point_cdcpd_frame, normal_cdcpd_frame);
+          if (contact_idx < MAX_CONTACTS_VIZ) {
+            contact_markers.markers[2*contact_idx] = arrow;
+            contact_markers.markers[2*contact_idx+1] = normal;
+          }
         }
       };
 
@@ -500,13 +478,50 @@ struct CDCPD_Moveit_Node {
       ++contact_idx;
     }
 
-    vm::MarkerArray clear_array;
-    vm::Marker clear_marker;
-    clear_marker.action = vm::Marker::DELETEALL;
-    clear_array.markers.push_back(clear_marker);
-    contact_marker_pub.publish(clear_array);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".contacts", "contacts: " << contact_idx);
     contact_marker_pub.publish(contact_markers);
     return obstacle_constraints;
+  }
+  std::pair<vm::Marker, vm::Marker> arrow_and_normal(int contact_idx, const Eigen::Vector3d& tracked_point_moveit_frame,
+                                                     const Eigen::Vector3d& object_point_moveit_frame,
+                                                     const Eigen::Vector3d& object_point_cdcpd_frame,
+                                                     const Eigen::Vector3d& normal_cdcpd_frame) const {
+    vm::Marker arrow, normal;
+    arrow.id = 100 * contact_idx + 0;
+    arrow.action = vm::Marker::ADD;
+    arrow.type = vm::Marker::ARROW;
+    arrow.ns = "arrow";
+    arrow.header.frame_id = moveit_frame;
+    arrow.header.stamp = ros::Time::now();
+    arrow.color.r = 1.0;
+    arrow.color.g = 0.0;
+    arrow.color.b = 1.0;
+    arrow.color.a = 0.2;
+    arrow.scale.x = 0.001;
+    arrow.scale.y = 0.002;
+    arrow.scale.z = 0.002;
+    arrow.pose.orientation.w = 1;
+    arrow.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_moveit_frame));
+    arrow.points.push_back(ConvertTo<geometry_msgs::Point>(tracked_point_moveit_frame));
+    normal.id = 100 * contact_idx + 0;
+    normal.action = vm::Marker::ADD;
+    normal.type = vm::Marker::ARROW;
+    normal.ns = "normal";
+    normal.header.frame_id = kinect_tf_name;
+    normal.header.stamp = ros::Time::now();
+    normal.color.r = 0.4;
+    normal.color.g = 1.0;
+    normal.color.b = 0.7;
+    normal.color.a = 0.6;
+    normal.scale.x = 0.0015;
+    normal.scale.y = 0.0025;
+    normal.scale.z = 0.0025;
+    normal.pose.orientation.w = 1;
+    normal.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_cdcpd_frame));
+    Eigen::Vector3d const normal_end_point_cdcpd_frame = object_point_cdcpd_frame + normal_cdcpd_frame * 0.02;
+    normal.points.push_back(ConvertTo<geometry_msgs::Point>(normal_end_point_cdcpd_frame));
+
+    return {arrow, normal};
   }
 
   ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points) {
@@ -532,9 +547,9 @@ struct CDCPD_Moveit_Node {
       if (world->hasObject(object_to_ignore)) {
         auto success = world->removeObject(object_to_ignore);
         if (success) {
-          ROS_DEBUG_STREAM_NAMED(LOGNAME, "Successfully removed " << object_to_ignore);
+          ROS_DEBUG_STREAM_NAMED(LOGNAME + ".moveit", "Successfully removed " << object_to_ignore);
         } else {
-          ROS_ERROR_STREAM_NAMED(LOGNAME, "Failed to remove " << object_to_ignore);
+          ROS_ERROR_STREAM_NAMED(LOGNAME + ".moveit", "Failed to remove " << object_to_ignore);
         }
       }
     }
@@ -571,12 +586,13 @@ struct CDCPD_Moveit_Node {
       auto sphere = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
 
       robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {sphere},
-                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{}, "base");
+                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{}, "base_link");
     }
 
     // visualize
     visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
 
+     ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Finding nearest points and normals");
     return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
   }
 };
