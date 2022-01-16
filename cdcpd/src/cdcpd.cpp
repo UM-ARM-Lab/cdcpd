@@ -1,6 +1,7 @@
 #include "cdcpd/cdcpd.h"
 
 #include <arc_utilities/enumerate.h>
+#include <pcl/filters/crop_box.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_types_conversion.h>
@@ -586,16 +587,28 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   total_frames_ += 1;
 
   // filter the point cloud by color
+  auto points_cropped = boost::make_shared<PointCloudRGB>();
   auto points_hsv = boost::make_shared<PointCloudHSV>();
   auto filtered_points_h = boost::make_shared<PointCloudHSV>();
   auto filtered_points_hs = boost::make_shared<PointCloudHSV>();
   auto filtered_points_hsv = boost::make_shared<PointCloudHSV>();
   auto cloud = boost::make_shared<PointCloud>();
 
-  // convert to HSV
-  pcl::PointCloudXYZRGBtoXYZHSV(*points, *points_hsv);
+  const Eigen::Vector4f box_min = (last_lower_bounding_box - bounding_box_extend).homogeneous();
+  const Eigen::Vector4f box_max = (last_upper_bounding_box + bounding_box_extend).homogeneous();
+  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".points", "min: " << box_min << " box max " << box_max);
 
-  // define conditions
+  // BBOX filter
+  pcl::CropBox<PointRGB> box_filter;
+  box_filter.setMin(box_min);
+  box_filter.setMax(box_max);
+  box_filter.setInputCloud(points);
+  box_filter.filter(*points_cropped);
+
+  // convert to HSV
+  pcl::PointCloudXYZRGBtoXYZHSV(*points_cropped, *points_hsv);
+
+  // HSV filter
   auto const hue_min = ROSHelpers::GetParamDebugLog<float>(ph, "hue_min", 340.0);
   auto const hue_max = ROSHelpers::GetParamDebugLog<float>(ph, "hue_max", 20.0);
   auto const sat_min = ROSHelpers::GetParamDebugLog<float>(ph, "saturation_min", 0.3);
