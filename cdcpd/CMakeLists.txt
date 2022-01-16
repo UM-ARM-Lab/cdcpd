@@ -63,7 +63,7 @@ add_library(cdcpd SHARED
         src/optimizer.cpp
         src/obs_util.cpp
         src/past_template_matcher.cpp
-        )
+        include/cdcpd/function_filter.h)
 target_include_directories(cdcpd PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>)

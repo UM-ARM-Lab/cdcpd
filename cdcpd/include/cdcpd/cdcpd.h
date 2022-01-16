@@ -14,6 +14,7 @@
 #include <CGAL/convex_hull_3.h>
 #include <CGAL/draw_surface_mesh.h>
 #include <CGAL/subdivision_method_3.h>
+#include <pcl/filters/conditional_removal.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/point_types.h>
@@ -29,25 +30,11 @@
 #include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"
 
-// #ifndef COMP
-// #define COMP
-// #endif
-
-// #ifndef CPDLOG
-// #define CPDLOG
-// #endif
-
-// #ifndef CYLINDER_INTER
-// #define CYLINDER_INTER
-// #endif
-
-// #ifndef CYL_CLOTH4
-// #define CYL_CLOTH4
-// #endif
-
+typedef pcl::PointXYZRGB PointRGB;
+typedef pcl::PointXYZHSV PointHSV;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
-typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudRGB;
-
+typedef pcl::PointCloud<PointRGB> PointCloudRGB;
+typedef pcl::PointCloud<PointHSV> PointCloudHSV;
 inline Eigen::Vector3f const bounding_box_extend(0.1, 0.2, 0.1);
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
@@ -116,6 +103,12 @@ class CDCPD {
                     const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
                     int pred_choice = 0);
 
+  Output operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
+                    ObstacleConstraints points_normals, double max_segment_length,
+                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+                    const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
+                    int pred_choice = 0);
+
   // The common implementation that the above overloads call
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
                     const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
@@ -126,7 +119,7 @@ class CDCPD {
                                    const Eigen::Matrix3f &intrinsics, float kvis);
 
   Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X, const Eigen::Matrix3Xf &Y, const Eigen::Matrix3Xf &Y_pred,
-                       const cv::Mat &depth, const cv::Mat &mask, const Eigen::Matrix3f &intr);
+                       const Eigen::VectorXf &Y_emit_prior);
 
   Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P, const smmap::AllGrippersSinglePoseDelta &q_dot,
                            const smmap::AllGrippersSinglePose &q_config, int pred_choice);

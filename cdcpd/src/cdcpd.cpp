@@ -2,7 +2,6 @@
 
 #include <arc_utilities/enumerate.h>
 #include <pcl/filters/voxel_grid.h>
-#include <pcl/kdtree/kdtree_flann.h>
 
 #include <Eigen/Dense>
 #include <algorithm>
@@ -39,6 +38,93 @@ using Eigen::Vector4f;
 using Eigen::VectorXd;
 using Eigen::VectorXf;
 using Eigen::VectorXi;
+
+class CompHSV : public pcl::ComparisonBase<PointHSV> {
+  using ComparisonBase<PointHSV>::capable_;
+  using ComparisonBase<PointHSV>::op_;
+
+ public:
+  /** \brief Construct a CompHSV
+   * \param component_name either "h", "s" or "v"
+   * \param op the operator to use when making the comparison
+   * \param compare_val the constant value to compare the component value too
+   */
+  CompHSV(const std::string &component_name, pcl::ComparisonOps::CompareOp op, double compare_val)
+      : component_offset_(),
+        compare_val_(compare_val)
+
+  {
+    // get all the fields
+    const auto point_fields = pcl::getFields<PointHSV>();
+
+    // Locate the "rgb" field
+    std::size_t d;
+    for (d = 0; d < point_fields.size(); ++d) {
+      if (point_fields[d].name == "hsv") break;
+    }
+    if (d == point_fields.size()) {
+      PCL_WARN("[pcl::CompHSV::CompHSV] field not found!\n");
+      capable_ = false;
+      return;
+    }
+
+    // Verify the datatype
+    std::uint8_t datatype = point_fields[d].datatype;
+    if (datatype != pcl::PCLPointField::FLOAT32 && datatype != pcl::PCLPointField::UINT32 &&
+        datatype != pcl::PCLPointField::INT32) {
+      PCL_WARN("[pcl::CompHSV::CompHSV] has unusable type!\n");
+      capable_ = false;
+      return;
+    }
+
+    // Verify the component name
+    if (component_name == "h") {
+      component_offset_ = point_fields[d].offset + 2;
+    } else if (component_name == "s") {
+      component_offset_ = point_fields[d].offset + 1;
+    } else if (component_name == "v") {
+      component_offset_ = point_fields[d].offset;
+    } else {
+      PCL_WARN("[pcl::CompHSV::CompHSV] unrecognized component name!\n");
+      capable_ = false;
+      return;
+    }
+
+    // save the rest of the context
+    capable_ = true;
+    op_ = op;
+  }
+
+  [[nodiscard]] bool evaluate(const PointHSV &point) const override {
+    // extract the component value
+    const auto *pt_data = reinterpret_cast<const std::uint8_t *>(&point);
+    std::uint8_t my_val = *(pt_data + component_offset_);
+
+    // now do the comparison
+    switch (this->op_) {
+      case pcl::ComparisonOps::GT:
+        return (my_val > this->compare_val_);
+      case pcl::ComparisonOps::GE:
+        return (my_val >= this->compare_val_);
+      case pcl::ComparisonOps::LT:
+        return (my_val < this->compare_val_);
+      case pcl::ComparisonOps::LE:
+        return (my_val <= this->compare_val_);
+      case pcl::ComparisonOps::EQ:
+        return (my_val == this->compare_val_);
+      default:
+        PCL_WARN("[pcl::CompHSV::evaluate] unrecognized op_!\n");
+        return (false);
+    }
+  }
+
+ protected:
+  std::uint32_t component_offset_;
+  double compare_val_;
+
+ private:
+  CompHSV() : component_offset_(), compare_val_() {}  // not allowed
+};
 
 static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat) {
   PointCloud::Ptr cloud(new PointCloud);
@@ -272,14 +358,13 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
   return {unfiltered_cloud, filtered_cloud};
 }
 
-Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred, const cv::Mat &depth,
-                     const cv::Mat &mask, const Eigen::Matrix3f &intr) {
+Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
+                     const Eigen::VectorXf &Y_emit_prior) {
   // downsampled_cloud: PointXYZ pointer to downsampled point clouds
   // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
   // depth: CV_16U depth image
   // mask: CV_8U mask for segmentation label
-
-  Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intr, kvis);
+  // Y_emit_prior: vector with a probability per tracked point
 
   /// CPD step
 
@@ -295,12 +380,6 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
 
   std::chrono::time_point<std::chrono::system_clock> start, end;
   start = std::chrono::system_clock::now();
-
-#ifdef CPDLOG
-  std::cout << "\nCPD loop\n";
-  std::cout << std::setw(20) << "loop" << std::setw(20) << "prob term" << std::setw(20) << "CPD term" << std::setw(20)
-            << "LLE term" << std::endl;
-#endif
 
   while (iterations <= max_iterations && error > tolerance) {
     double qprev = sigma2;
@@ -502,6 +581,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   return cdcpd_out;
 }
 
+// NOTE: this is the one I'm current using for rgb + depth
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
                                 const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
                                 const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
@@ -511,6 +591,128 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
                                     max_segment_length, q_dot, q_config, pred_choice);
   return cdcpd_out;
+}
+
+// NOTE: for point cloud inputs
+CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
+                                ObstacleConstraints obstacle_constraints, const double max_segment_length,
+                                const smmap::AllGrippersSinglePoseDelta &q_dot,
+                                const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
+                                const int pred_choice) {
+  // FIXME: this has a lot of duplicate code
+  this->gripper_idx = gripper_idx;
+
+  // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
+  // template_edges: (2, K) matrix corresponding to E in the paper
+  total_frames_ += 1;
+
+  // filter the point cloud by color
+  auto points_hsv = boost::make_shared<PointCloudHSV>();
+  auto filtered_points_hsv = boost::make_shared<PointCloudHSV>();
+  auto cloud = boost::make_shared<PointCloud>();
+
+  // convert to HSV
+  pcl::copyPointCloud(*points, *points_hsv);
+
+  // define conditions
+  auto const hue_min = ROSHelpers::GetParamDebugLog<double>(ph, "hue_min", 340.0);
+  auto const sat_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.3);
+  auto const val_min = ROSHelpers::GetParamDebugLog<double>(ph, "value_min", 0.4);
+  auto const hue_max = ROSHelpers::GetParamDebugLog<double>(ph, "hue_max", 20.0);
+  auto const sat_max = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_max", 1.0);
+  auto const val_max = ROSHelpers::GetParamDebugLog<double>(ph, "value_max", 1.0);
+
+  auto hue_min_cond = boost::make_shared<CompHSV>("h", pcl::ComparisonOps::GT, hue_min);
+  auto hue_max_cond = boost::make_shared<CompHSV>("h", pcl::ComparisonOps::LT, hue_max);
+  auto sat_min_cond = boost::make_shared<CompHSV>("s", pcl::ComparisonOps::GT, sat_min);
+  auto sat_max_cond = boost::make_shared<CompHSV>("s", pcl::ComparisonOps::LT, sat_max);
+  auto val_min_cond = boost::make_shared<CompHSV>("v", pcl::ComparisonOps::GT, val_min);
+  auto val_max_cond = boost::make_shared<CompHSV>("v", pcl::ComparisonOps::LT, val_max);
+
+  auto color_cond = boost::make_shared<pcl::ConditionAnd<PointHSV>>();
+  color_cond->addComparison(hue_min_cond);
+  color_cond->addComparison(hue_max_cond);
+
+  pcl::ConditionalRemoval<PointHSV> color_filter;
+  color_filter.setInputCloud(points_hsv);
+  color_filter.setCondition(color_cond);
+  color_filter.filter(*filtered_points_hsv);
+
+  // drop color info at this point
+  pcl::copyPointCloud(*filtered_points_hsv, *cloud);
+
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
+                                 "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
+
+  /// VoxelGrid filter downsampling
+  PointCloud::Ptr cloud_downsampled(new PointCloud);
+  const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+  // TODO: check whether the change is needed here for unit conversion
+  auto const Y_emit_prior = Eigen::VectorXf::Ones(template_cloud->size());
+  ROS_DEBUG_STREAM_NAMED(LOGNAME, "Y_emit_prior " << Y_emit_prior);
+
+  pcl::VoxelGrid<pcl::PointXYZ> sor;
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: " << cloud->width);
+  sor.setInputCloud(cloud);
+  sor.setLeafSize(0.02f, 0.02f, 0.02f);
+  sor.filter(*cloud_downsampled);
+  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
+                                 "Points in filtered point cloud: " << cloud_downsampled->width);
+  if (cloud_downsampled->width == 0) {
+    ROS_ERROR_STREAM_NAMED(LOGNAME, "No points in the filtered point cloud");
+    PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
+    PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
+    PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
+
+    return CDCPD::Output{
+        points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, OutputStatus::NoPointInFilteredCloud};
+  }
+  Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
+  // Add points to X according to the previous template
+
+  std::vector<FixedPoint> pred_fixed_points;
+  auto const num_grippers = std::min(static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
+  for (auto col = 0u; col < num_grippers; ++col) {
+    FixedPoint pt;
+    pt.template_index = gripper_idx(0, col);
+    pt.position(0) = q_config[col](0, 3);
+    pt.position(1) = q_config[col](1, 3);
+    pt.position(2) = q_config[col](2, 3);
+    pred_fixed_points.push_back(pt);
+  }
+
+  Matrix3Xf TY, TY_pred;
+  TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
+  TY = cpd(X, Y, TY_pred, Y_emit_prior);
+
+  // Next step: optimization.
+
+  ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
+
+  // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
+  // ???: most likely not 1.0
+  Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
+  auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
+  Matrix3Xf Y_opt = opt_out.first;
+  double objective_value = opt_out.second;
+
+  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
+
+  // NOTE: set stateful member variables for next time
+  last_lower_bounding_box = Y_opt.rowwise().minCoeff();
+  last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
+
+  PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
+  PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
+  PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
+
+  auto status = OutputStatus::Success;
+  if (total_frames_ > 10 and objective_value > objective_value_threshold_) {
+    ROS_WARN_STREAM_NAMED(LOGNAME + ".objective", "Objective too high!");
+    status = OutputStatus::ObjectiveTooHigh;
+  }
+
+  return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
@@ -541,6 +743,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
                                last_upper_bounding_box + bounding_box_extend);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
+
+  // STOP HERE
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
@@ -582,7 +786,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
   Matrix3Xf TY, TY_pred;
   TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
-  TY = cpd(X, Y, TY_pred, depth, mask, intrinsics_eigen);
+  TY = cpd(X, Y, TY_pred, Y_emit_prior);
 
   // Next step: optimization.
 
