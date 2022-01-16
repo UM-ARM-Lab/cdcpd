@@ -1,7 +1,9 @@
 #include "cdcpd/cdcpd.h"
 
 #include <arc_utilities/enumerate.h>
+#include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/point_types_conversion.h>
 
 #include <Eigen/Dense>
 #include <algorithm>
@@ -54,36 +56,13 @@ class CompHSV : public pcl::ComparisonBase<PointHSV> {
         compare_val_(compare_val)
 
   {
-    // get all the fields
-    const auto point_fields = pcl::getFields<PointHSV>();
-
-    // Locate the "rgb" field
-    std::size_t d;
-    for (d = 0; d < point_fields.size(); ++d) {
-      if (point_fields[d].name == "hsv") break;
-    }
-    if (d == point_fields.size()) {
-      PCL_WARN("[pcl::CompHSV::CompHSV] field not found!\n");
-      capable_ = false;
-      return;
-    }
-
-    // Verify the datatype
-    std::uint8_t datatype = point_fields[d].datatype;
-    if (datatype != pcl::PCLPointField::FLOAT32 && datatype != pcl::PCLPointField::UINT32 &&
-        datatype != pcl::PCLPointField::INT32) {
-      PCL_WARN("[pcl::CompHSV::CompHSV] has unusable type!\n");
-      capable_ = false;
-      return;
-    }
-
     // Verify the component name
     if (component_name == "h") {
-      component_offset_ = point_fields[d].offset + 2;
+      component_offset_ = 16;
     } else if (component_name == "s") {
-      component_offset_ = point_fields[d].offset + 1;
+      component_offset_ = 20;
     } else if (component_name == "v") {
-      component_offset_ = point_fields[d].offset;
+      component_offset_ = 24;
     } else {
       PCL_WARN("[pcl::CompHSV::CompHSV] unrecognized component name!\n");
       capable_ = false;
@@ -608,35 +587,49 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
 
   // filter the point cloud by color
   auto points_hsv = boost::make_shared<PointCloudHSV>();
+  auto filtered_points_h = boost::make_shared<PointCloudHSV>();
+  auto filtered_points_hs = boost::make_shared<PointCloudHSV>();
   auto filtered_points_hsv = boost::make_shared<PointCloudHSV>();
   auto cloud = boost::make_shared<PointCloud>();
 
   // convert to HSV
-  pcl::copyPointCloud(*points, *points_hsv);
+  pcl::PointCloudXYZRGBtoXYZHSV(*points, *points_hsv);
 
   // define conditions
-  auto const hue_min = ROSHelpers::GetParamDebugLog<double>(ph, "hue_min", 340.0);
-  auto const sat_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.3);
-  auto const val_min = ROSHelpers::GetParamDebugLog<double>(ph, "value_min", 0.4);
-  auto const hue_max = ROSHelpers::GetParamDebugLog<double>(ph, "hue_max", 20.0);
-  auto const sat_max = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_max", 1.0);
-  auto const val_max = ROSHelpers::GetParamDebugLog<double>(ph, "value_max", 1.0);
+  auto const hue_min = ROSHelpers::GetParamDebugLog<float>(ph, "hue_min", 340.0);
+  auto const hue_max = ROSHelpers::GetParamDebugLog<float>(ph, "hue_max", 20.0);
+  auto const sat_min = ROSHelpers::GetParamDebugLog<float>(ph, "saturation_min", 0.3);
+  auto const sat_max = ROSHelpers::GetParamDebugLog<float>(ph, "saturation_max", 1.0);
+  auto const val_min = ROSHelpers::GetParamDebugLog<float>(ph, "value_min", 0.4);
+  auto const val_max = ROSHelpers::GetParamDebugLog<float>(ph, "value_max", 1.0);
 
-  auto hue_min_cond = boost::make_shared<CompHSV>("h", pcl::ComparisonOps::GT, hue_min);
-  auto hue_max_cond = boost::make_shared<CompHSV>("h", pcl::ComparisonOps::LT, hue_max);
-  auto sat_min_cond = boost::make_shared<CompHSV>("s", pcl::ComparisonOps::GT, sat_min);
-  auto sat_max_cond = boost::make_shared<CompHSV>("s", pcl::ComparisonOps::LT, sat_max);
-  auto val_min_cond = boost::make_shared<CompHSV>("v", pcl::ComparisonOps::GT, val_min);
-  auto val_max_cond = boost::make_shared<CompHSV>("v", pcl::ComparisonOps::LT, val_max);
+  auto const hue_negative = hue_min > hue_max;
+  auto const sat_negative = sat_min > sat_max;
+  auto const val_negative = val_min > val_max;
 
-  auto color_cond = boost::make_shared<pcl::ConditionAnd<PointHSV>>();
-  color_cond->addComparison(hue_min_cond);
-  color_cond->addComparison(hue_max_cond);
+  pcl::PassThrough<PointHSV> hue_filter;
+  hue_filter.setInputCloud(points_hsv);
+  hue_filter.setFilterFieldName("h");
+  hue_filter.setFilterLimits(std::min(hue_min, hue_max), std::max(hue_min, hue_max));
+  hue_filter.setFilterLimitsNegative(hue_negative);
+  hue_filter.filter(*filtered_points_h);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "hue filtered " << filtered_points_h->size());
 
-  pcl::ConditionalRemoval<PointHSV> color_filter;
-  color_filter.setInputCloud(points_hsv);
-  color_filter.setCondition(color_cond);
-  color_filter.filter(*filtered_points_hsv);
+  pcl::PassThrough<PointHSV> sat_filter;
+  sat_filter.setInputCloud(filtered_points_h);
+  sat_filter.setFilterFieldName("s");
+  sat_filter.setFilterLimits(std::min(sat_min, sat_max), std::max(sat_min, sat_max));
+  sat_filter.setFilterLimitsNegative(sat_negative);
+  sat_filter.filter(*filtered_points_hs);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "sat filtered " << filtered_points_hs->size());
+
+  pcl::PassThrough<PointHSV> val_filter;
+  val_filter.setInputCloud(filtered_points_hs);
+  val_filter.setFilterFieldName("v");
+  val_filter.setFilterLimits(std::min(val_min, val_max), std::max(val_min, val_max));
+  val_filter.setFilterLimitsNegative(val_negative);
+  val_filter.filter(*filtered_points_hsv);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "val filtered " << filtered_points_hsv->size());
 
   // drop color info at this point
   pcl::copyPointCloud(*filtered_points_hsv, *cloud);
