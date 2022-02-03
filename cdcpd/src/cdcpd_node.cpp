@@ -631,6 +631,14 @@ struct CDCPD_Moveit_Node {
       if (contact.depth > min_distance_threshold) {
         continue;
       }
+      std::vector<std::string> bodies_to_ignore{
+          "leftgripper_link", "leftgripper2_link", "left_tool", "rightgripper_link", "rightgripper2_link", "right_tool",
+      };
+      if (std::find(bodies_to_ignore.cbegin(), bodies_to_ignore.cend(), contact.body_name_1) !=
+          bodies_to_ignore.cend()) {
+        ROS_DEBUG_STREAM_NAMED(LOGNAME + ".moveit", "Ignoring " << contact.body_name_1);
+        continue;
+      }
       if (contact.body_name_1.find(collision_body_prefix) != std::string::npos) {
         add_interaction_constraint(contact_idx, 0, contact.body_name_1, contact.nearest_points[0],
                                    contact.nearest_points[1]);
@@ -756,7 +764,7 @@ struct CDCPD_Moveit_Node {
     }
 
     // visualize
-//    visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
+    //    visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
 
     ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Finding nearest points and normals");
     return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
