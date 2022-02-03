@@ -45,7 +45,7 @@ find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
 
-# horrid hack to remove the space at the beginning of the list 
+# horrid hack to remove the space at the beginning of the list
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 catkin_python_setup()
@@ -63,7 +63,7 @@ add_library(cdcpd SHARED
         src/optimizer.cpp
         src/obs_util.cpp
         src/past_template_matcher.cpp
-        include/cdcpd/function_filter.h)
+        )
 target_include_directories(cdcpd PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>)
