@@ -16,7 +16,7 @@ IF (FAISS_INCLUDE_DIRS)
 ENDIF (FAISS_INCLUDE_DIRS)
 
 FIND_PATH( FAISS_INCLUDE_DIRS faiss/IndexFlat.h
-           PATHS "external/" "/usr/include" "../")
+           PATHS "external/" "/usr/include" "../" "~/.local/include")
 
 if( WIN32 )
 
@@ -26,11 +26,11 @@ else (WIN32)
 
 FIND_LIBRARY( FAISS_LIBRARY
                NAMES faiss
-               PATHS external/faiss ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib)
+               PATHS external/faiss ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib ~/.local/lib)
 
 FIND_LIBRARY( GPU_FAISS_LIBRARY
                NAMES gpufaiss
-               PATHS external/faiss/gpu ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib)
+               PATHS external/faiss/gpu ../faiss /lib /usr/lib /usr/lib64 /usr/local/lib ~/.local/lib)
 
 endif( WIN32)
 

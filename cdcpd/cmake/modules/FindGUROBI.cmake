@@ -10,7 +10,7 @@
 
 find_path(GUROBI_INCLUDE_DIR NAMES gurobi_c++.h PATHS "$ENV{GUROBI_HOME}/include")
 
-find_library(GUROBI_LIBRARY NAMES gurobi91 gurobi90 gurobi81 gurobi80 PATHS "$ENV{GUROBI_HOME}/lib")
+find_library(GUROBI_LIBRARY NAMES gurobi95 gurobi91 gurobi90 gurobi81 gurobi80 PATHS "$ENV{GUROBI_HOME}/lib")
 find_library(GUROBI_CXX_LIBRARY NAMES gurobi_g++5.2 PATHS "$ENV{GUROBI_HOME}/lib")
 
 set(GUROBI_INCLUDE_DIRS "${GUROBI_INCLUDE_DIR}")
