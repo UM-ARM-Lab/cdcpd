@@ -83,6 +83,7 @@ target_link_libraries(cdcpd PUBLIC
         ${OpenCV_LIBS}
         CGAL::CGAL
         CGAL::CGAL_Qt5
+        yaml-cpp
         )
 
 add_dependencies(cdcpd ${catkin_EXPORTED_TARGETS})

@@ -30,5 +30,6 @@
   <depend>smmap_models</depend>
   <depend>smmap_utilities</depend>
   <depend>std_msgs</depend>
+  <depend>yaml-cpp</depend>
 </package>
 

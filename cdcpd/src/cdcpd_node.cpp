@@ -16,6 +16,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <tf2_ros/transform_listener.h>
 #include <visualization_msgs/Marker.h>
+#include <yaml-cpp/yaml.h>
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/eigen_ros_conversions.hpp>
@@ -174,30 +175,65 @@ struct CDCPD_Moveit_Node {
     // For use with TF and "fixed points" for the constrain step
     kinect_tf_name = kinect_name + "_rgb_optical_frame";
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << kinect_tf_name);
-    auto const left_tf_name = ROSHelpers::GetParam<std::string>(ph, "left_tf_name", "");
-    auto const right_tf_name = ROSHelpers::GetParam<std::string>(ph, "right_tf_name", "");
+    auto const grippers_info_filename = ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node");
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
-    auto const left_node_idx = ROSHelpers::GetParam<int>(ph, "left_node_idx", num_points - 1);
-    auto const right_node_idx = ROSHelpers::GetParam<int>(ph, "right_node_idx", 1);
-    auto const use_gripper_constraints = ROSHelpers::GetParam<bool>(ph, "use_gripper_constraints", true);
-    Eigen::MatrixXi gripper_idx(1, 2);
-    gripper_idx << left_node_idx, right_node_idx;
+
+    ROS_INFO_STREAM_NAMED(LOGNAME, "Loading " << grippers_info_filename);
+    auto grippers_info = YAML::LoadFile(grippers_info_filename);
+    unsigned int gripper_count = grippers_info.size();
+    int gripper_idx = 0;
+    Eigen::MatrixXi gripper_indices(1, gripper_count);
+    for (auto const gripper_info_i : grippers_info) {
+      auto const tf_name = gripper_info_i.first.as<std::string>();
+      auto const node_idx = gripper_info_i.second.as<int>();
+      gripper_indices(0, gripper_idx) = node_idx;
+      gripper_idx++;
+    }
+    if (gripper_count == 0) {
+      gripper_indices = {};
+    }
+
+    auto get_q_config = [&]() {
+      smmap::AllGrippersSinglePose q_config;
+      for (auto const gripper_info_i : grippers_info) {
+        auto const tf_name = gripper_info_i.first.as<std::string>();
+        if (not tf_name.empty()) {
+          try {
+            auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, tf_name, ros::Time(0), ros::Duration(10));
+            auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
+            ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "gripper: " << config.translation());
+            q_config.push_back(config);
+          } catch (tf2::TransformException const& ex) {
+            ROS_WARN_STREAM_THROTTLE(
+                10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << tf_name << ": " << ex.what());
+          }
+        }
+      }
+
+      const smmap::AllGrippersSinglePoseDelta q_dot{gripper_count, kinematics::Vector6d::Zero()};
+
+      return std::tuple{q_config, q_dot};
+    };
 
     // Initial connectivity model of rope
     auto const max_rope_length = ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0);
     auto const max_segment_length = max_rope_length / static_cast<float>(num_points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
 
-    wait_for_tf(left_tf_name, right_tf_name);
-
-    // look up gripper positions to set the initial guess at the rope state to be a line between the grippers
-    auto const left_gripper = tf_buffer_.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
-    auto const right_gripper = tf_buffer_.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
-
-    Eigen::Vector3f const start_position =
-        ehc::GeometryVector3ToEigenVector3d(left_gripper.transform.translation).cast<float>();
-    Eigen::Vector3f const end_position =
-        ehc::GeometryVector3ToEigenVector3d(right_gripper.transform.translation).cast<float>();
+    // initialize start and end points for rope
+    auto [init_q_config, init_q_dot] = get_q_config();
+    Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
+    Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
+    end_position[2] += max_rope_length;
+    if (gripper_count == 2u) {
+      start_position = init_q_config[0].translation().cast<float>();
+      end_position = init_q_config[1].translation().cast<float>();
+    } else if (gripper_count == 1u) {
+      start_position = init_q_config[0].translation().cast<float>();
+      end_position = start_position;
+      end_position[1] += max_rope_length;
+    } else if (gripper_count == 0u) {
+    }
 
     auto const& initial_template_pair = makeRopeTemplate(num_points, start_position, end_position);
     auto const& initial_template_vertices = initial_template_pair.first;
@@ -226,81 +262,40 @@ struct CDCPD_Moveit_Node {
     auto cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
                        alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
 
-    auto const callback = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics) {
-      auto const t0 = ros::Time::now();
-      smmap::AllGrippersSinglePose q_config;
-      // Left Gripper
-      if (not left_tf_name.empty()) {
-        try {
-          auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
-          auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
-          ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "left gripper: " << config.translation());
-          q_config.push_back(config);
+    auto publish_bbox = [&]() {
+      jsk_recognition_msgs::BoundingBox bbox_msg;
+      bbox_msg.header.stamp = ros::Time::now();
+      bbox_msg.header.frame_id = kinect_tf_name;
 
-        } catch (tf2::TransformException const& ex) {
-          ROS_WARN_STREAM_THROTTLE(10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << left_tf_name
-                                                                            << ": " << ex.what());
-        }
-      }
-      // Right Gripper
-      if (not right_tf_name.empty()) {
-        try {
-          auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
-          auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
-          ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "right gripper: " << config.translation());
-          q_config.push_back(config);
+      auto const bbox_size = extent_to_env_size(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
+      auto const bbox_center = extent_to_center(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
+      bbox_msg.pose.position.x = bbox_center.x();
+      bbox_msg.pose.position.y = bbox_center.y();
+      bbox_msg.pose.position.z = bbox_center.z();
+      bbox_msg.pose.orientation.w = 1;
+      bbox_msg.dimensions.x = bbox_size.x();
+      bbox_msg.dimensions.y = bbox_size.y();
+      bbox_msg.dimensions.z = bbox_size.z();
+      bbox_pub.publish(bbox_msg);
+    };
 
-        } catch (tf2::TransformException const& ex) {
-          ROS_WARN_STREAM_THROTTLE(10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << right_tf_name
-                                                                            << ": " << ex.what());
-        }
-      }
+    auto publish_template = [&]() {
+      auto time = ros::Time::now();
+      tracked_points->header.frame_id = kinect_tf_name;
+      pcl_conversions::toPCL(time, tracked_points->header.stamp);
+      pre_template_publisher.publish(tracked_points);
+    };
 
-      // Perform and record the update
-      auto const hsv_mask = getHsvMask(ph, rgb);
-      auto const n_grippers = q_config.size();
-      const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
-
-      // publish bbox
-      {
-        jsk_recognition_msgs::BoundingBox bbox_msg;
-        bbox_msg.header.stamp = ros::Time::now();
-        bbox_msg.header.frame_id = kinect_tf_name;
-
-        auto const bbox_size = extent_to_env_size(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
-        auto const bbox_center = extent_to_center(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
-        bbox_msg.pose.position.x = bbox_center.x();
-        bbox_msg.pose.position.y = bbox_center.y();
-        bbox_msg.pose.position.z = bbox_center.z();
-        bbox_msg.pose.orientation.w = 1;
-        bbox_msg.dimensions.x = bbox_size.x();
-        bbox_msg.dimensions.y = bbox_size.y();
-        bbox_msg.dimensions.z = bbox_size.z();
-        bbox_pub.publish(bbox_msg);
-      }
-
-      // publish the template before processing
-      {
-        auto time = ros::Time::now();
-        tracked_points->header.frame_id = kinect_tf_name;
-        pcl_conversions::toPCL(time, tracked_points->header.stamp);
-        pre_template_publisher.publish(tracked_points);
-      }
-
+    auto get_obstacle_constraints = [&]() {
       ObstacleConstraints obstacle_constraints;
       if (moveit_ready and moveit_enabled) {
-        ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Getting moveit obstacle constraints");
         obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
+        ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
       }
+      return obstacle_constraints;
+    };
 
-      if (not use_gripper_constraints) {
-        q_config = {};
-        gripper_idx = {};
-      }
-      auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
-                             q_dot, q_config, gripper_idx);
-      tracked_points = out.gurobi_output;
-
+    auto publish_outputs = [&](ros::Time const& t0, CDCPD::Output const& out) {
       // Update the frame ids
       {
         out.original_cloud->header.frame_id = kinect_tf_name;
@@ -372,7 +367,9 @@ struct CDCPD_Moveit_Node {
       auto const t1 = ros::Time::now();
       auto const dt = t1 - t0;
       ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
+    };
 
+    auto reset_if_bad = [&](CDCPD::Output const& out) {
       if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
         // recreating
         cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
@@ -380,75 +377,29 @@ struct CDCPD_Moveit_Node {
       }
     };
 
+    auto const callback = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics) {
+      auto const t0 = ros::Time::now();
+      auto [q_config, q_dot] = get_q_config();
+
+      publish_bbox();
+
+      auto obstacle_constraints = get_obstacle_constraints();
+
+      auto const hsv_mask = getHsvMask(ph, rgb);
+      auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
+                             q_dot, q_config, gripper_indices);
+      tracked_points = out.gurobi_output;
+      publish_outputs(t0, out);
+      reset_if_bad(out);
+    };
+
     auto const points_callback = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg) {
       auto const t0 = ros::Time::now();
-      smmap::AllGrippersSinglePose q_config;
-      // Left Gripper
-      if (not left_tf_name.empty()) {
-        try {
-          auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, left_tf_name, ros::Time(0));
-          auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
-          ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "left gripper: " << config.translation());
-          q_config.push_back(config);
+      auto [q_config, q_dot] = get_q_config();
 
-        } catch (tf2::TransformException const& ex) {
-          ROS_WARN_STREAM_THROTTLE(10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << left_tf_name
-                                                                            << ": " << ex.what());
-        }
-      }
-      // Right Gripper
-      if (not right_tf_name.empty()) {
-        try {
-          auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, right_tf_name, ros::Time(0));
-          auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
-          ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "right gripper: " << config.translation());
-          q_config.push_back(config);
-
-        } catch (tf2::TransformException const& ex) {
-          ROS_WARN_STREAM_THROTTLE(10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << right_tf_name
-                                                                            << ": " << ex.what());
-        }
-      }
-
-      auto const n_grippers = q_config.size();
-      const smmap::AllGrippersSinglePoseDelta q_dot{n_grippers, kinematics::Vector6d::Zero()};
-
-      // publish bbox
-      {
-        jsk_recognition_msgs::BoundingBox bbox_msg;
-        bbox_msg.header.stamp = ros::Time::now();
-        bbox_msg.header.frame_id = kinect_tf_name;
-
-        auto const bbox_size = extent_to_env_size(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
-        auto const bbox_center = extent_to_center(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
-        bbox_msg.pose.position.x = bbox_center.x();
-        bbox_msg.pose.position.y = bbox_center.y();
-        bbox_msg.pose.position.z = bbox_center.z();
-        bbox_msg.pose.orientation.w = 1;
-        bbox_msg.dimensions.x = bbox_size.x();
-        bbox_msg.dimensions.y = bbox_size.y();
-        bbox_msg.dimensions.z = bbox_size.z();
-        bbox_pub.publish(bbox_msg);
-      }
-
-      // publish the template before processing
-      {
-        auto time = ros::Time::now();
-        tracked_points->header.frame_id = kinect_tf_name;
-        pcl_conversions::toPCL(time, tracked_points->header.stamp);
-        pre_template_publisher.publish(tracked_points);
-      }
-
-      ObstacleConstraints obstacle_constraints;
-      if (moveit_ready and moveit_enabled) {
-        obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
-        ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
-      }
-
-      if (not use_gripper_constraints) {
-        q_config = {};
-        gripper_idx = {};
-      }
+      publish_bbox();
+      publish_template();
+      auto obstacle_constraints = get_obstacle_constraints();
 
       pcl::PCLPointCloud2 points_v2;
       pcl_conversions::toPCL(*points_msg, points_v2);
@@ -457,86 +408,10 @@ struct CDCPD_Moveit_Node {
       ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
       auto const out =
-          cdcpd(points, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_idx);
+          cdcpd(points, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_indices);
       tracked_points = out.gurobi_output;
-
-      // Update the frame ids
-      {
-        out.original_cloud->header.frame_id = kinect_tf_name;
-        out.masked_point_cloud->header.frame_id = kinect_tf_name;
-        out.downsampled_cloud->header.frame_id = kinect_tf_name;
-        out.cpd_output->header.frame_id = kinect_tf_name;
-        out.gurobi_output->header.frame_id = kinect_tf_name;
-      }
-
-      // Add timestamp information
-      {
-        auto time = ros::Time::now();
-        pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
-        pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
-      }
-
-      // Publish the point clouds
-      {
-        original_publisher.publish(out.original_cloud);
-        masked_publisher.publish(out.masked_point_cloud);
-        downsampled_publisher.publish(out.downsampled_cloud);
-        template_publisher.publish(out.cpd_output);
-        output_publisher.publish(out.gurobi_output);
-      }
-
-      // Publish markers indication the order of the points
-      {
-        auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
-          vm::Marker order;
-          order.header.frame_id = kinect_tf_name;
-          order.header.stamp = ros::Time();
-          order.ns = ns;
-          order.type = visualization_msgs::Marker::LINE_STRIP;
-          order.action = visualization_msgs::Marker::ADD;
-          order.pose.orientation.w = 1.0;
-          order.id = 1;
-          order.scale.x = 0.01;
-          order.color.r = 0.1;
-          order.color.g = 0.6;
-          order.color.b = 0.9;
-          order.color.a = 1.0;
-
-          for (auto pc_iter : *cloud) {
-            geometry_msgs::Point p;
-            p.x = pc_iter.x;
-            p.y = pc_iter.y;
-            p.z = pc_iter.z;
-            order.points.push_back(p);
-          }
-          return order;
-        };
-
-        auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
-        order_pub.publish(rope_marker);
-      }
-
-      // compute length and print that for debugging purposes
-      auto output_length{0.0};
-      for (auto point_idx{0}; point_idx < tracked_points->size() - 1; ++point_idx) {
-        Eigen::Vector3f const p = tracked_points->at(point_idx + 1).getVector3fMap();
-        Eigen::Vector3f const p_next = tracked_points->at(point_idx).getVector3fMap();
-        output_length += (p_next - p).norm();
-      }
-      ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = " << max_rope_length);
-
-      auto const t1 = ros::Time::now();
-      auto const dt = t1 - t0;
-      ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
-
-      if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
-        // recreating
-        cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
-                      alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
-      }
+      publish_outputs(t0, out);
+      reset_if_bad(out);
     };
 
     if (points_name.empty()) {
@@ -551,15 +426,6 @@ struct CDCPD_Moveit_Node {
       ROS_INFO_NAMED(LOGNAME, "subscribing to points");
       auto sub = nh.subscribe<sensor_msgs::PointCloud2>(points_name, 10, points_callback);
       ros::spin();
-    }
-  }
-  void wait_for_tf(const std::string& left_tf_name, const std::string& right_tf_name) const {
-    ROS_INFO_NAMED(LOGNAME, "Waiting for TF...");
-    while (true) {
-      if (tf_buffer_.canTransform(kinect_tf_name, left_tf_name, ros::Time(0)) and
-          tf_buffer_.canTransform(kinect_tf_name, right_tf_name, ros::Time(0))) {
-        break;
-      }
     }
   }
 
@@ -701,7 +567,8 @@ struct CDCPD_Moveit_Node {
   ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points) {
     Eigen::Isometry3d cdcpd_to_moveit;
     try {
-      auto const cdcpd_to_moveit_msg = tf_buffer_.lookupTransform(moveit_frame, kinect_tf_name, ros::Time(0));
+      auto const cdcpd_to_moveit_msg =
+          tf_buffer_.lookupTransform(moveit_frame, kinect_tf_name, ros::Time(0), ros::Duration(10));
       cdcpd_to_moveit = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit_msg.transform);
     } catch (tf2::TransformException const& ex) {
       ROS_WARN_STREAM_THROTTLE(
