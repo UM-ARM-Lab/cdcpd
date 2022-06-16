@@ -17,7 +17,6 @@
 #include "cdcpd/obs_util.h"
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Surface_mesh.h>
-#include <CGAL/draw_surface_mesh.h>
 #include <CGAL/convex_hull_3.h>
 #include <CGAL/subdivision_method_3.h>
 

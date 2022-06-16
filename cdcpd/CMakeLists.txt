@@ -41,11 +41,11 @@ find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
-find_package(CGAL REQUIRED COMPONENTS Core Qt5)
+find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
 
-# horrid hack to remove the space at the beginning of the list 
+# horrid hack to remove the space at the beginning of the list
 list(REMOVE_AT PCL_DEFINITIONS 0)
 
 catkin_python_setup()
@@ -82,7 +82,6 @@ target_link_libraries(cdcpd PUBLIC
         ${FAISS_LIBRARY}
         ${OpenCV_LIBS}
         CGAL::CGAL
-        CGAL::CGAL_Qt5
         )
 message(STATUS "GUROBI LIB ${GUROBI_LIBRARIES}")
 message(STATUS "GUROBI INCLUDE ${GUROBI_INCLUDE_DIRS}")
@@ -104,7 +103,9 @@ add_library(cdcpd::cdcpd ALIAS cdcpd)
 #     target_link_libraries(pycdcpd PUBLIC cdcpd)
 # endif()
 
-add_subdirectory(tests)
+if (CATKIN_ENABLE_TESTING)
+  add_subdirectory(tests)
+endif()
 
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)

@@ -12,7 +12,6 @@
 #include <CGAL/Polygon_mesh_processing/smooth_mesh.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/convex_hull_3.h>
-#include <CGAL/draw_surface_mesh.h>
 #include <CGAL/subdivision_method_3.h>
 #include <gurobi_c++.h>
 #include <moveit_msgs/CollisionObject.h>
