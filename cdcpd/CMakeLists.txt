@@ -3,6 +3,7 @@ project(cdcpd)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+option(CDCPD_TESTING OFF)
 
 set(CATKIN_PACKAGES
         geometric_shapes
@@ -101,6 +102,11 @@ add_library(cdcpd::cdcpd ALIAS cdcpd)
 if (pybind11_catkin_FOUND)
     pybind_add_module(pycdcpd src/bindings.cpp)
     target_link_libraries(pycdcpd PUBLIC cdcpd)
+endif()
+
+if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)
+  message("Building tests!")
+  add_subdirectory(tests)
 endif()
 
 add_subdirectory(tests)
