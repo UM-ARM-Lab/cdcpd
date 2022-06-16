@@ -1,11 +1,10 @@
 Constrained Deformable Coherent Point Drift (CDCPD & CDCPD2)
 =============
 
-CDCPD is an implementation of *Occlusion-robust Deformable Object Tracking without Physics Simulation*
-by Cheng Chi and Dmitry Berenson.
-
 CDCPD2 is an implementation of *Tracking Partially-Occluded Deformable Objects while Enforcing Geometric Constraints*
 by Yixuan Wang, Dale McConachie and Dmitry Berenson.
+
+The master branch is the version the users outside the lab should use.
 
 Quick Demo
 ------------
@@ -14,8 +13,8 @@ Quick Demo
 Requirements
 ------------
   * Environment:
-    * Ubuntu 18 or 20
-    * ROS Melodic or Noetic
+    * Ubuntu 18 or 20 (20 is strongly preferred)
+    * ROS Melodic or Noetic (Noetic strongly preferred)
   * apt dependencies
     * [Eigen](http://eigen.tuxfamily.org/dox/GettingStarted.html)
     * [CGAL-5.0.3](https://github.com/CGAL/cgal/releases/tag/releases%2FCGAL-5.0.3)
