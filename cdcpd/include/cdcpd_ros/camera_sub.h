@@ -16,24 +16,23 @@ using SyncPolicy =
     message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo>;
 using DepthTraits = depth_image_proc::DepthTraits<uint16_t>;
 
-struct KinectSubSetup {
+struct CameraSubSetup {
   ros::NodeHandle nh;
   ros::NodeHandle pnh;
   image_transport::TransportHints hints;
   int queue_size;
-  std::string topic_prefix;
   std::string rgb_topic;
   std::string depth_topic;
-  std::string cam_topic;
+  std::string info_topic;
   ros::CallbackQueue queue;
   ros::AsyncSpinner spinner;
 
-  explicit KinectSubSetup(const std::string& prefix = "kinect2_victor_head/qhd");
+  explicit CameraSubSetup(const std::string& rgb_topic, const std::string& depth_topic, const std::string& info_topic);
 };
 
 class KinectSub {
  public:
-  KinectSubSetup& options;
+  CameraSubSetup& options;
   image_transport::ImageTransport it;
   image_transport::SubscriberFilter rgb_sub;
   image_transport::SubscriberFilter depth_sub;
@@ -44,7 +43,7 @@ class KinectSub {
 
   // Callback is in the form (rbg, depth, cameraIntrinsics)
   explicit KinectSub(const std::function<void(cv::Mat, cv::Mat, cv::Matx33d)>& _externCallback,
-                     KinectSubSetup& _options);
+                     CameraSubSetup& _options);
 
   void imageCb(const sensor_msgs::ImageConstPtr& rgb_msg, const sensor_msgs::ImageConstPtr& depth_msg,
                const sensor_msgs::CameraInfoConstPtr& cam_msg);

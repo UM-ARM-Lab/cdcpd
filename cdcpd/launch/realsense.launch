@@ -1,0 +1,15 @@
+<launch>
+    <param name="rope_num_points" value="25"/>
+    <param name="max_rope_length" value="0.39"/>
+
+    <node pkg="cdcpd" type="cdcpd_node" name="cdcpd_node" respawn="false" output="screen">
+        <param name="obstacle_cost_weight" value="0.02"/>
+        <param name="fixed_points_weight" value="10.0"/>
+        <param name="min_distance_threshold" value="0.01"/>
+        <param name="lambda" value="1.0"/>
+        <param name="moveit_enabled" value="false"/>
+        <!-- gripper info should be a space seperated list of [TF_NAME IDX TF_NAME IDX ...] -->
+        <param name="grippers_info" value="$(find cdcpd)/gripper_info.yaml"/>
+    </node>
+</launch>
+

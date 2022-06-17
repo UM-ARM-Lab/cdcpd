@@ -3,8 +3,6 @@
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <opencv2/imgproc/types_c.h>
-#include <opencv2/core/eigen.hpp>
-#include <opencv2/imgcodecs.hpp>
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 #include <ros/ros.h>
@@ -14,12 +12,13 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/eigen_ros_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
-
-#include "cdcpd_ros/kinect_sub.h"
-
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <opencv2/core/eigen.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include <string>
+
+#include "cdcpd_ros/camera_sub.h"
 
 constexpr auto const LOGNAME = "cdcpd_node";
 constexpr auto const PERF_LOGGER = "perf";

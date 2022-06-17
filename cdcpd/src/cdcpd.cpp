@@ -596,7 +596,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
 
   const Eigen::Vector4f box_min = (last_lower_bounding_box - bounding_box_extend).homogeneous();
   const Eigen::Vector4f box_max = (last_upper_bounding_box + bounding_box_extend).homogeneous();
-  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".points", "min: " << box_min << " box max " << box_max);
+  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".points", "box min: " << box_min.head(3) << " box max " << box_max.head(3));
 
   // BBOX filter
   pcl::CropBox<PointRGB> box_filter;

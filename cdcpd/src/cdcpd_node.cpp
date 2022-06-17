@@ -22,7 +22,7 @@
 #include <arc_utilities/eigen_ros_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 
-#include "cdcpd_ros/kinect_sub.h"
+#include "cdcpd_ros/camera_sub.h"
 
 std::string const LOGNAME = "cdcpd_node";
 constexpr auto const MAX_CONTACTS_VIZ = 25;
@@ -41,16 +41,8 @@ namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace ehc = EigenHelpersConversions;
 
-std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int num_points, float length);
-
 std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int num_points, const Eigen::Vector3f& start_position,
                                                                const Eigen::Vector3f& end_position);
-
-std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points, float const length) {
-  Eigen::Vector3f start_position(-length / 2, 0, 1.0);
-  Eigen::Vector3f end_position(length / 2, 0, 1.0);
-  return makeRopeTemplate(num_points, start_position, end_position);
-}
 
 std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points,
                                                                const Eigen::Vector3f& start_position,
@@ -133,7 +125,7 @@ struct CDCPD_Moveit_Node {
   robot_model::RobotModelPtr model_;
   moveit_visual_tools::MoveItVisualTools visual_tools_;
   std::string moveit_frame{"robot_root"};
-  std::string kinect_tf_name;
+  std::string camera_frame;
   double min_distance_threshold{0.01};
   bool moveit_ready{false};
 
@@ -170,11 +162,13 @@ struct CDCPD_Moveit_Node {
 
     // point cloud input takes precedence. If points_name is not empty, we will use that and not RGB + Depth
     auto const points_name = ROSHelpers::GetParam<std::string>(ph, "points", "");
-    auto const kinect_name = ROSHelpers::GetParam<std::string>(ph, "kinect_name", "kinect2");
+    auto const rgb_topic = ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw");
+    auto const depth_topic = ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw");
+    auto const info_topic = ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info");
+    auto const camera_frame = ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame");
 
     // For use with TF and "fixed points" for the constrain step
-    kinect_tf_name = kinect_name + "_rgb_optical_frame";
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << kinect_tf_name);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << camera_frame);
     auto const grippers_info_filename = ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node");
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
 
@@ -199,13 +193,13 @@ struct CDCPD_Moveit_Node {
         auto const tf_name = gripper_info_i.first.as<std::string>();
         if (not tf_name.empty()) {
           try {
-            auto const gripper = tf_buffer_.lookupTransform(kinect_tf_name, tf_name, ros::Time(0), ros::Duration(10));
+            auto const gripper = tf_buffer_.lookupTransform(camera_frame, tf_name, ros::Time(0), ros::Duration(10));
             auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
             ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "gripper: " << config.translation());
             q_config.push_back(config);
           } catch (tf2::TransformException const& ex) {
             ROS_WARN_STREAM_THROTTLE(
-                10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << tf_name << ": " << ex.what());
+                10.0, "Unable to lookup transform from " << camera_frame << " to " << tf_name << ": " << ex.what());
           }
         }
       }
@@ -233,6 +227,8 @@ struct CDCPD_Moveit_Node {
       end_position = start_position;
       end_position[1] += max_rope_length;
     } else if (gripper_count == 0u) {
+      start_position << -max_rope_length / 2, 0, 1.0;
+      end_position << max_rope_length / 2, 0, 1.0;
     }
 
     auto const& initial_template_pair = makeRopeTemplate(num_points, start_position, end_position);
@@ -256,8 +252,6 @@ struct CDCPD_Moveit_Node {
     // NOTE: original cdcpd recovery not implemented
     auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
     auto const moveit_enabled = ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false);
-    auto const kinect_channel = ROSHelpers::GetParam<std::string>(ph, "kinect_channel", "qhd");
-    auto const kinect_prefix = kinect_name + "/" + kinect_channel;
 
     auto cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
                        alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
@@ -265,7 +259,7 @@ struct CDCPD_Moveit_Node {
     auto publish_bbox = [&]() {
       jsk_recognition_msgs::BoundingBox bbox_msg;
       bbox_msg.header.stamp = ros::Time::now();
-      bbox_msg.header.frame_id = kinect_tf_name;
+      bbox_msg.header.frame_id = camera_frame;
 
       auto const bbox_size = extent_to_env_size(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
       auto const bbox_center = extent_to_center(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
@@ -281,7 +275,7 @@ struct CDCPD_Moveit_Node {
 
     auto publish_template = [&]() {
       auto time = ros::Time::now();
-      tracked_points->header.frame_id = kinect_tf_name;
+      tracked_points->header.frame_id = camera_frame;
       pcl_conversions::toPCL(time, tracked_points->header.stamp);
       pre_template_publisher.publish(tracked_points);
     };
@@ -298,11 +292,11 @@ struct CDCPD_Moveit_Node {
     auto publish_outputs = [&](ros::Time const& t0, CDCPD::Output const& out) {
       // Update the frame ids
       {
-        out.original_cloud->header.frame_id = kinect_tf_name;
-        out.masked_point_cloud->header.frame_id = kinect_tf_name;
-        out.downsampled_cloud->header.frame_id = kinect_tf_name;
-        out.cpd_output->header.frame_id = kinect_tf_name;
-        out.gurobi_output->header.frame_id = kinect_tf_name;
+        out.original_cloud->header.frame_id = camera_frame;
+        out.masked_point_cloud->header.frame_id = camera_frame;
+        out.downsampled_cloud->header.frame_id = camera_frame;
+        out.cpd_output->header.frame_id = camera_frame;
+        out.gurobi_output->header.frame_id = camera_frame;
       }
 
       // Add timestamp information
@@ -328,7 +322,7 @@ struct CDCPD_Moveit_Node {
       {
         auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
           vm::Marker order;
-          order.header.frame_id = kinect_tf_name;
+          order.header.frame_id = camera_frame;
           order.header.stamp = ros::Time();
           order.ns = ns;
           order.type = visualization_msgs::Marker::LINE_STRIP;
@@ -416,11 +410,11 @@ struct CDCPD_Moveit_Node {
 
     if (points_name.empty()) {
       ROS_INFO_NAMED(LOGNAME, "subscribing to RGB + Depth");
-      auto kinect_sub_setup = KinectSubSetup(kinect_prefix);
+      auto camera_sub_setup = CameraSubSetup(rgb_topic, depth_topic, info_topic);
       // wait a second so the TF buffer can fill
       ros::Duration(0.5).sleep();
 
-      KinectSub sub(callback, kinect_sub_setup);
+      KinectSub sub(callback, camera_sub_setup);
       ros::waitForShutdown();
     } else {
       ROS_INFO_NAMED(LOGNAME, "subscribing to points");
@@ -547,7 +541,7 @@ struct CDCPD_Moveit_Node {
     normal.action = vm::Marker::ADD;
     normal.type = vm::Marker::ARROW;
     normal.ns = "normal";
-    normal.header.frame_id = kinect_tf_name;
+    normal.header.frame_id = camera_frame;
     normal.header.stamp = ros::Time::now();
     normal.color.r = 0.4;
     normal.color.g = 1.0;
@@ -568,11 +562,11 @@ struct CDCPD_Moveit_Node {
     Eigen::Isometry3d cdcpd_to_moveit;
     try {
       auto const cdcpd_to_moveit_msg =
-          tf_buffer_.lookupTransform(moveit_frame, kinect_tf_name, ros::Time(0), ros::Duration(10));
+          tf_buffer_.lookupTransform(moveit_frame, camera_frame, ros::Time(0), ros::Duration(10));
       cdcpd_to_moveit = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit_msg.transform);
     } catch (tf2::TransformException const& ex) {
       ROS_WARN_STREAM_THROTTLE(
-          10.0, "Unable to lookup transform from " << kinect_tf_name << " to " << moveit_frame << ": " << ex.what());
+          10.0, "Unable to lookup transform from " << camera_frame << " to " << moveit_frame << ": " << ex.what());
       return {};
     }
 
