@@ -1,10 +1,10 @@
 <launch>
     <param name="rope_num_points" value="25"/>
-    <param name="max_rope_length" value="0.39"/>
+    <param name="max_rope_length" value="0.8"/>
 
     <node pkg="cdcpd" type="cdcpd_node" name="cdcpd_node" respawn="false" output="screen">
-        <param name="obstacle_cost_weight" value="0.02"/>
-        <param name="fixed_points_weight" value="10.0"/>
+        <param name="points" value="/camera/depth/color/points"/>
+        <param name="camera_frame" value="camera_depth_optical_frame"/>
         <param name="min_distance_threshold" value="0.01"/>
         <param name="lambda" value="1.0"/>
         <param name="moveit_enabled" value="false"/>

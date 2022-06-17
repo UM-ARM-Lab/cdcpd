@@ -30,7 +30,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: masked
   - Class: merrrt_visualization/AnimationController
     Name: AnimationController
     auto_play: true
@@ -140,7 +140,7 @@ Visualization Manager:
           Marker Topic: /cdcpd/order
           Name: output
           Namespaces:
-            {}
+            line_order: true
           Queue Size: 100
           Value: true
         - Alpha: 1
@@ -283,7 +283,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 4.849134922027588
+      Distance: 5.739884376525879
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -299,9 +299,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -1.5697963237762451
+      Pitch: -1.0597968101501465
       Target Frame: anim_camera
-      Yaw: 4.8487229347229
+      Yaw: 4.7337236404418945
     Saved: ~
 Window Geometry:
   AnimationController:
