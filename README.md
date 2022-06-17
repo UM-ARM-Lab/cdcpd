@@ -6,10 +6,6 @@ by Yixuan Wang, Dale McConachie and Dmitry Berenson.
 
 The master branch is the version the users outside the lab should use.
 
-Quick Demo
-------------
- You could try out virtual machine linked [here](https://drive.google.com/file/d/1N_l3ZRWVAIY1Mwr8b5D8uyWY96DrnUMm/view?usp=sharing). Password is `123456`. You could run demos under `~/catkin_ws/src/cdcpd/cdcpd_ros/scripts`. Note that not all data is downloaded. Now only `rope_edge_cover_2.bag` is downloaded under `~/catkin_ws/src/cdcpd/cdcpd_ros/dataset`. If you would like to see more demoes, please download [here](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing).
-
 Requirements
 ------------
   * Environment:
@@ -59,9 +55,23 @@ Once you've cloned, it might be a good idea to `rosdep install -r --from-paths c
 
 Demo
 ------------
-To run the demo, you will need to download some [dataset](https://drive.google.com/drive/folders/1rnmUDIAFOpbrpt6wNurH6x2WF5xm_3ij?usp=sharing). Then run the corresponding scripts under `cdcpd/scripts`. You need to specify `.bag` file path in the shell script.
+To run with a realsense, without the obstacle or gripper constraints, try this:
 
-My own running result is [here](https://drive.google.com/drive/folders/1MZTR-hEaU5czsxzUIKvPnCCAEd29aM4u?usp=sharing), which includes MP4 files.
+```
+roslaunch realsense2_camera rs_camera.launch enable_pointcloud:=true
+roslaunch rviz -d cdcpd/rviz/realsense.rviz
+roslaunch cdcpd realsense.launch
+```
+
+
+We also provide an example for the kinect, in our case the kinectv2, but as long as your camera node published RGB/D or point clouds it should be easy to adapt the launch file.
+
+```
+roslaunch kinect2_calibration_files kinect2_bridge_tripodA.launch  # ARMLab internal usage
+roslaunch rviz -d cdcpd/rviz/kinect.rviz
+roslaunch cdcpd kinect.launch
+```
+
 
 # FAQ & Misc Notes
 
