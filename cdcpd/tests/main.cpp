@@ -3,6 +3,7 @@
 
 // All of the test files we want to run
 #include "dummy_test.h"
+#include "MeshConversionTest.h"
 
 int main(int argc, char **argv){
   testing::InitGoogleTest(&argc, argv);
