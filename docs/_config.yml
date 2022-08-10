@@ -1,0 +1,21 @@
+# This is the theme I use most often. I think it's slick and minimalist.
+remote_theme: pmarsceill/just-the-docs
+
+# Auxiliary links for the upper right navigation.
+aux_links:
+  "CDCPD Repository":
+  - "http://github.com/UM-ARM-Lab/cdcpd"
+  "ARM Lab Website":
+  - "http://arm.eecs.umich.edu/"
+  
+# Not a big fan of dark mode. I think the light looks better.
+# color_scheme: "dark"
+
+# You can display an image instead of the site's title like this.
+logo: "/assets/images/arm_lab_logo.png"
+
+# Footer
+footer_content: "Written by Members of The ARM Lab"
+
+# This is the title of the website
+title: "CDCPD"
