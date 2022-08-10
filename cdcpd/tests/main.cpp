@@ -4,6 +4,7 @@
 // All of the test files we want to run
 #include "dummy_test.h"
 #include "MeshConversionTest.h"
+#include "BoxNearestPointsTest.h"
 
 int main(int argc, char **argv){
   testing::InitGoogleTest(&argc, argv);
