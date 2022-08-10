@@ -2,7 +2,6 @@
 #include <gtest/gtest.h>
 
 // All of the test files we want to run
-#include "dummy_test.h"
 #include "MeshConversionTest.h"
 #include "BoxNearestPointsTest.h"
 
