@@ -1,8 +1,20 @@
 #include <cdcpd/optimizer.h>
+#include <gtest/gtest.h>
 
 using Eigen::Matrix3Xf;
 
-int main()
+void expectVector3fEqual(Eigen::Vector3f const& lhs, Eigen::Vector3f const& rhs)
+{
+  for (std::size_t i = 0; i < 3U; ++i)
+  {
+    // Compute a relative error tolerance based on magnitude of passed in values.
+    // We should expect that the values will match within 4 decimal places.
+    float rel_err_tol = std::min(std::abs(lhs[i] / 1e-4), std::abs(rhs[i] / 1e-4));
+    EXPECT_NEAR(lhs[i], rhs[i], rel_err_tol);
+  }
+}
+
+TEST(BoxNearestPointsTest, testCdcpdOptimizer)
 {
   Matrix3Xf init_temp(3,5);
   init_temp(0, 0) =  1.0; init_temp(1, 0) = 0.0; init_temp(2, 0) = -1.0; // near: (sqrt(2)/2, 0, 0); normal: (1/sqrt(3), 0, -sqrt(2/3))
@@ -28,9 +40,12 @@ int main()
   orien.x = 0.3826834; orien.y = 0; orien.z = 0; orien.w = 0.9238795;
   pose.orientation = orien;
 
-  Optimizer opt(init_temp, last_temp, 1.0, 1.0);
-  auto res = opt.test_box(init_temp, box, pose);
+  Optimizer opt(init_temp, last_temp, 1.0, 1.0, 10.0);
+  PointNormal res = opt.test_box(init_temp, box, pose);
 
-  std::cout << std::get<0>(res) << std::endl;
-  std::cout << std::get<1>(res) << std::endl;
+  Point point_expected = {0.707107, -5.96046e-08, 5.96046e-08};
+  Normal normal_expected = {1, -1.19209e-07, -1.41421};
+
+  expectVector3fEqual(std::get<0>(res), point_expected);
+  expectVector3fEqual(std::get<1>(res), normal_expected);
 }

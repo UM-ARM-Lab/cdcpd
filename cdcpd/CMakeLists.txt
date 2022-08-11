@@ -104,13 +104,6 @@ if (pybind11_catkin_FOUND)
     target_link_libraries(pycdcpd PUBLIC cdcpd)
 endif()
 
-if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)
-  message("Building tests!")
-  add_subdirectory(tests)
-endif()
-
-add_subdirectory(tests)
-
 ### Installation
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
@@ -131,3 +124,12 @@ add_executable(cdcpd_node
         )
 add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
+
+
+## Testing
+if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)
+  message("Building CDCPD tests!")
+  include_directories(tests/include)
+  catkin_add_gtest(utest tests/main.cpp)
+  target_link_libraries(utest cdcpd)
+endif()
