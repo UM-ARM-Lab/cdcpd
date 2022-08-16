@@ -1,16 +1,27 @@
 #include <cdcpd/optimizer.h>
 #include <gtest/gtest.h>
 
+#include <iostream>
+
 using Eigen::Matrix3Xf;
 
-void expectVector3fEqual(Eigen::Vector3f const& lhs, Eigen::Vector3f const& rhs)
+void expectMatrixEqual(Eigen::Matrix3Xf const& lhs, Eigen::Matrix3Xf const& rhs)
 {
-  for (std::size_t i = 0; i < 3U; ++i)
+  // Compute a relative error tolerance based on magnitude of each element in the matrix.
+  // We should expect that the values will match within 4 decimals places.
+  Eigen::Matrix3Xf lhs_abs = lhs.cwiseAbs();
+  Eigen::Matrix3Xf rhs_abs = rhs.cwiseAbs();
+  Eigen::Matrix3Xf err_tol = (rhs_abs.cwiseMin(lhs_abs)) / 1e-4;
+ 
+  Eigen::Matrix3Xf subtracted_abs = (rhs - lhs).cwiseAbs();
+  // Make sure all elements in the resulting subtracted absolute value matrix are smaller in
+  // magnitude than the error tolerance.
+  for (std::size_t i = 0; i < lhs.rows(); ++i)
   {
-    // Compute a relative error tolerance based on magnitude of passed in values.
-    // We should expect that the values will match within 4 decimal places.
-    float rel_err_tol = std::min(std::abs(lhs[i] / 1e-4), std::abs(rhs[i] / 1e-4));
-    EXPECT_NEAR(lhs[i], rhs[i], rel_err_tol);
+    for (std::size_t j = 0; j < lhs.cols(); ++j)
+    {
+      EXPECT_TRUE(subtracted_abs(i, j) <= err_tol(i, j));
+    }
   }
 }
 
@@ -41,11 +52,18 @@ TEST(BoxNearestPointsTest, testCdcpdOptimizer)
   pose.orientation = orien;
 
   Optimizer opt(init_temp, last_temp, 1.0, 1.0, 10.0);
-  PointNormal res = opt.test_box(init_temp, box, pose);
+  std::tuple<Points, Normals> res = opt.test_box(init_temp, box, pose);
 
-  Point point_expected = {0.707107, -5.96046e-08, 5.96046e-08};
-  Normal normal_expected = {1, -1.19209e-07, -1.41421};
+  Eigen::Matrix<float, 3, 5> points_expected;
+  points_expected <<  0.707107F   , 0.0F, -0.707107F  , 0.0F        , 0.707107F,
+                     -5.96046e-08F, 0.5F, 4.47035e-08F, 5.96046e-08F, 0.5F,
+                      5.96046e-08F, 1.5F, 1.5F        , 2.0F        , 1.0F;
 
-  expectVector3fEqual(std::get<0>(res), point_expected);
-  expectVector3fEqual(std::get<1>(res), normal_expected);
+  Eigen::Matrix<float, 3, 5> normals_expected;
+  normals_expected <<  1.0F        , 0.0F     , -1.0F, 0.0F        , 1.0F,  
+                      -1.19209e-07F, 0.707107F,  0.0F, 1.19209e-07F, 0.0F,
+                      -1.41421F    , 0.707107F,  0.0F, 1.41421F    , 0.0F;
+
+  expectMatrixEqual(std::get<0>(res), points_expected);
+  expectMatrixEqual(std::get<1>(res), normals_expected);
 }
