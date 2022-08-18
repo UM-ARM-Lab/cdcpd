@@ -15,7 +15,12 @@ The master branch is the version the users outside the lab should use.
   - [Gurobi Licence](#gurobi-licence)
   - [Building](#building)
   - [Testing](#testing)
-- [Demo](#demo)
+- [Demos](#demos)
+  - [Virtual Demos](#virtual-demos)
+    - [Downloading The rosbags](#downloading-the-rosbags)
+    - [Running The Demos](#running-the-demos)
+    - [Demo Descriptions](#demo-descriptions)
+  - [Demos With Sensors](#demos-with-sensors)
 - [Adding gtest Unit Tests](#adding-gtest-unit-tests)
 - [FAQ & Misc Notes](#faq--misc-notes)
 
@@ -73,7 +78,50 @@ catkin test cdcpd
 
 This will build and execute all CDCPD unit tests to ensure the package was installed without error.
 
-## Demo
+## Demos
+
+### Virtual Demos
+
+We offer several rosbag files to showcase what nominal function of CDCPD should look like given a proper install and sensor configuration.
+
+#### Downloading The rosbags
+
+Before running the virtual demos you must download and decompress the rosbags. To do this:
+
+1. Download the demos folder to your local machine.
+   1. The link is: https://www.dropbox.com/sh/4nsnxu4a2cxm8ko/AAC0-FsuWTHUB8FWrvp5BqR0a?dl=0
+   2. Simply click the link and download the "rosbags_compressed" zip folder.
+2. Extract the folder in the link (rosbags_compressed) to `<your_cdcpd_repo>/demos`. This should result in a folder structure that looks like `<your_cdcpd_repo>/demos/rosbags_compressed/` that has all of the compressed rosbags in this folder.
+3. Change directory to `<your_cdcpd_repo>/demos`
+4. Run the rosbag decompression script with:
+    ```
+    ./unpack_rosbags.sh
+    ```
+    This unpacks all of the compressed rosbags in `demos/rosbags_compressed/` to the `demos/rosbags/`.
+
+#### Running The Demos
+
+To run the virtual demos:
+
+1. Start a `roscore`
+   1. If you already have a `roscore` running, make sure to `rosnode cleanup` before running the demos.
+2. In another terminal, navigate to `<your_cdcpd_repo>/demos/`
+3. Run the desired demo script, e.g.
+    ```
+    ./launch_demo1.sh
+    ```
+
+This will display an example of CDCPD running.
+
+#### Demo Descriptions
+
+Note that demos loop! If you see the tracking jump around in rviz, it's likely due to the demo starting over.
+
+- Demo 1
+  - A static rope. This is a good place to start to see how CDCPD converges to tracking a short, static rope.
+
+
+### Demos With Sensors
 
 To run with a realsense, without the obstacle or gripper constraints, try this:
 
