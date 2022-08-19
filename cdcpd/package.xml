@@ -31,5 +31,7 @@
   <depend>smmap_utilities</depend>
   <depend>std_msgs</depend>
   <depend>yaml-cpp</depend>
+
+  <test_depend>rosunit</test_depend>
 </package>
 
