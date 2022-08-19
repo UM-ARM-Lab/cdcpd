@@ -129,7 +129,15 @@ target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
 ## Testing
 if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)
   message("Building CDCPD tests!")
-  include_directories(tests/include)
-  catkin_add_gtest(utest tests/main.cpp)
+  
+
+  # Regression/integration testing
+#   find_package(rostest REQUIRED)
+#   add_rostest_gtest(cdcpd-test launch/gtest.test tests/main.cpp)
+#   target_link_libraries(cdcpd-test ${catkin_LIBRARIES} cdcpd)
+  
+  # Unit testing
+  include_directories(tests/unit/include)
+  catkin_add_gtest(utest tests/unit/main.cpp)
   target_link_libraries(utest cdcpd)
 endif()
