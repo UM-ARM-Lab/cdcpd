@@ -15,6 +15,7 @@ set(CATKIN_PACKAGES
         moveit_visual_tools
         pybind11_catkin
         pyrosmsg
+        rosbag
         sdf_tools
         sensor_msgs
         smmap_models
@@ -132,9 +133,10 @@ if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)
   
 
   # Regression/integration testing
-#   find_package(rostest REQUIRED)
-#   add_rostest_gtest(cdcpd-test launch/gtest.test tests/main.cpp)
-#   target_link_libraries(cdcpd-test ${catkin_LIBRARIES} cdcpd)
+  find_package(rostest REQUIRED)
+  find_package(rosbag REQUIRED)
+  add_rostest_gtest(static-rope-test launch/static_rope.test tests/integration/static_rope.cpp)
+  target_link_libraries(static-rope-test ${catkin_LIBRARIES} cdcpd)
   
   # Unit testing
   include_directories(tests/unit/include)

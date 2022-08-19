@@ -24,6 +24,7 @@
   <depend>moveit_visual_tools</depend>
   <depend>pybind11_catkin</depend>
   <depend>pyrosmsg</depend>
+  <depend>rosbag</depend>
   <depend>roscpp</depend>
   <depend>sdf_tools</depend>
   <depend>sensor_msgs</depend>
