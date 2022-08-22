@@ -489,6 +489,7 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
       use_recovery(use_recovery),
       last_grasp_status({false, false}),
       objective_value_threshold_(objective_value_threshold) {
+  ROS_WARN("after initializer list");
   last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
   last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 
