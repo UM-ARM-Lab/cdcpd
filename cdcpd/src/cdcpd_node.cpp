@@ -165,9 +165,9 @@ struct CDCPD_Moveit_Node {
     auto const rgb_topic = ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw");
     auto const depth_topic = ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw");
     auto const info_topic = ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info");
-    auto const camera_frame = ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame");
+    camera_frame = ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame");
 
-    // For use with TF and "fixed points" for the constrain step
+    // For use with TF and "fixed points" for the constraint step
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << camera_frame);
     auto const grippers_info_filename = ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node");
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
@@ -283,7 +283,7 @@ struct CDCPD_Moveit_Node {
     auto get_obstacle_constraints = [&]() {
       ObstacleConstraints obstacle_constraints;
       if (moveit_ready and moveit_enabled) {
-        obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
+        obstacle_constraints = get_moveit_obstacle_constraints(tracked_points);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
       }
       return obstacle_constraints;
@@ -558,7 +558,7 @@ struct CDCPD_Moveit_Node {
     return {arrow, normal};
   }
 
-  ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points) {
+  ObstacleConstraints get_moveit_obstacle_constraints(PointCloud::ConstPtr tracked_points) {
     Eigen::Isometry3d cdcpd_to_moveit;
     try {
       auto const cdcpd_to_moveit_msg =
@@ -621,7 +621,7 @@ struct CDCPD_Moveit_Node {
       auto sphere = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
 
       robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {sphere},
-                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{}, "base_link");
+                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{}, "hdt_michigan_root");
     }
 
     // visualize
