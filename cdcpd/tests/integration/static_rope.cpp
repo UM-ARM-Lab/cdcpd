@@ -11,6 +11,8 @@
 
 #include <iostream>
 
+#define PRINT_DEBUG_MESSAGES false
+
 // TODO(dylan.colli): This was ripped from cdcpd_node.cpp and should be refactored at some point
 // soon.
 std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_points,
@@ -30,6 +32,8 @@ std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> makeRopeTemplate(int const num_poi
     template_edges(0, i) = i;
     template_edges(1, i - 1) = i;
   }
+
+  if (PRINT_DEBUG_MESSAGES)
   {
       ROS_WARN("Template edges:");
       std::stringstream ss;
@@ -65,51 +69,29 @@ std::pair<PointCloud::Ptr, Eigen::Matrix2Xi const> getInitialTracking(
         makeRopeTemplate(num_points, start_position, end_position);
     Eigen::Matrix3Xf const& initial_template_vertices = initial_template_pair.first;
     Eigen::Matrix2Xi const initial_template_edges = initial_template_pair.second;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr initial_tracked_points = makeCloud(initial_template_vertices);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr initial_tracked_points =
+        makeCloud(initial_template_vertices);
     return {initial_tracked_points, initial_template_edges};
 }
 
 CDCPD* initializeCdcpdSimulator(float const max_rope_length, int const num_points)
 {
-    // Initialize the ROS node handlers?
-    // Not necessary for one constructor but that just default constructs the node handlers to:
-    //  ros::NodeHandle() and ros::NodeHandle("~").
-    // I'm not sure if this is sufficient for testing purposes. I might have to separate the
-    // ROS interfaces from the CDCPD math to properly test everything.
-
-    // Likely need to remove these. Just here for debugging.
-    // ROS_WARN("Before nh");
-    // auto nh = ros::NodeHandle();
-    // ROS_WARN("After nh");
-    // auto ph = ros::NodeHandle("~");
-    // ROS_WARN("After ph");
-
     // Initialize the template point clouds.
     // TODO(dylan.colli): There's a decent amount of repeated code between this and cdcpd_node.cpp
     // CDCPD constructor. Refactor.
-
-    // TODO(dylan.colli): This is taken from a conditional in cdcpd_node.cpp CDCPD_Moveit_Node
-    // constructor. This should be refactored.
-    // Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
-    // Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
-    // start_position << -max_rope_length / 2, 0, 1.0;
-    // end_position << max_rope_length / 2, 0, 1.0;
-    // std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> const& initial_template_pair =
-    //     makeRopeTemplate(num_points, start_position, end_position);
-    // Eigen::Matrix3Xf const& initial_template_vertices = initial_template_pair.first;
-    // Eigen::Matrix2Xi const& initial_template_edges = initial_template_pair.second;
-    // PointCloud::Ptr const& initial_tracked_points = makeCloud(initial_template_vertices);
-    std::pair<PointCloud::Ptr, Eigen::Matrix2Xi const> initial_tracking = 
+    std::pair<PointCloud::Ptr, Eigen::Matrix2Xi const> initial_tracking =
         getInitialTracking(max_rope_length, num_points);
     PointCloud::Ptr const& initial_tracked_points = initial_tracking.first;
     Eigen::Matrix2Xi const& initial_template_edges = initial_tracking.second;
-    
+
+    if (PRINT_DEBUG_MESSAGES)
     {
         std::stringstream ss;
         ss << initial_template_edges;
         ROS_WARN("Initial template edges");
         ROS_WARN(ss.str().c_str());
     }
+
     // Specify constant scalar and boolean parameters
     float const objective_value_threshold = 1.0;
     bool const use_recovery = false;
@@ -120,19 +102,12 @@ CDCPD* initializeCdcpdSimulator(float const max_rope_length, int const num_point
     float const zeta = 10.0;
     float const obstacle_cost_weight = 0.001;
     float const fixed_points_weight = 10.0;
-    // TODO(dylan.colli): Use smart pointer here.
-    ROS_WARN("Right before CDCPD object construction");
-    // CDCPD cdcpd = CDCPD(initial_tracked_points, initial_template_edges,
-    //     objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
-    //     fixed_points_weight);
-    // ROS_WARN("Right after initial constrution");
+
     CDCPD* cdcpd_ptr = new CDCPD(initial_tracked_points, initial_template_edges,
         objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
         fixed_points_weight);
-    ROS_WARN("Right after CDCPD object construction");
 
     return cdcpd_ptr;
-    // return cdcpd;
 }
 
 void expectPointCloudsEqual(pcl::PointCloud<pcl::PointXYZ> const& truth,
@@ -174,25 +149,13 @@ boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> readLastCdcpdOutput(rosbag::Ba
             ROS_WARN("No data!");
         }
     }
+
     // Convert the last point cloud message to a usable point cloud type.
     auto pt_cloud_last = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    {
-        pcl::PCLPointCloud2 points_v2;
-        pcl_conversions::toPCL(*pt_cloud_last_ptr, points_v2);
-        pcl::fromPCLPointCloud2(points_v2, *pt_cloud_last);
-    }
-    {
-        std::stringstream ss_2;
-        for (int nIndex = 0; nIndex < pt_cloud_last->points.size (); nIndex++)
-        {
-            float x = pt_cloud_last->points[nIndex].x;
-            float y = pt_cloud_last->points[nIndex].y;
-            float z = pt_cloud_last->points[nIndex].z;
-            ss_2 << "(" << x << ", " << y << ", " << z << "), ";
-        }
-        ROS_WARN("Read pt_cloud_last points:");
-        ROS_WARN(ss_2.str().c_str());
-    }
+    pcl::PCLPointCloud2 points_v2;
+    pcl_conversions::toPCL(*pt_cloud_last_ptr, points_v2);
+    pcl::fromPCLPointCloud2(points_v2, *pt_cloud_last);
+
     return pt_cloud_last;
 }
 
@@ -216,14 +179,14 @@ std::vector<boost::shared_ptr<PointCloudRGB>> readCdcpdInputPointClouds(rosbag::
         {
             ROS_ERROR("Point cloud pointer is empty!");
         }
-        
+
         // Do any data transformation on the message to put into form that CDCPD can take as input.
         // TODO(dylan.colli): This mimics some of the functionality in points_callback that should
         // likely be refactored.
         auto points_input = boost::make_shared<PointCloudRGB>();
         {
             pcl::PCLPointCloud2 points_v2;
-            pcl_conversions::toPCL(*points_msg, points_v2);   
+            pcl_conversions::toPCL(*points_msg, points_v2);
             pcl::fromPCLPointCloud2(points_v2, *points_input);
         }
         input_clouds.push_back(points_input);
@@ -231,9 +194,13 @@ std::vector<boost::shared_ptr<PointCloudRGB>> readCdcpdInputPointClouds(rosbag::
     return input_clouds;
 }
 
-PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim, std::vector<boost::shared_ptr<PointCloudRGB>> const& input_clouds, float const max_rope_length, int const num_points)
+// Resimulate CDCPD on a set of previously recorded input point clouds in a bag file.
+PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
+    std::vector<boost::shared_ptr<PointCloudRGB>> const& input_clouds, float const max_rope_length,
+    int const num_points)
 {
-    std::pair<PointCloud::Ptr, Eigen::Matrix2Xi const> initial_tracking = 
+    // Do some setup of parameters and gripper configuration.
+    std::pair<PointCloud::Ptr, Eigen::Matrix2Xi const> initial_tracking =
         getInitialTracking(max_rope_length, num_points);
     PointCloud::Ptr tracked_points = initial_tracking.first;
     ObstacleConstraints obstacle_constraints;  // No need to specify anything with this demo.
@@ -242,7 +209,6 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim, std::vector<boost::shared_ptr<
     smmap::AllGrippersSinglePose q_config;
     const smmap::AllGrippersSinglePoseDelta q_dot{gripper_count, kinematics::Vector6d::Zero()};
     Eigen::MatrixXi gripper_indices(1, gripper_count);
-    ROS_WARN("After CDCPD initialization");
 
     // Read the CDCPD input from the rosbag and step through the execution until the end of input is
     // reached.
@@ -257,50 +223,47 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim, std::vector<boost::shared_ptr<
         tracked_points = out.gurobi_output;
 
         // Do a health check of CDCPD?
-        if (out.status == OutputStatus::NoPointInFilteredCloud || 
+        if (out.status == OutputStatus::NoPointInFilteredCloud ||
             out.status == OutputStatus::ObjectiveTooHigh)
         {
-            ROS_ERROR("CDCPD failed for this iteration. We need to implement cdcpd_node.cpp reset_if_bad lambda function!");
+            std::string err_msg = "CDCPD failed for this iteration. We need to implement "
+                "cdcpd_node.cpp reset_if_bad lambda function!";
+            ROS_ERROR(err_msg.c_str());
         }
-        ROS_WARN("After health check");
     }
     return tracked_points;
 }
 
 TEST(StaticRope, testConvergence)
 {
+    // Read in the ros bagfile that we'll be resimulating and checking CDCPD performance against.
     rosbag::Bag bag;
-    // Test executed from ~/.ros, so we have to do some funky path manipulation to get to the bag
-    // files
+    // This test is executed from ~/.ros, so we have to do some funky path manipulation to get to
+    // the bag files
     bag.open("../../../../../src/cdcpd/demos/rosbags/demo_1_static_rope.bag",
         rosbag::bagmode::Read);
     auto pt_cloud_last = readLastCdcpdOutput(bag);
 
     // Run CDCPD on rosbag input so as to simulate a full run of CDCPD and test that the
     // functionality has not changed significantly since recording of the bag file.
-    // CDCPD cdcpd_sim();
-    ROS_WARN("Before cdcpd initialization.");
     float const max_rope_length = 0.46F;  // Taken from kinect_tripodB.launch
     int const num_points = 15;  // Taken from kinect_tripodB.launch
     CDCPD* cdcpd_sim = initializeCdcpdSimulator(max_rope_length, num_points);
-    ROS_WARN("After cdcpd_sim object initialization");
 
     auto input_clouds = readCdcpdInputPointClouds(bag);
-    PointCloud::Ptr tracked_points = resimulateCdcpd(*cdcpd_sim, input_clouds, max_rope_length, num_points);
+    PointCloud::Ptr tracked_points = resimulateCdcpd(*cdcpd_sim, input_clouds, max_rope_length,
+        num_points);
 
     expectPointCloudsEqual(*pt_cloud_last, *tracked_points);
-    
+
     bag.close();
 }
 
 int main(int argc, char** argv){
     ros::init(argc, argv, "StaticRopeTestNode");
     testing::InitGoogleTest(&argc, argv);
-//   ros::NodeHandle nh;
     auto nh = ros::NodeHandle();
     auto ph = ros::NodeHandle("~");
-
-//   thread t([]{while(ros::ok()) ros::spin();});
 
     auto res = RUN_ALL_TESTS();
 
