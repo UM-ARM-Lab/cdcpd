@@ -1,7 +1,3 @@
 <launch>
-	<!-- Start CDCPD node so that we can test its functionality -->
-	<!-- <node pkg="cdcpd" type="cdcpd_node" name="cdcpd_test_static_rope_node" /> -->
-	<!-- Do we need to setup parameters here? Likely. -->
-	<!-- parameter syntax: <param name="string"  value="mystring" /> -->
 	<test test-name="static_rope" pkg="cdcpd" type="static-rope-test" cwd="node"/>
 </launch>
