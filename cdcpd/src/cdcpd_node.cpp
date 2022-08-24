@@ -1,29 +1,4 @@
-#include <arc_utilities/enumerate.h>
-#include <cdcpd/cdcpd.h>
-#include <geometric_shapes/shapes.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <jsk_recognition_msgs/BoundingBox.h>
-#include <moveit/collision_detection/collision_common.h>
-#include <moveit/collision_detection/collision_tools.h>
-#include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
-#include <moveit/collision_detection_bullet/collision_env_bullet.h>
-#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-#include <moveit_visual_tools/moveit_visual_tools.h>
-#include <opencv2/imgproc/types_c.h>
-#include <pcl/point_types.h>
-#include <pcl_ros/point_cloud.h>
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <tf2_ros/transform_listener.h>
-#include <visualization_msgs/Marker.h>
-#include <yaml-cpp/yaml.h>
-
-#include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <arc_utilities/eigen_ros_conversions.hpp>
-#include <arc_utilities/ros_helpers.hpp>
-
-#include "cdcpd_ros/camera_sub.h"
-#include "cdcpd/utils.h"
+#include "cdcpd/cdcpd_node.h"
 
 std::string const LOGNAME = "cdcpd_node";
 constexpr auto const MAX_CONTACTS_VIZ = 25;
@@ -36,11 +11,6 @@ Eigen::Vector3f extent_to_env_size(Eigen::Vector3f const& bbox_lower, Eigen::Vec
 Eigen::Vector3f extent_to_center(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
   return (bbox_upper + bbox_lower) / 2;
 };
-
-typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
-namespace gm = geometry_msgs;
-namespace vm = visualization_msgs;
-namespace ehc = EigenHelpersConversions;
 
 cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
   auto const hue_min = ROSHelpers::GetParamDebugLog<double>(ph, "hue_min", 340.0);
@@ -81,35 +51,47 @@ void print_bodies(robot_state::RobotState const& state) {
   }
 }
 
-struct CDCPD_Moveit_Node {
-  std::string collision_body_prefix{"cdcpd_tracked_point_"};
-  std::string robot_namespace_;
-  std::string robot_description_;
-  ros::NodeHandle nh;
-  ros::NodeHandle ph;
-  ros::Publisher contact_marker_pub;
-  ros::Publisher bbox_pub;
-  planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
-  robot_model_loader::RobotModelLoaderPtr model_loader_;
-  robot_model::RobotModelPtr model_;
-  moveit_visual_tools::MoveItVisualTools visual_tools_;
-  std::string moveit_frame{"robot_root"};
-  std::string camera_frame;
-  double min_distance_threshold{0.01};
-  bool moveit_ready{false};
+CdcpdPublishers::CdcpdPublishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
+{
+    original_publisher = nh.advertise<PointCloud>("cdcpd/original", 10);
+    masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 10);
+    downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 10);
+    template_publisher = nh.advertise<PointCloud>("cdcpd/template", 10);
+    pre_template_publisher = nh.advertise<PointCloud>("cdcpd/pre_template", 10);
+    output_publisher = nh.advertise<PointCloud>("cdcpd/output", 10);
+    order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
+    contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
+    bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
+}
 
-  tf2_ros::Buffer tf_buffer_;
-  tf2_ros::TransformListener tf_listener_;
 
-  explicit CDCPD_Moveit_Node(std::string const& robot_namespace)
+CdcpdNodeParameters::CdcpdNodeParameters(ros::NodeHandle& nh, ros::NodeHandle& ph)
+  : points_name(ROSHelpers::GetParam<std::string>(ph, "points", "")),
+    rgb_topic(ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw")),
+    depth_topic(ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw")),
+    info_topic(ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info")),
+    camera_frame(ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame")),
+    grippers_info_filename(ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node")),
+    num_points(ROSHelpers::GetParam<int>(nh, "rope_num_points", 11)),
+    max_rope_length(ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0)),
+    moveit_enabled(ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false))
+{}
+
+
+CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
       : robot_namespace_(robot_namespace),
         robot_description_(robot_namespace + "/robot_description"),
         ph("~"),
+        publishers(nh, ph),
+        node_params(nh, ph),
+        cdcpd_params(ph),
+        max_segment_length(node_params.max_rope_length / static_cast<float>(node_params.num_points)),
         scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
         model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
         model_(model_loader_->getModel()),
         visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
-        tf_listener_(tf_buffer_) {
+        tf_listener_(tf_buffer_)
+{
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
     scene_monitor_->startSceneMonitor(scene_topic);
@@ -118,34 +100,14 @@ struct CDCPD_Moveit_Node {
       ROS_WARN_NAMED(LOGNAME, "Could not get the moveit planning scene. This means no obstacle constraints.");
     }
 
-    // Publishers for the data, some visualizations, others consumed by other nodes
-    auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 10);
-    auto masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 10);
-    auto downsampled_publisher = nh.advertise<PointCloud>("cdcpd/downsampled", 10);
-    auto template_publisher = nh.advertise<PointCloud>("cdcpd/template", 10);
-    auto pre_template_publisher = nh.advertise<PointCloud>("cdcpd/pre_template", 10);
-    auto output_publisher = nh.advertise<PointCloud>("cdcpd/output", 10);
-    auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
-    contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
-    bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
-
-    // point cloud input takes precedence. If points_name is not empty, we will use that and not RGB + Depth
-    auto const points_name = ROSHelpers::GetParam<std::string>(ph, "points", "");
-    auto const rgb_topic = ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw");
-    auto const depth_topic = ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw");
-    auto const info_topic = ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info");
-    auto const camera_frame = ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame");
-
     // For use with TF and "fixed points" for the constrain step
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << camera_frame);
-    auto const grippers_info_filename = ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node");
-    auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << node_params.camera_frame);
 
-    ROS_INFO_STREAM_NAMED(LOGNAME, "Loading " << grippers_info_filename);
-    auto grippers_info = YAML::LoadFile(grippers_info_filename);
-    unsigned int gripper_count = grippers_info.size();
+    ROS_INFO_STREAM_NAMED(LOGNAME, "Loading " << node_params.grippers_info_filename);
+    grippers_info = YAML::LoadFile(node_params.grippers_info_filename);
+    gripper_count = grippers_info.size();
     int gripper_idx = 0;
-    Eigen::MatrixXi gripper_indices(1, gripper_count);
+    gripper_indices(1, gripper_count);
     for (auto const gripper_info_i : grippers_info) {
       auto const tf_name = gripper_info_i.first.as<std::string>();
       auto const node_idx = gripper_info_i.second.as<int>();
@@ -156,243 +118,70 @@ struct CDCPD_Moveit_Node {
       gripper_indices = {};
     }
 
-    auto get_q_config = [&]() {
-      smmap::AllGrippersSinglePose q_config;
-      for (auto const gripper_info_i : grippers_info) {
-        auto const tf_name = gripper_info_i.first.as<std::string>();
-        if (not tf_name.empty()) {
-          try {
-            auto const gripper = tf_buffer_.lookupTransform(camera_frame, tf_name, ros::Time(0), ros::Duration(10));
-            auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
-            ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "gripper: " << config.translation());
-            q_config.push_back(config);
-          } catch (tf2::TransformException const& ex) {
-            ROS_WARN_STREAM_THROTTLE(
-                10.0, "Unable to lookup transform from " << camera_frame << " to " << tf_name << ": " << ex.what());
-          }
-        }
-      }
-
-      const smmap::AllGrippersSinglePoseDelta q_dot{gripper_count, kinematics::Vector6d::Zero()};
-
-      return std::tuple{q_config, q_dot};
-    };
-
     // Initial connectivity model of rope
-    auto const max_rope_length = ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0);
-    auto const max_segment_length = max_rope_length / static_cast<float>(num_points);
+    // auto const max_segment_length = node_params.max_rope_length / static_cast<float>(node_params.num_points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
 
     // initialize start and end points for rope
     auto [init_q_config, init_q_dot] = get_q_config();
     Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
     Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
-    end_position[2] += max_rope_length;
+    end_position[2] += node_params.max_rope_length;
     if (gripper_count == 2u) {
       start_position = init_q_config[0].translation().cast<float>();
       end_position = init_q_config[1].translation().cast<float>();
     } else if (gripper_count == 1u) {
       start_position = init_q_config[0].translation().cast<float>();
       end_position = start_position;
-      end_position[1] += max_rope_length;
+      end_position[1] += node_params.max_rope_length;
     } else if (gripper_count == 0u) {
-      start_position << -max_rope_length / 2, 0, 1.0;
-      end_position << max_rope_length / 2, 0, 1.0;
+      start_position << -node_params.max_rope_length / 2, 0, 1.0;
+      end_position << node_params.max_rope_length / 2, 0, 1.0;
     }
 
-    auto const& initial_template_pair = makeRopeTemplate(num_points, start_position, end_position);
+    auto const& initial_template_pair = makeRopeTemplate(node_params.num_points, start_position, end_position);
     auto const& initial_template_vertices = initial_template_pair.first;
-    auto const& initial_template_edges = initial_template_pair.second;
+    // auto const& initial_template_edges = initial_template_pair.second;
+    initial_template_edges = initial_template_pair.second;
 
     // Construct the initial template as a PCL cloud
-    auto const& initial_tracked_points = makeCloud(initial_template_vertices);
-    PointCloud::Ptr tracked_points = initial_tracked_points;  // non-const, modified each time
+    // auto const& initial_tracked_points = makeCloud(initial_template_vertices);
+    initial_tracked_points = makeCloud(initial_template_vertices);
+    tracked_points = initial_tracked_points;  // non-const, modified each time
 
-    // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
-    auto const objective_value_threshold = ROSHelpers::GetParam<double>(ph, "objective_value_threshold", 1.0);
-    auto const alpha = ROSHelpers::GetParam<double>(ph, "alpha", 0.5);
-    auto const lambda = ROSHelpers::GetParam<double>(ph, "lambda", 1.0);
-    auto const k_spring = ROSHelpers::GetParam<double>(ph, "k", 100.0);
-    auto const beta = ROSHelpers::GetParam<double>(ph, "beta", 1.0);
-    auto const zeta = ROSHelpers::GetParam<double>(ph, "zeta", 10.0);
-    min_distance_threshold = ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01);
-    auto const obstacle_cost_weight = ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001);
-    auto const fixed_points_weight = ROSHelpers::GetParam<double>(ph, "fixed_points_weight", 10.0);
-    // NOTE: original cdcpd recovery not implemented
-    auto const use_recovery = ROSHelpers::GetParam<bool>(ph, "use_recovery", false);
-    auto const moveit_enabled = ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false);
+    cdcpd = new CDCPD(nh, ph, initial_tracked_points, initial_template_edges,
+        cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha, cdcpd_params.beta,
+        cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta, cdcpd_params.obstacle_cost_weight,
+        cdcpd_params.fixed_points_weight);
 
-    auto cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
-                       alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
-
-    auto publish_bbox = [&]() {
-      jsk_recognition_msgs::BoundingBox bbox_msg;
-      bbox_msg.header.stamp = ros::Time::now();
-      bbox_msg.header.frame_id = camera_frame;
-
-      auto const bbox_size = extent_to_env_size(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
-      auto const bbox_center = extent_to_center(cdcpd.last_lower_bounding_box, cdcpd.last_upper_bounding_box);
-      bbox_msg.pose.position.x = bbox_center.x();
-      bbox_msg.pose.position.y = bbox_center.y();
-      bbox_msg.pose.position.z = bbox_center.z();
-      bbox_msg.pose.orientation.w = 1;
-      bbox_msg.dimensions.x = bbox_size.x();
-      bbox_msg.dimensions.y = bbox_size.y();
-      bbox_msg.dimensions.z = bbox_size.z();
-      bbox_pub.publish(bbox_msg);
+    // Define the callback wrappers we need to pass to ROS nodes.
+    auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics)
+    {
+        callback(rgb, depth, intrinsics);
+    };
+    auto const points_callback_wrapper = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg)
+    {
+        points_callback(points_msg);
     };
 
-    auto publish_template = [&]() {
-      auto time = ros::Time::now();
-      tracked_points->header.frame_id = camera_frame;
-      pcl_conversions::toPCL(time, tracked_points->header.stamp);
-      pre_template_publisher.publish(tracked_points);
-    };
-
-    auto get_obstacle_constraints = [&]() {
-      ObstacleConstraints obstacle_constraints;
-      if (moveit_ready and moveit_enabled) {
-        obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
-        ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
-      }
-      return obstacle_constraints;
-    };
-
-    auto publish_outputs = [&](ros::Time const& t0, CDCPD::Output const& out) {
-      // Update the frame ids
-      {
-        out.original_cloud->header.frame_id = camera_frame;
-        out.masked_point_cloud->header.frame_id = camera_frame;
-        out.downsampled_cloud->header.frame_id = camera_frame;
-        out.cpd_output->header.frame_id = camera_frame;
-        out.gurobi_output->header.frame_id = camera_frame;
-      }
-
-      // Add timestamp information
-      {
-        auto time = ros::Time::now();
-        pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
-        pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
-      }
-
-      // Publish the point clouds
-      {
-        original_publisher.publish(out.original_cloud);
-        masked_publisher.publish(out.masked_point_cloud);
-        downsampled_publisher.publish(out.downsampled_cloud);
-        template_publisher.publish(out.cpd_output);
-        output_publisher.publish(out.gurobi_output);
-      }
-
-      // Publish markers indication the order of the points
-      {
-        auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
-          vm::Marker order;
-          order.header.frame_id = camera_frame;
-          order.header.stamp = ros::Time();
-          order.ns = ns;
-          order.type = visualization_msgs::Marker::LINE_STRIP;
-          order.action = visualization_msgs::Marker::ADD;
-          order.pose.orientation.w = 1.0;
-          order.id = 1;
-          order.scale.x = 0.01;
-          order.color.r = 0.1;
-          order.color.g = 0.6;
-          order.color.b = 0.9;
-          order.color.a = 1.0;
-
-          for (auto pc_iter : *cloud) {
-            geometry_msgs::Point p;
-            p.x = pc_iter.x;
-            p.y = pc_iter.y;
-            p.z = pc_iter.z;
-            order.points.push_back(p);
-          }
-          return order;
-        };
-
-        auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
-        order_pub.publish(rope_marker);
-      }
-
-      // compute length and print that for debugging purposes
-      auto output_length{0.0};
-      for (auto point_idx{0}; point_idx < tracked_points->size() - 1; ++point_idx) {
-        Eigen::Vector3f const p = tracked_points->at(point_idx + 1).getVector3fMap();
-        Eigen::Vector3f const p_next = tracked_points->at(point_idx).getVector3fMap();
-        output_length += (p_next - p).norm();
-      }
-      ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = " << max_rope_length);
-
-      auto const t1 = ros::Time::now();
-      auto const dt = t1 - t0;
-      ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
-    };
-
-    auto reset_if_bad = [&](CDCPD::Output const& out) {
-      if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
-        // recreating
-        cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
-                      alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
-      }
-    };
-
-    auto const callback = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics) {
-      auto const t0 = ros::Time::now();
-      auto [q_config, q_dot] = get_q_config();
-
-      publish_bbox();
-
-      auto obstacle_constraints = get_obstacle_constraints();
-
-      auto const hsv_mask = getHsvMask(ph, rgb);
-      auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
-                             q_dot, q_config, gripper_indices);
-      tracked_points = out.gurobi_output;
-      publish_outputs(t0, out);
-      reset_if_bad(out);
-    };
-
-    auto const points_callback = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg) {
-      auto const t0 = ros::Time::now();
-      auto [q_config, q_dot] = get_q_config();
-
-      publish_bbox();
-      publish_template();
-      auto obstacle_constraints = get_obstacle_constraints();
-
-      pcl::PCLPointCloud2 points_v2;
-      pcl_conversions::toPCL(*points_msg, points_v2);
-      auto points = boost::make_shared<PointCloudRGB>();
-      pcl::fromPCLPointCloud2(points_v2, *points);
-      ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
-
-      auto const out =
-          cdcpd(points, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_indices);
-      tracked_points = out.gurobi_output;
-      publish_outputs(t0, out);
-      reset_if_bad(out);
-    };
-
-    if (points_name.empty()) {
+    if (node_params.points_name.empty()) {
       ROS_INFO_NAMED(LOGNAME, "subscribing to RGB + Depth");
-      auto camera_sub_setup = CameraSubSetup(rgb_topic, depth_topic, info_topic);
+      auto camera_sub_setup = CameraSubSetup(node_params.rgb_topic, node_params.depth_topic,
+        node_params.info_topic);
       // wait a second so the TF buffer can fill
       ros::Duration(0.5).sleep();
 
-      KinectSub sub(callback, camera_sub_setup);
+      KinectSub sub(callback_wrapper, camera_sub_setup);
       ros::waitForShutdown();
     } else {
       ROS_INFO_NAMED(LOGNAME, "subscribing to points");
-      auto sub = nh.subscribe<sensor_msgs::PointCloud2>(points_name, 10, points_callback);
+      auto sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 10,
+          points_callback_wrapper);
       ros::spin();
     }
   }
 
-  ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
                                                       Eigen::Isometry3d const& cdcpd_to_moveit) {
     collision_detection::CollisionRequest req;
     req.contacts = true;
@@ -482,10 +271,11 @@ struct CDCPD_Moveit_Node {
     }
 
     ROS_DEBUG_STREAM_NAMED(LOGNAME + ".contacts", "contacts: " << contact_idx);
-    contact_marker_pub.publish(contact_markers);
+    publishers.contact_marker_pub.publish(contact_markers);
     return obstacle_constraints;
   }
-  std::pair<vm::Marker, vm::Marker> arrow_and_normal(int contact_idx, const Eigen::Vector3d& tracked_point_moveit_frame,
+
+std::pair<vm::Marker, vm::Marker> CDCPD_Moveit_Node::arrow_and_normal(int contact_idx, const Eigen::Vector3d& tracked_point_moveit_frame,
                                                      const Eigen::Vector3d& object_point_moveit_frame,
                                                      const Eigen::Vector3d& object_point_cdcpd_frame,
                                                      const Eigen::Vector3d& normal_cdcpd_frame) const {
@@ -510,7 +300,7 @@ struct CDCPD_Moveit_Node {
     normal.action = vm::Marker::ADD;
     normal.type = vm::Marker::ARROW;
     normal.ns = "normal";
-    normal.header.frame_id = camera_frame;
+    normal.header.frame_id = node_params.camera_frame;
     normal.header.stamp = ros::Time::now();
     normal.color.r = 0.4;
     normal.color.g = 1.0;
@@ -527,15 +317,15 @@ struct CDCPD_Moveit_Node {
     return {arrow, normal};
   }
 
-  ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points) {
+ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points) {
     Eigen::Isometry3d cdcpd_to_moveit;
     try {
       auto const cdcpd_to_moveit_msg =
-          tf_buffer_.lookupTransform(moveit_frame, camera_frame, ros::Time(0), ros::Duration(10));
+          tf_buffer_.lookupTransform(moveit_frame, node_params.camera_frame, ros::Time(0), ros::Duration(10));
       cdcpd_to_moveit = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit_msg.transform);
     } catch (tf2::TransformException const& ex) {
       ROS_WARN_STREAM_THROTTLE(
-          10.0, "Unable to lookup transform from " << camera_frame << " to " << moveit_frame << ": " << ex.what());
+          10.0, "Unable to lookup transform from " << node_params.camera_frame << " to " << moveit_frame << ": " << ex.what());
       return {};
     }
 
@@ -599,7 +389,196 @@ struct CDCPD_Moveit_Node {
     ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Finding nearest points and normals");
     return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
   }
+
+void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics)
+{
+    auto const t0 = ros::Time::now();
+    auto [q_config, q_dot] = get_q_config();
+
+    publish_bbox();
+
+    auto obstacle_constraints = get_obstacle_constraints();
+
+    auto const hsv_mask = getHsvMask(ph, rgb);
+    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
+                            q_dot, q_config, gripper_indices);
+    tracked_points = out.gurobi_output;
+    publish_outputs(t0, out);
+    reset_if_bad(out);
 };
+
+void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
+{
+    auto const t0 = ros::Time::now();
+    auto [q_config, q_dot] = get_q_config();
+
+    publish_bbox();
+    publish_template();
+    auto obstacle_constraints = get_obstacle_constraints();
+
+    pcl::PCLPointCloud2 points_v2;
+    pcl_conversions::toPCL(*points_msg, points_v2);
+    auto points = boost::make_shared<PointCloudRGB>();
+    pcl::fromPCLPointCloud2(points_v2, *points);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
+
+    auto const out =
+        (*cdcpd)(points, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_indices);
+    tracked_points = out.gurobi_output;
+    publish_outputs(t0, out);
+    reset_if_bad(out);
+}
+
+void CDCPD_Moveit_Node::publish_bbox()
+{
+    jsk_recognition_msgs::BoundingBox bbox_msg;
+    bbox_msg.header.stamp = ros::Time::now();
+    bbox_msg.header.frame_id = node_params.camera_frame;
+
+    auto const bbox_size = extent_to_env_size(cdcpd->last_lower_bounding_box, cdcpd->last_upper_bounding_box);
+    auto const bbox_center = extent_to_center(cdcpd->last_lower_bounding_box, cdcpd->last_upper_bounding_box);
+    bbox_msg.pose.position.x = bbox_center.x();
+    bbox_msg.pose.position.y = bbox_center.y();
+    bbox_msg.pose.position.z = bbox_center.z();
+    bbox_msg.pose.orientation.w = 1;
+    bbox_msg.dimensions.x = bbox_size.x();
+    bbox_msg.dimensions.y = bbox_size.y();
+    bbox_msg.dimensions.z = bbox_size.z();
+    publishers.bbox_pub.publish(bbox_msg);
+}
+
+void CDCPD_Moveit_Node::publish_template()
+{
+    auto time = ros::Time::now();
+    tracked_points->header.frame_id = node_params.camera_frame;
+    pcl_conversions::toPCL(time, tracked_points->header.stamp);
+    publishers.pre_template_publisher.publish(tracked_points);
+}
+
+ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
+{
+    ObstacleConstraints obstacle_constraints;
+    if (moveit_ready and node_params.moveit_enabled)
+    {
+        obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
+        ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
+    }
+    return obstacle_constraints;
+}
+
+void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const& out)
+{
+    // Update the frame ids
+    {
+        out.original_cloud->header.frame_id = node_params.camera_frame;
+        out.masked_point_cloud->header.frame_id = node_params.camera_frame;
+        out.downsampled_cloud->header.frame_id = node_params.camera_frame;
+        out.cpd_output->header.frame_id = node_params.camera_frame;
+        out.gurobi_output->header.frame_id = node_params.camera_frame;
+    }
+
+    // Add timestamp information
+    {
+        auto time = ros::Time::now();
+        pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
+        pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
+        pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
+        pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
+        pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
+    }
+
+    // Publish the point clouds
+    {
+        publishers.original_publisher.publish(out.original_cloud);
+        publishers.masked_publisher.publish(out.masked_point_cloud);
+        publishers.downsampled_publisher.publish(out.downsampled_cloud);
+        publishers.template_publisher.publish(out.cpd_output);
+        publishers.output_publisher.publish(out.gurobi_output);
+    }
+
+    // Publish markers indication the order of the points
+    {
+        auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
+            vm::Marker order;
+            order.header.frame_id = node_params.camera_frame;
+            order.header.stamp = ros::Time();
+            order.ns = ns;
+            order.type = visualization_msgs::Marker::LINE_STRIP;
+            order.action = visualization_msgs::Marker::ADD;
+            order.pose.orientation.w = 1.0;
+            order.id = 1;
+            order.scale.x = 0.01;
+            order.color.r = 0.1;
+            order.color.g = 0.6;
+            order.color.b = 0.9;
+            order.color.a = 1.0;
+
+            for (auto pc_iter : *cloud)
+            {
+                geometry_msgs::Point p;
+                p.x = pc_iter.x;
+                p.y = pc_iter.y;
+                p.z = pc_iter.z;
+                order.points.push_back(p);
+            }
+            return order;
+        };
+
+        auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
+        publishers.order_pub.publish(rope_marker);
+    }
+
+    // compute length and print that for debugging purposes
+    auto output_length{0.0};
+    for (auto point_idx{0}; point_idx < tracked_points->size() - 1; ++point_idx) {
+        Eigen::Vector3f const p = tracked_points->at(point_idx + 1).getVector3fMap();
+        Eigen::Vector3f const p_next = tracked_points->at(point_idx).getVector3fMap();
+        output_length += (p_next - p).norm();
+    }
+    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = " << node_params.max_rope_length);
+
+    auto const t1 = ros::Time::now();
+    auto const dt = t1 - t0;
+    ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "dt = " << dt.toSec() << "s");
+}
+
+void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
+{
+    if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
+        // Recreate CDCPD from initial tracking.
+        // First need to delete old CDCPD instance to avoid memory leak.
+        delete cdcpd;
+        cdcpd = new CDCPD(nh, ph, initial_tracked_points, initial_template_edges,
+            cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+            cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+            cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+    }
+}
+
+std::tuple<smmap::AllGrippersSinglePose,
+           const smmap::AllGrippersSinglePoseDelta> CDCPD_Moveit_Node::get_q_config()
+{
+    smmap::AllGrippersSinglePose q_config;
+    for (auto const gripper_info_i : grippers_info) {
+        auto const tf_name = gripper_info_i.first.as<std::string>();
+        if (not tf_name.empty()) {
+          try
+          {
+              auto const gripper = tf_buffer_.lookupTransform(node_params.camera_frame, tf_name, ros::Time(0), ros::Duration(10));
+              auto const config = ehc::GeometryTransformToEigenIsometry3d(gripper.transform);
+              ROS_DEBUG_STREAM_NAMED(LOGNAME + ".grippers", "gripper: " << config.translation());
+              q_config.push_back(config);
+          } catch (tf2::TransformException const& ex) {
+              ROS_WARN_STREAM_THROTTLE(
+                  10.0, "Unable to lookup transform from " << node_params.camera_frame << " to " << tf_name << ": " << ex.what());
+          }
+        }
+    }
+
+    const smmap::AllGrippersSinglePoseDelta q_dot{gripper_count, kinematics::Vector6d::Zero()};
+
+    return std::tuple{q_config, q_dot};
+}
 
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "cdcpd_node");
