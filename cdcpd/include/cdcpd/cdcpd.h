@@ -68,6 +68,25 @@ enum OutputStatus {
   Success,
 };
 
+class CdcpdParameters
+{
+public:
+    CdcpdParameters(ros::NodeHandle& ph);
+
+    // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
+    double const objective_value_threshold;
+    double const alpha;
+    double const lambda;
+    double const k_spring;
+    double const beta;
+    double const zeta;
+    double const min_distance_threshold;
+    double const obstacle_cost_weight;
+    double const fixed_points_weight;
+    // NOTE: original cdcpd recovery not implemented
+    bool const use_recovery;
+};
+
 class CDCPD {
  public:
   struct Output {
@@ -134,6 +153,7 @@ class CDCPD {
   Eigen::Matrix3Xf original_template;
   Eigen::Matrix2Xi template_edges;
 
+  // CdcpdParameters params;
   Eigen::Vector3f last_lower_bounding_box;
   Eigen::Vector3f last_upper_bounding_box;
   int lle_neighbors;
