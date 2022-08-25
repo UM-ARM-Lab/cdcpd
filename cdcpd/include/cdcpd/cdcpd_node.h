@@ -82,19 +82,34 @@ public:
 
     ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points);
 
-    // Previous lambda functions.
+
     // TODO(dylan.colli): Make as many of these const methods as possible.
+
+    // Returns the gripper configuration
     std::tuple<smmap::AllGrippersSinglePose,
                const smmap::AllGrippersSinglePoseDelta> get_q_config();
+
+    // Publishes the bounding box.
     void publish_bbox();
+
+    // Publishes the tracked points of the deformable object.
+    // NOTE: Meant to be called before CDCPD runs as CDCPD modifies the tracked points.
     void publish_template();
+
+    // Return a vector of ObstacleConstraint objects.
     ObstacleConstraints get_obstacle_constraints();
+
+    // Publishes the CDCPD outputs.
     void publish_outputs(ros::Time const& t0, CDCPD::Output const& out);
+
+    // Main callback for RGB and Depth Mat inputs.
     void callback(cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics);
+
+    // Main callback for point cloud inputs.
     void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg);
+
+    // Resets CDCPD tracking to initial tracking configuration if OutputStatus indicates a problem.
     void reset_if_bad(CDCPD::Output const& out);
-
-
 
     std::string collision_body_prefix{"cdcpd_tracked_point_"};
     std::string robot_namespace_;
