@@ -5,50 +5,50 @@ constexpr auto const MAX_CONTACTS_VIZ = 25;
 constexpr auto const PERF_LOGGER = "perf";
 
 Eigen::Vector3f extent_to_env_size(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
-  return (bbox_upper - bbox_lower).cwiseAbs() + 2 * bounding_box_extend;
+    return (bbox_upper - bbox_lower).cwiseAbs() + 2 * bounding_box_extend;
 };
 
 Eigen::Vector3f extent_to_center(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
-  return (bbox_upper + bbox_lower) / 2;
+    return (bbox_upper + bbox_lower) / 2;
 };
 
 cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
-  auto const hue_min = ROSHelpers::GetParamDebugLog<double>(ph, "hue_min", 340.0);
-  auto const sat_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.3);
-  auto const val_min = ROSHelpers::GetParamDebugLog<double>(ph, "value_min", 0.4);
-  auto const hue_max = ROSHelpers::GetParamDebugLog<double>(ph, "hue_max", 20.0);
-  auto const sat_max = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_max", 1.0);
-  auto const val_max = ROSHelpers::GetParamDebugLog<double>(ph, "value_max", 1.0);
+    auto const hue_min = ROSHelpers::GetParamDebugLog<double>(ph, "hue_min", 340.0);
+    auto const sat_min = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_min", 0.3);
+    auto const val_min = ROSHelpers::GetParamDebugLog<double>(ph, "value_min", 0.4);
+    auto const hue_max = ROSHelpers::GetParamDebugLog<double>(ph, "hue_max", 20.0);
+    auto const sat_max = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_max", 1.0);
+    auto const val_max = ROSHelpers::GetParamDebugLog<double>(ph, "value_max", 1.0);
 
-  cv::Mat rgb_f;
-  rgb.convertTo(rgb_f, CV_32FC3);
-  rgb_f /= 255.0;  // get RGB 0.0-1.0
-  cv::Mat color_hsv;
-  cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
+    cv::Mat rgb_f;
+    rgb.convertTo(rgb_f, CV_32FC3);
+    rgb_f /= 255.0;  // get RGB 0.0-1.0
+    cv::Mat color_hsv;
+    cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
 
-  cv::Mat mask1;
-  cv::Mat mask2;
-  cv::Mat hsv_mask;
-  auto hue_min1 = hue_min;
-  auto hue_max2 = hue_max;
-  if (hue_min > hue_max) {
-    hue_max2 = 360;
-    hue_min1 = 0;
-  }
-  cv::inRange(color_hsv, cv::Scalar(hue_min, sat_min, val_min), cv::Scalar(hue_max2, sat_max, val_max), mask1);
-  cv::inRange(color_hsv, cv::Scalar(hue_min1, sat_min, val_min), cv::Scalar(hue_max, sat_max, val_max), mask2);
-  bitwise_or(mask1, mask2, hsv_mask);
+    cv::Mat mask1;
+    cv::Mat mask2;
+    cv::Mat hsv_mask;
+    auto hue_min1 = hue_min;
+    auto hue_max2 = hue_max;
+    if (hue_min > hue_max) {
+        hue_max2 = 360;
+        hue_min1 = 0;
+    }
+    cv::inRange(color_hsv, cv::Scalar(hue_min, sat_min, val_min), cv::Scalar(hue_max2, sat_max, val_max), mask1);
+    cv::inRange(color_hsv, cv::Scalar(hue_min1, sat_min, val_min), cv::Scalar(hue_max, sat_max, val_max), mask2);
+    bitwise_or(mask1, mask2, hsv_mask);
 
-  return hsv_mask;
+    return hsv_mask;
 }
 
 void print_bodies(robot_state::RobotState const& state) {
-  std::vector<robot_state::AttachedBody const*> bs;
-  std::cout << "Attached Bodies:\n";
-  state.getAttachedBodies(bs);
-  for (auto const& b : bs) {
-    std::cout << b->getName() << '\n';
-  }
+    std::vector<robot_state::AttachedBody const*> bs;
+    std::cout << "Attached Bodies:\n";
+    state.getAttachedBodies(bs);
+    for (auto const& b : bs) {
+        std::cout << b->getName() << '\n';
+    }
 }
 
 CdcpdPublishers::CdcpdPublishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
@@ -66,38 +66,39 @@ CdcpdPublishers::CdcpdPublishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
 
 
 CdcpdNodeParameters::CdcpdNodeParameters(ros::NodeHandle& nh, ros::NodeHandle& ph)
-  : points_name(ROSHelpers::GetParam<std::string>(ph, "points", "")),
-    rgb_topic(ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw")),
-    depth_topic(ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw")),
-    info_topic(ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info")),
-    camera_frame(ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame")),
-    grippers_info_filename(ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node")),
-    num_points(ROSHelpers::GetParam<int>(nh, "rope_num_points", 11)),
-    max_rope_length(ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0)),
-    moveit_enabled(ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false))
+    : points_name(ROSHelpers::GetParam<std::string>(ph, "points", "")),
+      rgb_topic(ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw")),
+      depth_topic(ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw")),
+      info_topic(ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info")),
+      camera_frame(ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame")),
+      grippers_info_filename(ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node")),
+      num_points(ROSHelpers::GetParam<int>(nh, "rope_num_points", 11)),
+      max_rope_length(ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0)),
+      moveit_enabled(ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false))
 {}
 
 
 CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
-      : robot_namespace_(robot_namespace),
-        robot_description_(robot_namespace + "/robot_description"),
-        ph("~"),
-        publishers(nh, ph),
-        node_params(nh, ph),
-        cdcpd_params(ph),
-        max_segment_length(node_params.max_rope_length / static_cast<float>(node_params.num_points)),
-        scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
-        model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
-        model_(model_loader_->getModel()),
-        visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
-        tf_listener_(tf_buffer_)
+    : robot_namespace_(robot_namespace),
+      robot_description_(robot_namespace + "/robot_description"),
+      ph("~"),
+      publishers(nh, ph),
+      node_params(nh, ph),
+      cdcpd_params(ph),
+      max_segment_length(node_params.max_rope_length / static_cast<float>(node_params.num_points)),
+      rope_configuration(node_params.num_points),
+      scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
+      model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
+      model_(model_loader_->getModel()),
+      visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
+      tf_listener_(tf_buffer_)
 {
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
     scene_monitor_->startSceneMonitor(scene_topic);
     moveit_ready = scene_monitor_->requestPlanningSceneState(service_name);
     if (not moveit_ready) {
-      ROS_WARN_NAMED(LOGNAME, "Could not get the moveit planning scene. This means no obstacle constraints.");
+        ROS_WARN_NAMED(LOGNAME, "Could not get the moveit planning scene. This means no obstacle constraints.");
     }
 
     // For use with TF and "fixed points" for the constrain step
@@ -109,13 +110,13 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     int gripper_idx = 0;
     gripper_indices(1, gripper_count);
     for (auto const gripper_info_i : grippers_info) {
-      auto const tf_name = gripper_info_i.first.as<std::string>();
-      auto const node_idx = gripper_info_i.second.as<int>();
-      gripper_indices(0, gripper_idx) = node_idx;
-      gripper_idx++;
+        auto const tf_name = gripper_info_i.first.as<std::string>();
+        auto const node_idx = gripper_info_i.second.as<int>();
+        gripper_indices(0, gripper_idx) = node_idx;
+        gripper_idx++;
     }
     if (gripper_count == 0) {
-      gripper_indices = {};
+        gripper_indices = {};
     }
 
     // Initial connectivity model of rope
@@ -128,31 +129,26 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
     end_position[2] += node_params.max_rope_length;
     if (gripper_count == 2u) {
-      start_position = init_q_config[0].translation().cast<float>();
-      end_position = init_q_config[1].translation().cast<float>();
+        start_position = init_q_config[0].translation().cast<float>();
+        end_position = init_q_config[1].translation().cast<float>();
     } else if (gripper_count == 1u) {
-      start_position = init_q_config[0].translation().cast<float>();
-      end_position = start_position;
-      end_position[1] += node_params.max_rope_length;
+        start_position = init_q_config[0].translation().cast<float>();
+        end_position = start_position;
+        end_position[1] += node_params.max_rope_length;
     } else if (gripper_count == 0u) {
-      start_position << -node_params.max_rope_length / 2, 0, 1.0;
-      end_position << node_params.max_rope_length / 2, 0, 1.0;
+        start_position << -node_params.max_rope_length / 2, 0, 1.0;
+        end_position << node_params.max_rope_length / 2, 0, 1.0;
     }
 
-    auto const& initial_template_pair = makeRopeTemplate(node_params.num_points, start_position, end_position);
-    auto const& initial_template_vertices = initial_template_pair.first;
-    // auto const& initial_template_edges = initial_template_pair.second;
-    initial_template_edges = initial_template_pair.second;
+    // TODO: decide on rope versus cloth configuration here.
+    rope_configuration.initializeTracking(start_position, end_position);
 
-    // Construct the initial template as a PCL cloud
-    // auto const& initial_tracked_points = makeCloud(initial_template_vertices);
-    initial_tracked_points = makeCloud(initial_template_vertices);
-    tracked_points = initial_tracked_points;  // non-const, modified each time
-
-    cdcpd = new CDCPD(nh, ph, initial_tracked_points, initial_template_edges,
+    std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, rope_configuration.initial.points,
+        rope_configuration.initial.edges,
         cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha, cdcpd_params.beta,
         cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta, cdcpd_params.obstacle_cost_weight,
-        cdcpd_params.fixed_points_weight);
+        cdcpd_params.fixed_points_weight));
+    cdcpd = std::move(cdcpd_new);
 
     // Define the callback wrappers we need to pass to ROS nodes.
     auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics)
@@ -165,19 +161,19 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     };
 
     if (node_params.points_name.empty()) {
-      ROS_INFO_NAMED(LOGNAME, "subscribing to RGB + Depth");
-      auto camera_sub_setup = CameraSubSetup(node_params.rgb_topic, node_params.depth_topic,
-        node_params.info_topic);
-      // wait a second so the TF buffer can fill
-      ros::Duration(0.5).sleep();
+        ROS_INFO_NAMED(LOGNAME, "subscribing to RGB + Depth");
+        auto camera_sub_setup = CameraSubSetup(node_params.rgb_topic, node_params.depth_topic,
+          node_params.info_topic);
+        // wait a second so the TF buffer can fill
+        ros::Duration(0.5).sleep();
 
-      KinectSub sub(callback_wrapper, camera_sub_setup);
-      ros::waitForShutdown();
+        KinectSub sub(callback_wrapper, camera_sub_setup);
+        ros::waitForShutdown();
     } else {
-      ROS_INFO_NAMED(LOGNAME, "subscribing to points");
-      auto sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 10,
-          points_callback_wrapper);
-      ros::spin();
+        ROS_INFO_NAMED(LOGNAME, "subscribing to points");
+        auto sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 10,
+            points_callback_wrapper);
+        ros::spin();
     }
   }
 
@@ -400,9 +396,11 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth, cv::M
     auto obstacle_constraints = get_obstacle_constraints();
 
     auto const hsv_mask = getHsvMask(ph, rgb);
-    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
-                            q_dot, q_config, gripper_indices);
-    tracked_points = out.gurobi_output;
+    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
+                              rope_configuration.tracked.points,
+                              obstacle_constraints, max_segment_length, q_dot, q_config,
+                              gripper_indices);
+    rope_configuration.tracked.points = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
 };
@@ -422,9 +420,9 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     pcl::fromPCLPointCloud2(points_v2, *points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
-    auto const out =
-        (*cdcpd)(points, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_indices);
-    tracked_points = out.gurobi_output;
+    auto const out = (*cdcpd)(points, rope_configuration.tracked.points, obstacle_constraints, max_segment_length,
+        q_dot, q_config, gripper_indices);
+    rope_configuration.tracked.points = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
 }
@@ -435,8 +433,10 @@ void CDCPD_Moveit_Node::publish_bbox()
     bbox_msg.header.stamp = ros::Time::now();
     bbox_msg.header.frame_id = node_params.camera_frame;
 
-    auto const bbox_size = extent_to_env_size(cdcpd->last_lower_bounding_box, cdcpd->last_upper_bounding_box);
-    auto const bbox_center = extent_to_center(cdcpd->last_lower_bounding_box, cdcpd->last_upper_bounding_box);
+    auto const bbox_size = extent_to_env_size(cdcpd->last_lower_bounding_box,
+        cdcpd->last_upper_bounding_box);
+    auto const bbox_center = extent_to_center(cdcpd->last_lower_bounding_box,
+        cdcpd->last_upper_bounding_box);
     bbox_msg.pose.position.x = bbox_center.x();
     bbox_msg.pose.position.y = bbox_center.y();
     bbox_msg.pose.position.z = bbox_center.z();
@@ -450,9 +450,9 @@ void CDCPD_Moveit_Node::publish_bbox()
 void CDCPD_Moveit_Node::publish_template()
 {
     auto time = ros::Time::now();
-    tracked_points->header.frame_id = node_params.camera_frame;
-    pcl_conversions::toPCL(time, tracked_points->header.stamp);
-    publishers.pre_template_publisher.publish(tracked_points);
+    rope_configuration.tracked.points->header.frame_id = node_params.camera_frame;
+    pcl_conversions::toPCL(time, rope_configuration.tracked.points->header.stamp);
+    publishers.pre_template_publisher.publish(rope_configuration.tracked.points);
 }
 
 ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
@@ -460,7 +460,7 @@ ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
     ObstacleConstraints obstacle_constraints;
     if (moveit_ready and node_params.moveit_enabled)
     {
-        obstacle_constraints = get_moveit_obstacle_constriants(tracked_points);
+        obstacle_constraints = get_moveit_obstacle_constriants(rope_configuration.tracked.points);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
     }
     return obstacle_constraints;
@@ -530,9 +530,9 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
 
     // compute length and print that for debugging purposes
     auto output_length{0.0};
-    for (auto point_idx{0}; point_idx < tracked_points->size() - 1; ++point_idx) {
-        Eigen::Vector3f const p = tracked_points->at(point_idx + 1).getVector3fMap();
-        Eigen::Vector3f const p_next = tracked_points->at(point_idx).getVector3fMap();
+    for (auto point_idx{0}; point_idx < rope_configuration.tracked.points->size() - 1; ++point_idx) {
+        Eigen::Vector3f const p = rope_configuration.tracked.points->at(point_idx + 1).getVector3fMap();
+        Eigen::Vector3f const p_next = rope_configuration.tracked.points->at(point_idx).getVector3fMap();
         output_length += (p_next - p).norm();
     }
     ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = " << node_params.max_rope_length);
@@ -546,12 +546,12 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
 {
     if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
         // Recreate CDCPD from initial tracking.
-        // First need to delete old CDCPD instance to avoid memory leak.
-        delete cdcpd;
-        cdcpd = new CDCPD(nh, ph, initial_tracked_points, initial_template_edges,
+        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, rope_configuration.initial.points,
+            rope_configuration.initial.edges,
             cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
             cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-            cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+            cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
+        cdcpd = std::move(cdcpd_new);
     }
 }
 

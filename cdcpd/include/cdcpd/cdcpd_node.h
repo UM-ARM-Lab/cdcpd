@@ -28,6 +28,7 @@
 #include "cdcpd/cdcpd.h"
 #include "cdcpd_ros/camera_sub.h"
 #include "cdcpd/utils.h"
+#include "cdcpd/deformable_object_configuration.h"
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
@@ -113,15 +114,17 @@ public:
     bool moveit_ready{false};
 
     // Dylan added to get previous lambda functions working.
-    CDCPD* cdcpd;
-    PointCloud::Ptr initial_tracked_points;
-    PointCloud::Ptr tracked_points;
-    Eigen::Matrix2Xi initial_template_edges;
+    std::unique_ptr<CDCPD> cdcpd;
+    // PointCloud::Ptr initial_tracked_points;
+    // Eigen::Matrix2Xi initial_template_edges;
+    // PointCloud::Ptr tracked_points;
     float const max_segment_length;
     // TODO(dylan.colli): refactor gripper information into another class.
     YAML::Node grippers_info;
     unsigned int gripper_count;
     Eigen::MatrixXi gripper_indices;
+
+    RopeConfiguration rope_configuration;
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;

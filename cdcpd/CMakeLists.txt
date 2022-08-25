@@ -61,6 +61,7 @@ catkin_package(
 
 ### The library itself
 add_library(cdcpd SHARED
+        src/deformable_object_configuration.cpp
         src/cdcpd.cpp
         src/optimizer.cpp
         src/obs_util.cpp
@@ -110,10 +111,12 @@ endif()
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES
+        include/cdcpd/deformable_object_configuration.h
         include/cdcpd/cdcpd.h
         include/cdcpd/optimizer.h
         include/cdcpd/obs_util.h
         include/cdcpd/past_template_matcher.h
+        include/cdcpd/utils.h
         DESTINATION
         include/cdcpd)
 install(FILES "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" DESTINATION lib/${PROJECT_NAME})
