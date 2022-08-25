@@ -82,9 +82,6 @@ public:
 
     ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points);
 
-
-    // TODO(dylan.colli): Make as many of these const methods as possible.
-
     // Returns the gripper configuration
     std::tuple<smmap::AllGrippersSinglePose,
                const smmap::AllGrippersSinglePoseDelta> get_q_config();
