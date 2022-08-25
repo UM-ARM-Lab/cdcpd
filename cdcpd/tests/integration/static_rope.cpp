@@ -8,6 +8,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <string>
 #include <gtest/gtest.h>
+#include <ros/package.h>
 
 #include <iostream>
 
@@ -34,7 +35,7 @@ std::pair<PointCloud::Ptr, Eigen::Matrix2Xi const> getInitialTracking(
     return {initial_tracked_points, initial_template_edges};
 }
 
-CDCPD* initializeCdcpdSimulator(PointCloud::Ptr const& initial_tracked_points,
+CDCPD initializeCdcpdSimulator(PointCloud::Ptr const& initial_tracked_points,
     Eigen::Matrix2Xi initial_template_edges, float const max_rope_length, int const num_points)
 {
     if (PRINT_DEBUG_MESSAGES)
@@ -56,11 +57,11 @@ CDCPD* initializeCdcpdSimulator(PointCloud::Ptr const& initial_tracked_points,
     float const obstacle_cost_weight = 0.001;
     float const fixed_points_weight = 10.0;
 
-    CDCPD* cdcpd_ptr = new CDCPD(initial_tracked_points, initial_template_edges,
+    CDCPD cdcpd = CDCPD(initial_tracked_points, initial_template_edges,
         objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
         fixed_points_weight);
 
-    return cdcpd_ptr;
+    return cdcpd;
 }
 
 // Resimulate CDCPD on a set of previously recorded input point clouds in a bag file.
@@ -104,10 +105,9 @@ TEST(StaticRope, testResimPointEquivalency)
 {
     // Read in the ros bagfile that we'll be resimulating and checking CDCPD performance against.
     rosbag::Bag bag;
-    // This test is executed from ~/.ros, so we have to do some funky path manipulation to get to
-    // the bag files
-    bag.open("../../../../../src/cdcpd/demos/rosbags/demo_1_static_rope.bag",
-        rosbag::bagmode::Read);
+    std::string package_path = ros::package::getPath("cdcpd");
+    std::string bag_file_path = package_path + "/../demos/rosbags/demo_1_static_rope.bag";
+    bag.open(bag_file_path, rosbag::bagmode::Read);
     auto pt_cloud_last = readLastCdcpdOutput(bag);
 
     // Run CDCPD on rosbag input so as to simulate a full run of CDCPD and test that the
@@ -117,11 +117,11 @@ TEST(StaticRope, testResimPointEquivalency)
     auto initial_tracking = getInitialTracking(max_rope_length, num_points);
     auto initial_tracked_points = initial_tracking.first;
     auto initial_template_edges = initial_tracking.second;
-    CDCPD* cdcpd_sim = initializeCdcpdSimulator(initial_tracked_points, initial_template_edges,
+    CDCPD cdcpd_sim = initializeCdcpdSimulator(initial_tracked_points, initial_template_edges,
         max_rope_length, num_points);
 
     auto input_clouds = readCdcpdInputPointClouds(bag);
-    PointCloud::Ptr tracked_points = resimulateCdcpd(*cdcpd_sim, input_clouds,
+    PointCloud::Ptr tracked_points = resimulateCdcpd(cdcpd_sim, input_clouds,
         initial_tracked_points, max_rope_length, num_points);
 
     expectPointCloudsEqual(*pt_cloud_last, *tracked_points);
