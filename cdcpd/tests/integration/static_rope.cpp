@@ -11,7 +11,6 @@
 
 #include "cdcpd/deformable_object_configuration.h"
 #include "cdcpd/cdcpd.h"
-#include "cdcpd/utils.h"
 #include "test_resim_utils.h"
 
 #define PRINT_DEBUG_MESSAGES false

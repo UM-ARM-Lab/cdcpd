@@ -27,7 +27,6 @@
 
 #include "cdcpd/cdcpd.h"
 #include "cdcpd_ros/camera_sub.h"
-#include "cdcpd/utils.h"
 #include "cdcpd/deformable_object_configuration.h"
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;

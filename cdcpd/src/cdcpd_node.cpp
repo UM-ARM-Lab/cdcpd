@@ -143,13 +143,14 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
 
     std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, rope_configuration.initial.points,
         rope_configuration.initial.edges,
-        cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha, cdcpd_params.beta,
-        cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta, cdcpd_params.obstacle_cost_weight,
-        cdcpd_params.fixed_points_weight));
+        cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+        cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+        cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
     cdcpd = std::move(cdcpd_new);
 
     // Define the callback wrappers we need to pass to ROS nodes.
-    auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics)
+    auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
+        cv::Matx33d const& intrinsics)
     {
         callback(rgb, depth, intrinsics);
     };
@@ -175,8 +176,10 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     }
   }
 
-ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-                                                      Eigen::Isometry3d const& cdcpd_to_moveit) {
+ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
+    planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+    Eigen::Isometry3d const& cdcpd_to_moveit)
+{
     collision_detection::CollisionRequest req;
     req.contacts = true;
     req.distance = true;
