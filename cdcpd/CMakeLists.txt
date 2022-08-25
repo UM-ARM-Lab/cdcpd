@@ -15,6 +15,7 @@ set(CATKIN_PACKAGES
         moveit_visual_tools
         pybind11_catkin
         pyrosmsg
+        rosbag
         sdf_tools
         sensor_msgs
         smmap_models
@@ -64,6 +65,7 @@ add_library(cdcpd SHARED
         src/optimizer.cpp
         src/obs_util.cpp
         src/past_template_matcher.cpp
+        src/utils.cpp
         )
 target_include_directories(cdcpd PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -129,7 +131,17 @@ target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
 ## Testing
 if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)
   message("Building CDCPD tests!")
-  include_directories(tests/include)
-  catkin_add_gtest(utest tests/main.cpp)
+
+  # Regression/integration testing
+  find_package(rostest REQUIRED)
+  find_package(rosbag REQUIRED)
+  include_directories(tests/integration/include)
+  add_rostest_gtest(static-rope-test launch/static_rope.test tests/integration/static_rope.cpp
+                    src/utils.cpp tests/integration/test_resim_utils.cpp)
+  target_link_libraries(static-rope-test ${catkin_LIBRARIES} cdcpd)
+
+  # Unit testing
+  include_directories(tests/unit/include)
+  catkin_add_gtest(utest tests/unit/main.cpp)
   target_link_libraries(utest cdcpd)
 endif()

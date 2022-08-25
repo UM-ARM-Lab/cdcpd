@@ -2,3 +2,4 @@
 .qglviewer.xml
 demos/rosbags
 demos/rosbags_compressed
+.vscode

@@ -24,6 +24,7 @@
   <depend>moveit_visual_tools</depend>
   <depend>pybind11_catkin</depend>
   <depend>pyrosmsg</depend>
+  <depend>rosbag</depend>
   <depend>roscpp</depend>
   <depend>sdf_tools</depend>
   <depend>sensor_msgs</depend>
@@ -31,5 +32,7 @@
   <depend>smmap_utilities</depend>
   <depend>std_msgs</depend>
   <depend>yaml-cpp</depend>
+
+  <test_depend>rosunit</test_depend>
 </package>
 

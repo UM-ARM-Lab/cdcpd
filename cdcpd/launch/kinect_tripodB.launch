@@ -1,0 +1,16 @@
+<launch>
+    <env name="ROSCONSOLE_CONFIG_FILE" value="$(find cdcpd)/custom_rosconsole.conf"/>
+
+    <param name="rope_num_points" value="15"/>
+    <param name="max_rope_length" value="0.46"/>
+
+    <node pkg="cdcpd" type="cdcpd_node" name="cdcpd_node" respawn="false" output="screen">
+        <param name="points" value="/kinect2_tripodB/qhd/points"/>
+        <param name="camera_frame" value="kinect2_tripodB_rgb_optical_frame"/>
+        <param name="lambda" value="1.0"/>
+        <param name="moveit_enabled" value="false"/>
+        <!-- gripper info should be a space seperated list of [TF_NAME IDX TF_NAME IDX ...] -->
+        <param name="grippers_info" value="$(find cdcpd)/gripper_info.yaml"/>
+    </node>
+</launch>
+
