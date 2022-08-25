@@ -90,11 +90,11 @@ public:
                const smmap::AllGrippersSinglePoseDelta> get_q_config();
 
     // Publishes the bounding box.
-    void publish_bbox();
+    void publish_bbox() const;
 
     // Publishes the tracked points of the deformable object.
     // NOTE: Meant to be called before CDCPD runs as CDCPD modifies the tracked points.
-    void publish_template();
+    void publish_template() const;
 
     // Return a vector of ObstacleConstraint objects.
     ObstacleConstraints get_obstacle_constraints();

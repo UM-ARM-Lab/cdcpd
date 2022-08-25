@@ -450,7 +450,7 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     reset_if_bad(out);
 }
 
-void CDCPD_Moveit_Node::publish_bbox()
+void CDCPD_Moveit_Node::publish_bbox() const
 {
     jsk_recognition_msgs::BoundingBox bbox_msg;
     bbox_msg.header.stamp = ros::Time::now();
@@ -470,7 +470,7 @@ void CDCPD_Moveit_Node::publish_bbox()
     publishers.bbox_pub.publish(bbox_msg);
 }
 
-void CDCPD_Moveit_Node::publish_template()
+void CDCPD_Moveit_Node::publish_template() const
 {
     auto time = ros::Time::now();
     rope_configuration.tracked.points->header.frame_id = node_params.camera_frame;
