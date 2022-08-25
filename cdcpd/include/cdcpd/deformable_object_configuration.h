@@ -44,9 +44,12 @@ public:
 class RopeConfiguration : public DeformableObjectConfiguration
 {
 public:
-    RopeConfiguration(int const num_points);
+    RopeConfiguration(int const num_points_, float const max_rope_length_);
     DeformableObjectTracking virtual makeTemplate(Eigen::Vector3f const& start_position,
         Eigen::Vector3f const& end_position);
+
+    float const max_rope_length;
+    float const max_segment_length;
 };
 
 

@@ -105,6 +105,7 @@ public:
     CdcpdPublishers publishers;
     CdcpdNodeParameters const node_params;
     CdcpdParameters const cdcpd_params;
+    std::unique_ptr<CDCPD> cdcpd;
     planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
     robot_model_loader::RobotModelLoaderPtr model_loader_;
     robot_model::RobotModelPtr model_;
@@ -113,12 +114,6 @@ public:
     double min_distance_threshold{0.01};
     bool moveit_ready{false};
 
-    // Dylan added to get previous lambda functions working.
-    std::unique_ptr<CDCPD> cdcpd;
-    // PointCloud::Ptr initial_tracked_points;
-    // Eigen::Matrix2Xi initial_template_edges;
-    // PointCloud::Ptr tracked_points;
-    float const max_segment_length;
     // TODO(dylan.colli): refactor gripper information into another class.
     YAML::Node grippers_info;
     unsigned int gripper_count;

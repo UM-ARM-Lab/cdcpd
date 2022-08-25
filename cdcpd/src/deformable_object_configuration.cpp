@@ -32,8 +32,10 @@ void DeformableObjectConfiguration::initializeTracking(Eigen::Vector3f const& st
     initial = DeformableObjectTracking(object_tracking);
 }
 
-RopeConfiguration::RopeConfiguration(int const num_points)
-    : DeformableObjectConfiguration{num_points}
+RopeConfiguration::RopeConfiguration(int const num_points_, float const max_rope_length_)
+    : DeformableObjectConfiguration{num_points_},
+      max_rope_length(max_rope_length_),
+      max_segment_length(max_rope_length / static_cast<float>(num_points))
 {}
 
 DeformableObjectTracking RopeConfiguration::makeTemplate(Eigen::Vector3f const& start_position,

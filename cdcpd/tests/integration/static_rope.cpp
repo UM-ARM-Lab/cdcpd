@@ -23,14 +23,12 @@ RopeConfiguration getInitialTracking(float const max_rope_length, int const num_
     start_position << -max_rope_length / 2, 0, 1.0;
     end_position << max_rope_length / 2, 0, 1.0;
 
-    RopeConfiguration rope_configuration(num_points);
+    RopeConfiguration rope_configuration(num_points, max_rope_length);
     rope_configuration.initializeTracking(start_position, end_position);
 
     return rope_configuration;
 }
 
-// CDCPD* initializeCdcpdSimulator(PointCloud::Ptr const& initial_tracked_points,
-//     Eigen::Matrix2Xi initial_template_edges, float const max_rope_length, int const num_points)
 CDCPD* initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_initial)
 {
     if (PRINT_DEBUG_MESSAGES)

@@ -85,8 +85,7 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
       publishers(nh, ph),
       node_params(nh, ph),
       cdcpd_params(ph),
-      max_segment_length(node_params.max_rope_length / static_cast<float>(node_params.num_points)),
-      rope_configuration(node_params.num_points),
+      rope_configuration(node_params.num_points, node_params.max_rope_length),
       scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
       model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
       model_(model_loader_->getModel()),
@@ -120,8 +119,7 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     }
 
     // Initial connectivity model of rope
-    // auto const max_segment_length = node_params.max_rope_length / static_cast<float>(node_params.num_points);
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << rope_configuration.max_segment_length);
 
     // initialize start and end points for rope
     auto [init_q_config, init_q_dot] = get_q_config();
@@ -398,8 +396,8 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth, cv::M
     auto const hsv_mask = getHsvMask(ph, rgb);
     auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
                               rope_configuration.tracked.points,
-                              obstacle_constraints, max_segment_length, q_dot, q_config,
-                              gripper_indices);
+                              obstacle_constraints, rope_configuration.max_segment_length, q_dot,
+                              q_config, gripper_indices);
     rope_configuration.tracked.points = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
@@ -420,8 +418,8 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     pcl::fromPCLPointCloud2(points_v2, *points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
-    auto const out = (*cdcpd)(points, rope_configuration.tracked.points, obstacle_constraints, max_segment_length,
-        q_dot, q_config, gripper_indices);
+    auto const out = (*cdcpd)(points, rope_configuration.tracked.points, obstacle_constraints,
+        rope_configuration.max_segment_length, q_dot, q_config, gripper_indices);
     rope_configuration.tracked.points = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
