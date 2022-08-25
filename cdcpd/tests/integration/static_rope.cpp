@@ -1,5 +1,3 @@
-#include <cdcpd/cdcpd.h>
-
 #include <ros/ros.h>
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
@@ -11,36 +9,34 @@
 
 #include <iostream>
 
+#include "cdcpd/deformable_object_configuration.h"
+#include "cdcpd/cdcpd.h"
 #include "cdcpd/utils.h"
 #include "test_resim_utils.h"
 
 #define PRINT_DEBUG_MESSAGES false
 
-// NOTE: This is refactored code so that I can get the initial tracked points more than once to
-// initialize the tracked points that are updated over time.
-std::pair<PointCloud::Ptr, Eigen::Matrix2Xi const> getInitialTracking(
-    float const max_rope_length, int const num_points)
+RopeConfiguration getInitialTracking(float const max_rope_length, int const num_points)
 {
     Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
     Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
     start_position << -max_rope_length / 2, 0, 1.0;
     end_position << max_rope_length / 2, 0, 1.0;
-    std::pair<Eigen::Matrix3Xf, Eigen::Matrix2Xi> const& initial_template_pair =
-        makeRopeTemplate(num_points, start_position, end_position);
-    Eigen::Matrix3Xf const& initial_template_vertices = initial_template_pair.first;
-    Eigen::Matrix2Xi const initial_template_edges = initial_template_pair.second;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr initial_tracked_points =
-        makeCloud(initial_template_vertices);
-    return {initial_tracked_points, initial_template_edges};
+
+    RopeConfiguration rope_configuration(num_points);
+    rope_configuration.initializeTracking(start_position, end_position);
+
+    return rope_configuration;
 }
 
-CDCPD* initializeCdcpdSimulator(PointCloud::Ptr const& initial_tracked_points,
-    Eigen::Matrix2Xi initial_template_edges, float const max_rope_length, int const num_points)
+// CDCPD* initializeCdcpdSimulator(PointCloud::Ptr const& initial_tracked_points,
+//     Eigen::Matrix2Xi initial_template_edges, float const max_rope_length, int const num_points)
+CDCPD* initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_initial)
 {
     if (PRINT_DEBUG_MESSAGES)
     {
         std::stringstream ss;
-        ss << initial_template_edges;
+        ss << rope_tracking_initial.edges;
         ROS_WARN("Initial template edges");
         ROS_WARN(ss.str().c_str());
     }
@@ -56,7 +52,7 @@ CDCPD* initializeCdcpdSimulator(PointCloud::Ptr const& initial_tracked_points,
     float const obstacle_cost_weight = 0.001;
     float const fixed_points_weight = 10.0;
 
-    CDCPD* cdcpd_ptr = new CDCPD(initial_tracked_points, initial_template_edges,
+    CDCPD* cdcpd_ptr = new CDCPD(rope_tracking_initial.points, rope_tracking_initial.edges,
         objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
         fixed_points_weight);
 
@@ -114,15 +110,12 @@ TEST(StaticRope, testResimPointEquivalency)
     // functionality has not changed significantly since recording of the bag file.
     float const max_rope_length = 0.46F;  // Taken from kinect_tripodB.launch
     int const num_points = 15;  // Taken from kinect_tripodB.launch
-    auto initial_tracking = getInitialTracking(max_rope_length, num_points);
-    auto initial_tracked_points = initial_tracking.first;
-    auto initial_template_edges = initial_tracking.second;
-    CDCPD* cdcpd_sim = initializeCdcpdSimulator(initial_tracked_points, initial_template_edges,
-        max_rope_length, num_points);
+    RopeConfiguration rope_configuration = getInitialTracking(max_rope_length, num_points);
+    CDCPD* cdcpd_sim = initializeCdcpdSimulator(rope_configuration.initial);
 
     auto input_clouds = readCdcpdInputPointClouds(bag);
     PointCloud::Ptr tracked_points = resimulateCdcpd(*cdcpd_sim, input_clouds,
-        initial_tracked_points, max_rope_length, num_points);
+        rope_configuration.initial.points, max_rope_length, num_points);
 
     expectPointCloudsEqual(*pt_cloud_last, *tracked_points);
 
