@@ -204,6 +204,19 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_n
   return M;
 }
 
+CDCPD_Parameters::CDCPD_Parameters(ros::NodeHandle& ph)
+  : objective_value_threshold(ROSHelpers::GetParam<double>(ph, "objective_value_threshold", 1.0)),
+    alpha(ROSHelpers::GetParam<double>(ph, "alpha", 0.5)),
+    lambda(ROSHelpers::GetParam<double>(ph, "lambda", 1.0)),
+    k_spring(ROSHelpers::GetParam<double>(ph, "k", 100.0)),
+    beta(ROSHelpers::GetParam<double>(ph, "beta", 1.0)),
+    zeta(ROSHelpers::GetParam<double>(ph, "zeta", 10.0)),
+    min_distance_threshold(ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01)),
+    obstacle_cost_weight(ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001)),
+    fixed_points_weight(ROSHelpers::GetParam<double>(ph, "fixed_points_weight", 10.0)),
+    use_recovery(ROSHelpers::GetParam<bool>(ph, "use_recovery", false))
+{}
+
 /*
  * Return a non-normalized probability that each of the tracked vertices produced any detected point.
  * Implement Eq. (7) in the paper

@@ -4,6 +4,7 @@
 // All of the test files we want to run
 #include "MeshConversionTest.h"
 #include "BoxNearestPointsTest.h"
+#include "DeformableObjectTrackingTest.h"
 
 int main(int argc, char **argv){
   testing::InitGoogleTest(&argc, argv);

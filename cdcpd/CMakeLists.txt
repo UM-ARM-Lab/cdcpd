@@ -61,11 +61,11 @@ catkin_package(
 
 ### The library itself
 add_library(cdcpd SHARED
+        src/deformable_object_configuration.cpp
         src/cdcpd.cpp
         src/optimizer.cpp
         src/obs_util.cpp
         src/past_template_matcher.cpp
-        src/utils.cpp
         )
 target_include_directories(cdcpd PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -110,6 +110,7 @@ endif()
 configure_file(cdcpd-config.cmake.in "${PROJECT_BINARY_DIR}/cdcpd-config.cmake" @ONLY)
 install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES
+        include/cdcpd/deformable_object_configuration.h
         include/cdcpd/cdcpd.h
         include/cdcpd/optimizer.h
         include/cdcpd/obs_util.h
@@ -137,7 +138,7 @@ if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)
   find_package(rosbag REQUIRED)
   include_directories(tests/integration/include)
   add_rostest_gtest(static-rope-test launch/static_rope.test tests/integration/static_rope.cpp
-                    src/utils.cpp tests/integration/test_resim_utils.cpp)
+                    tests/integration/test_resim_utils.cpp)
   target_link_libraries(static-rope-test ${catkin_LIBRARIES} cdcpd)
 
   # Unit testing
