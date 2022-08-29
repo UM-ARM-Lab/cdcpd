@@ -34,9 +34,9 @@ namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace ehc = EigenHelpersConversions;
 
-struct CdcpdPublishers
+struct CDCPD_Publishers
 {
-    CdcpdPublishers(ros::NodeHandle& nh, ros::NodeHandle& ph);
+    CDCPD_Publishers(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
     ros::Publisher original_publisher;
     ros::Publisher masked_publisher;
@@ -49,9 +49,9 @@ struct CdcpdPublishers
     ros::Publisher bbox_pub;
 };
 
-struct CdcpdNodeParameters
+struct CDCPD_Node_Parameters
 {
-    CdcpdNodeParameters(ros::NodeHandle& nh, ros::NodeHandle& ph);
+    CDCPD_Node_Parameters(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
     // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
     // point cloud input takes precedence. If points_name is not empty, we will use that and not RGB + Depth
@@ -113,9 +113,9 @@ public:
     std::string robot_description_;
     ros::NodeHandle nh;
     ros::NodeHandle ph;
-    CdcpdPublishers publishers;
-    CdcpdNodeParameters const node_params;
-    CdcpdParameters const cdcpd_params;
+    CDCPD_Publishers publishers;
+    CDCPD_Node_Parameters const node_params;
+    CDCPD_Parameters const cdcpd_params;
     std::unique_ptr<CDCPD> cdcpd;
     planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
     robot_model_loader::RobotModelLoaderPtr model_loader_;

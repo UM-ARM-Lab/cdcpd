@@ -55,7 +55,7 @@ void print_bodies(robot_state::RobotState const& state) {
     }
 }
 
-CdcpdPublishers::CdcpdPublishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
+CDCPD_Publishers::CDCPD_Publishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
 {
     original_publisher = nh.advertise<PointCloud>("cdcpd/original", 10);
     masked_publisher = nh.advertise<PointCloud>("cdcpd/masked", 10);
@@ -69,7 +69,7 @@ CdcpdPublishers::CdcpdPublishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
 }
 
 
-CdcpdNodeParameters::CdcpdNodeParameters(ros::NodeHandle& nh, ros::NodeHandle& ph)
+CDCPD_Node_Parameters::CDCPD_Node_Parameters(ros::NodeHandle& nh, ros::NodeHandle& ph)
     : points_name(ROSHelpers::GetParam<std::string>(ph, "points", "")),
       rgb_topic(ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw")),
       depth_topic(ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw")),

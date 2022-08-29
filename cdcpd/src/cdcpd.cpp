@@ -204,7 +204,7 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_n
   return M;
 }
 
-CdcpdParameters::CdcpdParameters(ros::NodeHandle& ph)
+CDCPD_Parameters::CDCPD_Parameters(ros::NodeHandle& ph)
   : objective_value_threshold(ROSHelpers::GetParam<double>(ph, "objective_value_threshold", 1.0)),
     alpha(ROSHelpers::GetParam<double>(ph, "alpha", 0.5)),
     lambda(ROSHelpers::GetParam<double>(ph, "lambda", 1.0)),

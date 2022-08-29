@@ -68,10 +68,10 @@ enum OutputStatus {
   Success,
 };
 
-class CdcpdParameters
+class CDCPD_Parameters
 {
 public:
-    CdcpdParameters(ros::NodeHandle& ph);
+    CDCPD_Parameters(ros::NodeHandle& ph);
 
     // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
     double const objective_value_threshold;
