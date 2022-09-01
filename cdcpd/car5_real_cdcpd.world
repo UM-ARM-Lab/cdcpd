@@ -1,0 +1,55 @@
+<?xml version="1.0" ?>
+<sdf version="1.4">
+    <world name="default">
+<!--        <include>-->
+<!--            <uri>file:///home/peter/catkin_ws/src/arm_gazebo/arm_gazebo_models/media/models/car_scene5_real</uri>-->
+<!--            <pose>0.0384 0.9494 -0.1611 0 0</pose>-->
+<!--        </include>-->
+
+        <model name="car_scene5_real">
+            <allow_auto_disable>true</allow_auto_disable>
+            <link name="car_scene5_real_mesh">
+                <kinematic>true</kinematic>
+                <pose>-0.03 -0.20 0.14 0 0 0</pose>
+                <visual name="visual">
+                    <geometry>
+                        <mesh>
+                            <uri>/home/peter/catkin_ws/src/arm_gazebo/arm_gazebo_models/media/models/car_scene5_real/meshes/car_scene5_real.stl</uri>
+                        </mesh>
+                    </geometry>
+                </visual>
+                <collision name="collision">
+                    <geometry>
+                        <mesh>
+                            <uri>/home/peter/catkin_ws/src/arm_gazebo/arm_gazebo_models/media/models/car_scene5_real/meshes/car_scene5_real.stl</uri>
+                        </mesh>
+                    </geometry>
+                </collision>
+            </link>
+        </model>
+
+        <include>
+            <uri>file:///home/peter/catkin_ws/src/arm_gazebo/arm_gazebo_models/media/models/box_floor</uri>
+            <pose>0 0 -0.21 0 0 0</pose>
+        </include>
+
+        <include>
+            <name>left_wall</name>
+            <uri>file:///home/peter/catkin_ws/src/arm_gazebo/arm_gazebo_models/media/models/fake_wall</uri>
+            <pose>-0.8 0 0 0 0 1.5707</pose>
+        </include>
+
+        <include>
+            <name>right_wall</name>
+            <uri>file:///home/peter/catkin_ws/src/arm_gazebo/arm_gazebo_models/media/models/fake_wall</uri>
+            <pose>0.77 0 0 0 0 1.5707</pose>
+        </include>
+
+        <include>
+            <name>back_wall</name>
+            <uri>file:///home/peter/catkin_ws/src/arm_gazebo/arm_gazebo_models/media/models/fake_wall</uri>
+            <pose>0 -.4 0 0 0 0</pose>
+        </include>
+
+    </world>
+</sdf>

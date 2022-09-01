@@ -21,6 +21,7 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/eigen_ros_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
+#include <sdformat-9.7/sdf/sdf.hh>
 
 #include "cdcpd_ros/camera_sub.h"
 
@@ -569,6 +570,55 @@ struct CDCPD_Moveit_Node {
           10.0, "Unable to lookup transform from " << camera_frame << " to " << moveit_frame << ": " << ex.what());
       return {};
     }
+
+    // load SDF file
+    std::string sdf_filename = "/home/peter/catkin_ws/src/link_bot/link_bot_gazebo/worlds/car5_real.world";
+    // load and check sdf file
+    sdf::SDFPtr sdfElement(new sdf::SDF());
+    sdf::init(sdfElement);
+    if (!sdf::readFile(sdf_filename, sdfElement)) {
+      std::cerr << sdf_filename << " is not a valid SDF file!" << std::endl;
+      return {};
+    }
+
+    // start parsing model
+    const sdf::ElementPtr rootElement = sdfElement->Root();
+    if (!rootElement->HasElement("world")) {
+      std::cerr << sdf_filename << " the root element is not <world>" << std::endl;
+      return {};
+    }
+    const sdf::ElementPtr modelElement = rootElement->GetElement("model");
+    const auto modelName = modelElement->Get<std::string>("name");
+    std::cout << "Found " << modelName << " model!" << std::endl;
+
+    // parse model links
+    sdf::ElementPtr linkElement = modelElement->GetElement("link");
+    while (linkElement) {
+      const auto linkName = linkElement->Get<std::string>("name");
+      std::cout << "Found " << linkName << " link in " << modelName << " model!" << std::endl;
+      linkElement = linkElement->GetNextElement("link");
+    }
+
+    // parse model joints
+    sdf::ElementPtr jointElement = modelElement->GetElement("joint");
+    while (jointElement) {
+      const auto jointName = jointElement->Get<std::string>("name");
+      std::cout << "Found " << jointName << " joint in " << modelName << " model!" << std::endl;
+
+      const sdf::ElementPtr parentElement = jointElement->GetElement("parent");
+      const auto parentLinkName = parentElement->Get<std::string>();
+
+      const sdf::ElementPtr childElement = jointElement->GetElement("child");
+      const auto childLinkName = childElement->Get<std::string>();
+
+      std::cout << "Joint " << jointName << " connects " << parentLinkName << " link to " << childLinkName << " link"
+                << std::endl;
+
+      jointElement = jointElement->GetNextElement("joint");
+    }
+
+    throw std::runtime_error("done");
+    return {};
 
     planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor_);
 

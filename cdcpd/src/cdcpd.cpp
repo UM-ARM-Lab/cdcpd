@@ -314,7 +314,7 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
         float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y;
         float z = float(depth) * unit_scaling;
         // Add to unfiltered cloud
-        // ENHANCE: be more concise
+        // TODO: be more concise
         unfiltered_iter->x = x;
         unfiltered_iter->y = y;
         unfiltered_iter->z = z;
