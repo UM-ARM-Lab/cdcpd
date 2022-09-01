@@ -1,5 +1,6 @@
 #include <arc_utilities/enumerate.h>
 #include <cdcpd/cdcpd.h>
+#include <cdcpd/sdformat_to_planning_scene.h>
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <jsk_recognition_msgs/BoundingBox.h>
@@ -21,7 +22,6 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/eigen_ros_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
-#include <sdformat-9.7/sdf/sdf.hh>
 
 #include "cdcpd_ros/camera_sub.h"
 
@@ -121,6 +121,7 @@ struct CDCPD_Moveit_Node {
   ros::NodeHandle ph;
   ros::Publisher contact_marker_pub;
   ros::Publisher bbox_pub;
+  ros::Publisher scene_pub;
   planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
   robot_model_loader::RobotModelLoaderPtr model_loader_;
   robot_model::RobotModelPtr model_;
@@ -128,10 +129,13 @@ struct CDCPD_Moveit_Node {
   std::string moveit_frame{"robot_root"};
   std::string camera_frame;
   double min_distance_threshold{0.01};
-  bool moveit_ready{false};
 
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
+
+  std::string sdf_filename = "/home/peter/catkin_ws/src/cdcpd/cdcpd/car5_real_cdcpd.world";
+  planning_scene::PlanningScenePtr planning_scene_;
+  moveit_msgs::PlanningScene planning_scene_msg_;
 
   explicit CDCPD_Moveit_Node(std::string const& robot_namespace)
       : robot_namespace_(robot_namespace),
@@ -140,15 +144,12 @@ struct CDCPD_Moveit_Node {
         scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
         model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
         model_(model_loader_->getModel()),
+        planning_scene_(sdf_to_planning_scene(sdf_filename, "fake_robot_link")),
         visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
         tf_listener_(tf_buffer_) {
     auto const scene_topic = ros::names::append(robot_namespace, "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
-    scene_monitor_->startSceneMonitor(scene_topic);
-    moveit_ready = scene_monitor_->requestPlanningSceneState(service_name);
-    if (not moveit_ready) {
-      ROS_WARN_NAMED(LOGNAME, "Could not get the moveit planning scene. This means no obstacle constraints.");
-    }
+    planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
 
     // Publishers for the data, some visualizations, others consumed by other nodes
     auto original_publisher = nh.advertise<PointCloud>("cdcpd/original", 10);
@@ -160,6 +161,7 @@ struct CDCPD_Moveit_Node {
     auto order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
     bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
+    scene_pub = ph.advertise<moveit_msgs::PlanningScene>("scene", 10);
 
     // point cloud input takes precedence. If points_name is not empty, we will use that and not RGB + Depth
     auto const points_name = ROSHelpers::GetParam<std::string>(ph, "points", "");
@@ -283,7 +285,7 @@ struct CDCPD_Moveit_Node {
 
     auto get_obstacle_constraints = [&]() {
       ObstacleConstraints obstacle_constraints;
-      if (moveit_ready and moveit_enabled) {
+      if (moveit_enabled) {
         obstacle_constraints = get_moveit_obstacle_constraints(tracked_points);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
       }
@@ -424,7 +426,7 @@ struct CDCPD_Moveit_Node {
     }
   }
 
-  ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+  ObstacleConstraints find_nearest_points_and_normals(planning_scene::PlanningScenePtr planning_scene,
                                                       Eigen::Isometry3d const& cdcpd_to_moveit) {
     collision_detection::CollisionRequest req;
     req.contacts = true;
@@ -571,59 +573,12 @@ struct CDCPD_Moveit_Node {
       return {};
     }
 
-    // load SDF file
-    std::string sdf_filename = "/home/peter/catkin_ws/src/link_bot/link_bot_gazebo/worlds/car5_real.world";
-    // load and check sdf file
-    sdf::SDFPtr sdfElement(new sdf::SDF());
-    sdf::init(sdfElement);
-    if (!sdf::readFile(sdf_filename, sdfElement)) {
-      std::cerr << sdf_filename << " is not a valid SDF file!" << std::endl;
-      return {};
-    }
-
-    // start parsing model
-    const sdf::ElementPtr rootElement = sdfElement->Root();
-    if (!rootElement->HasElement("world")) {
-      std::cerr << sdf_filename << " the root element is not <world>" << std::endl;
-      return {};
-    }
-    const sdf::ElementPtr modelElement = rootElement->GetElement("model");
-    const auto modelName = modelElement->Get<std::string>("name");
-    std::cout << "Found " << modelName << " model!" << std::endl;
-
-    // parse model links
-    sdf::ElementPtr linkElement = modelElement->GetElement("link");
-    while (linkElement) {
-      const auto linkName = linkElement->Get<std::string>("name");
-      std::cout << "Found " << linkName << " link in " << modelName << " model!" << std::endl;
-      linkElement = linkElement->GetNextElement("link");
-    }
-
-    // parse model joints
-    sdf::ElementPtr jointElement = modelElement->GetElement("joint");
-    while (jointElement) {
-      const auto jointName = jointElement->Get<std::string>("name");
-      std::cout << "Found " << jointName << " joint in " << modelName << " model!" << std::endl;
-
-      const sdf::ElementPtr parentElement = jointElement->GetElement("parent");
-      const auto parentLinkName = parentElement->Get<std::string>();
-
-      const sdf::ElementPtr childElement = jointElement->GetElement("child");
-      const auto childLinkName = childElement->Get<std::string>();
-
-      std::cout << "Joint " << jointName << " connects " << parentLinkName << " link to " << childLinkName << " link"
-                << std::endl;
-
-      jointElement = jointElement->GetNextElement("joint");
-    }
-
-    throw std::runtime_error("done");
-    return {};
-
-    planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor_);
+    // planning_scene_monitor::LockedPlanningSceneRW locked_planning_scene(scene_monitor_);
+    // auto planning_scene = locked_planning_scene.operator->();
+    scene_pub.publish(planning_scene_msg_);
 
     // customize by excluding some objects
-    auto& world = planning_scene->getWorldNonConst();
+    auto& world = planning_scene_->getWorldNonConst();
     std::vector<std::string> objects_to_ignore{
         "collision_sphere.link_1",
         "ground_plane.link",
@@ -639,7 +594,7 @@ struct CDCPD_Moveit_Node {
       }
     }
 
-    auto& robot_state = planning_scene->getCurrentStateNonConst();
+    auto& robot_state = planning_scene_->getCurrentStateNonConst();
 
     // remove the attached "tool boxes"
     std::vector<std::string> objects_to_detach{"left_tool_box", "right_tool_box"};
@@ -653,7 +608,7 @@ struct CDCPD_Moveit_Node {
       }
     }
 
-    planning_scene->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
+    planning_scene_->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
 
     // attach to the robot base link, sort of hacky but MoveIt only has API for checking robot vs self/world,
     // so we have to make the tracked points part of the robot, hence "attached collision objects"
@@ -671,14 +626,14 @@ struct CDCPD_Moveit_Node {
       auto sphere = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
 
       robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {sphere},
-                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{}, "hdt_michigan_root");
+                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{}, "fake_robot_link");
     }
 
     // visualize
     //    visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
 
     ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Finding nearest points and normals");
-    return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
+    return find_nearest_points_and_normals(planning_scene_, cdcpd_to_moveit);
   }
 };
 

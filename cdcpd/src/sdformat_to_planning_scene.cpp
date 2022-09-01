@@ -1,8 +1,9 @@
-#include <assimp/postprocess.h>  // Post processing flags
-#include <assimp/scene.h>        // Output data structure
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
 #include <moveit/planning_scene/planning_scene.h>
+#include <moveit/robot_model_loader/robot_model_loader.h>
 
-#include <assimp/Importer.hpp>  // C++ importer interface
+#include <assimp/Importer.hpp>
 #include <cstddef>
 #include <iterator>
 #include <sdformat-9.7/sdf/sdf.hh>
@@ -46,48 +47,60 @@ class ElementIterator {
 
 std::string const LOGNAME = "sdformat_to_planning_scene";
 
-int main(int argc, char* argv[]) {
+planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_filename, std::string const& frame_id) {
+  std::cout << "Loading SDF\n";
+
   moveit_msgs::PlanningScene planning_scene_msg;
   planning_scene_msg.name = "cdcpd_world";
-  planning_scene_msg.robot_model_name = "";
+  planning_scene_msg.robot_model_name = "fake_robot";
   planning_scene_msg.is_diff = false;
-
-  std::string sdf_filename = "car5_real_cdcpd.world";
 
   auto sdf_element = std::make_shared<sdf::SDF>();
   sdf::init(sdf_element);
 
   if (!sdf::readFile(sdf_filename, sdf_element)) {
     std::cerr << sdf_filename << " is not a valid SDF file!" << std::endl;
-    return EXIT_SUCCESS;
+    return nullptr;
   }
 
   auto const root = sdf_element->Root();
   if (!root->HasElement("world")) {
     std::cerr << sdf_filename << " the root element is not <world>" << std::endl;
-    return EXIT_SUCCESS;
+    return nullptr;
   }
 
   auto const world = root->GetElement("world");
 
   for (auto const& model : ElementIterator(world, "model")) {
     const auto model_name = model->Get<std::string>("name");
-    std::cout << "model " << model_name << std::endl;
-
-    moveit_msgs::CollisionObject collision_object;
-    collision_object.id = model_name;
-    collision_object.header.frame_id = "cdcpd_world";  // FIXME: what should this be?
-    collision_object.operation = moveit_msgs::CollisionObject::ADD;
+    const auto model_pose = model->Get<ignition::math::Pose3d>("pose");
+    std::cout << "model " << model_name << " pose: " << model_pose << std::endl;
 
     for (auto const& link : ElementIterator(model, "link")) {
       const auto link_name = link->Get<std::string>("name");
-      const auto link_pose = link->Get<ignition::math::Vector3d>("pose");
+      const auto link_pose = link->Get<ignition::math::Pose3d>("pose");
       const auto link_collision = link->GetElement("collision");
       std::cout << " link " << link_name << " pose: " << link_pose << std::endl;
+      auto link_pose_in_world_frame = model_pose + link_pose;
 
       for (auto const& link_collision_geometry : ElementIterator(link_collision, "geometry")) {
         const auto link_geometry_name = link_collision_geometry->Get<std::string>("name");
         std::cout << "  link collision geometry " << link_geometry_name << std::endl;
+
+        moveit_msgs::CollisionObject collision_object;
+        collision_object.id = model_name;
+        collision_object.header.frame_id = frame_id;
+        collision_object.operation = moveit_msgs::CollisionObject::ADD;
+        collision_object.pose.orientation.w = 1;
+
+        geometry_msgs::Pose link_pose_msg;
+        link_pose_msg.orientation.x = link_pose_in_world_frame.Rot().X();
+        link_pose_msg.orientation.y = link_pose_in_world_frame.Rot().Y();
+        link_pose_msg.orientation.z = link_pose_in_world_frame.Rot().Z();
+        link_pose_msg.orientation.w = link_pose_in_world_frame.Rot().W();
+        link_pose_msg.position.x = link_pose_in_world_frame.X();
+        link_pose_msg.position.y = link_pose_in_world_frame.Y();
+        link_pose_msg.position.z = link_pose_in_world_frame.Z();
 
         // for each collision geometry, convert it to the planning scene
         if (link_collision_geometry->HasElement("mesh")) {
@@ -128,37 +141,39 @@ int main(int argc, char* argv[]) {
             }
             collision_object.meshes.push_back(mesh_msg);
 
-            geometry_msgs::Pose mesh_pose_msg;
-            mesh_pose_msg.orientation.w = 1;
-            collision_object.mesh_poses.push_back(mesh_pose_msg);
+            collision_object.mesh_poses.push_back(link_pose_msg);
           }
-        }
-
-        if (link_collision_geometry->HasElement("box")) {
+        } else if (link_collision_geometry->HasElement("box")) {
           auto const box_element = link_collision_geometry->GetElement("box");
           auto const size_element = box_element->GetElement("size");
           std::cout << "   box element " << size_element->Get<ignition::math::Vector3d>() << std::endl;
+          std::cout << " NOT IMPLEMENTED!!!\n";
           // collision_object.primitive_poses.push_back()
-        }
-
-        if (link_collision_geometry->HasElement("cylinder")) {
+        } else if (link_collision_geometry->HasElement("sphere")) {
+          auto const sphere_element = link_collision_geometry->GetElement("sphere");
+          auto const radius = sphere_element->GetElement("radius")->Get<double>();
+          std::cout << "   sphere element " << radius << std::endl;
+          std::cout << " NOT IMPLEMENTED!!!\n";
+          // collision_object.primitive_poses.push_back()
+        } else if (link_collision_geometry->HasElement("cylinder")) {
           auto const cylinder_element = link_collision_geometry->GetElement("cylinder");
           auto const radius = cylinder_element->GetElement("radius")->Get<double>();
           auto const length = cylinder_element->GetElement("length")->Get<double>();
-          std::cout << "   cylinder element " << radius << std::endl;
+          std::cout << "   cylinder element " << radius << " " << length << std::endl;
+          std::cout << " NOT IMPLEMENTED!!!\n";
           // collision_object.primitive_poses.push_back()
         }
+
+        planning_scene_msg.world.collision_objects.push_back(collision_object);
       }
     }
-
-    planning_scene_msg.world.collision_objects.push_back(collision_object);
   }
 
-  auto empty_urdf = std::make_shared<urdf::ModelInterface>();
-  auto empty_srdf = std::make_shared<srdf::Model>();
-  auto robot_model = std::make_shared<robot_model::RobotModel>(empty_urdf, empty_srdf);
+  auto model_loader = std::make_shared<robot_model_loader::RobotModelLoader>("fake_robot_description");
+  auto robot_model = model_loader->getModel();
   auto moveit_world = std::make_shared<collision_detection::World>();
-  planning_scene::PlanningScene planning_scene(robot_model, moveit_world);
-  planning_scene.usePlanningSceneMsg(planning_scene_msg);
-  return EXIT_SUCCESS;
+  auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, moveit_world);
+  planning_scene->usePlanningSceneMsg(planning_scene_msg);
+
+  return planning_scene;
 }
