@@ -100,15 +100,38 @@ int main(int argc, char* argv[]) {
                                                             aiProcess_JoinIdenticalVertices | aiProcess_SortByPType);
 
           // If the import failed, report it
-          if (nullptr != scene) {
+          if (scene == nullptr) {
             std::cout << importer.GetErrorString() << std::endl;
             continue;
           }
 
-          shape_msgs::Mesh mesh_msg;
-          // mesh_msg.triangles
-          // mesh_msg.vertices
-          collision_object.meshes.push_back(mesh_msg);
+          for (auto i{0u}; i < scene->mNumMeshes; ++i) {
+            auto mesh = scene->mMeshes[i];
+
+            shape_msgs::Mesh mesh_msg;
+            std::cout << "     Mesh has " << mesh->mNumFaces << " faces\n";
+            for (auto face_idx{0u}; face_idx < mesh->mNumFaces; ++face_idx) {
+              auto face = mesh->mFaces[face_idx];
+              shape_msgs::MeshTriangle triangle_msg;
+              triangle_msg.vertex_indices[0] = face.mIndices[0];
+              triangle_msg.vertex_indices[1] = face.mIndices[1];
+              triangle_msg.vertex_indices[2] = face.mIndices[2];
+              mesh_msg.triangles.push_back(triangle_msg);
+            }
+            for (auto vertex_idx{0u}; vertex_idx < mesh->mNumVertices; ++vertex_idx) {
+              auto vertex = mesh->mVertices[vertex_idx];
+              geometry_msgs::Point point_msg;
+              point_msg.x = vertex.x;
+              point_msg.y = vertex.y;
+              point_msg.z = vertex.z;
+              mesh_msg.vertices.push_back(point_msg);
+            }
+            collision_object.meshes.push_back(mesh_msg);
+
+            geometry_msgs::Pose mesh_pose_msg;
+            mesh_pose_msg.orientation.w = 1;
+            collision_object.mesh_poses.push_back(mesh_pose_msg);
+          }
         }
 
         if (link_collision_geometry->HasElement("box")) {
