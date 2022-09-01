@@ -1,5 +1,16 @@
 <?xml version="1.0"?>
 <robot name="fake_robot">
-    <link name="fake_robot_link">
+    <link name="mock_camera_link">
+        <visual>
+            <geometry>
+                <cylinder length="0.05" radius="0.02"/>
+            </geometry>
+        </visual>
+        <visual>
+            <origin xyz="0 0 0.03" rpy="0 0 0"/>
+            <geometry>
+                <sphere radius="0.02"/>
+            </geometry>
+        </visual>
     </link>
 </robot>
