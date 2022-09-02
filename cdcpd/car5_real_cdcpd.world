@@ -14,6 +14,46 @@
             <!--                    </geometry>-->
             <!--                </collision>-->
             <!--            </link>-->
+            <link name="Bumper0">
+                <pose>0.30 0.37 1.48 0.252 0.206 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Bumper1">
+                <pose>0.24 0.44 1.31 0.252 0.406 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Bumper2">
+                <pose>0.14 0.49 1.14 0.252 0.606 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Bumper3">
+                <pose>0.03 0.53 1.01 0.252 0.806 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
             <link name="Cube">
                 <pose>-0.052 0.4544 1.531 0.252 0.406 0.069</pose>
                 <collision name="Cube">
