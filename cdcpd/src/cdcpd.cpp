@@ -5,6 +5,8 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_types_conversion.h>
+#include <pcl/filters/conditional_removal.h>
+
 
 #include <Eigen/Dense>
 #include <algorithm>
@@ -41,6 +43,24 @@ using Eigen::Vector4f;
 using Eigen::VectorXd;
 using Eigen::VectorXf;
 using Eigen::VectorXi;
+
+template <typename PointT>
+class GenericCondition : public pcl::ConditionBase<PointT> {
+ public:
+  typedef boost::shared_ptr<GenericCondition<PointT>> Ptr;
+  typedef boost::shared_ptr<const GenericCondition<PointT>> ConstPtr;
+  typedef std::function<bool(const PointT &)> FunctorT;
+
+  GenericCondition(FunctorT evaluator) : pcl::ConditionBase<PointT>(), _evaluator(evaluator) {}
+
+  virtual bool evaluate(const PointT &point) const {
+    // just delegate ALL the work to the injected std::function
+    return _evaluator(point);
+  }
+
+ private:
+  FunctorT _evaluator;
+};
 
 class CompHSV : public pcl::ComparisonBase<PointHSV> {
   using ComparisonBase<PointHSV>::capable_;
@@ -644,15 +664,29 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   val_filter.filter(*filtered_points_hsv);
   ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "val filtered " << filtered_points_hsv->size());
 
-  // drop color info at this point
-  pcl::copyPointCloud(*filtered_points_hsv, *cloud);
+  const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+
+  auto range_cond = boost::make_shared<GenericCondition<PointHSV>>([&](const PointHSV &point) {
+    Eigen::Vector3f p{point.x, point.y, point.z};
+    Eigen::Matrix3Xf const deltas_to_tracked_points = Y.array().colwise() - p.array();
+    Eigen::VectorXf const distances_to_tracked_points = deltas_to_tracked_points.colwise().norm();
+    auto near_tracked_points = distances_to_tracked_points.minCoeff() < 0.08f;
+    return near_tracked_points;
+  });
+
+  pcl::ConditionalRemoval<PointHSV> condition_removal;
+  condition_removal.setCondition(range_cond);
+  condition_removal.setInputCloud(filtered_points_hsv);
+  auto filtered_points_hsv2 = boost::make_shared<PointCloudHSV>();
+  condition_removal.filter(*filtered_points_hsv2);
+
+  pcl::copyPointCloud(*filtered_points_hsv2, *cloud);
 
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
-  const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
   // TODO: check whether the change is needed here for unit conversion
   auto const Y_emit_prior = Eigen::VectorXf::Ones(template_cloud->size());
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "Y_emit_prior " << Y_emit_prior);

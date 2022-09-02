@@ -145,7 +145,10 @@ target_include_directories(sdformat_to_planning_scene PUBLIC
         ${SDFormat_INCLUDE_DIRS}
         ${catkin_INCLUDE_DIRS}
         ${ASSIMP_INCLUDE_DIRS}
+        ${PCL_INCLUDE_DIRS}
         )
+target_compile_definitions(sdformat_to_planning_scene PUBLIC ${PCL_DEFINITIONS})
 target_link_directories(sdformat_to_planning_scene PUBLIC
+        ${PCL_LIBRARIES}
         ${SDFormat_LIBRARY_DIRS})
 target_link_libraries(sdformat_to_planning_scene PRIVATE ${catkin_LIBRARIES} ${SDFormat_LIBRARIES} ${ASSIMP_LIBRARIES})

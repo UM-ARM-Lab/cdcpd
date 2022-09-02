@@ -1,0 +1,39 @@
+<?xml version="1.0" ?>
+<sdf version="1.4">
+    <world name="default">
+        <model name="simple_world">
+            <link name="box">
+                <pose>0 0 1 0 0 0</pose>
+                <collision name="box_collision">
+                    <geometry>
+                        <box>
+                            <size>0.1 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="sphere">
+                <pose>0.2 0 1 0 0 0</pose>
+                <collision name="sphere_collision">
+                    <geometry>
+                        <sphere>
+                            <radius>0.1</radius>
+                        </sphere>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="torus">
+                <pose>-0.2 0 1.0 0 0 0</pose>
+                <collision name="torus_collision">
+                    <geometry>
+                        <mesh>
+                            <uri>
+                                /home/peter/catkin_ws/src/cdcpd/cdcpd/meshes/torus.stl
+                            </uri>
+                        </mesh>
+                    </geometry>
+                </collision>
+            </link>
+        </model>
+    </world>
+</sdf>

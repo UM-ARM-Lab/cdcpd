@@ -27,7 +27,7 @@
 #include "cdcpd_ros/camera_sub.h"
 
 std::string const LOGNAME = "cdcpd_node";
-constexpr auto const MAX_CONTACTS_VIZ = 1000;
+constexpr auto const MAX_CONTACTS_VIZ = 500;
 constexpr auto const PERF_LOGGER = "perf";
 
 Eigen::Vector3f extent_to_env_size(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
@@ -169,8 +169,6 @@ struct CDCPD_Moveit_Node {
     auto const depth_topic = ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw");
     auto const info_topic = ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info");
     camera_frame = ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame");
-    planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
-    planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
 
     // For use with TF and "fixed points" for the constraint step
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << camera_frame);
@@ -431,7 +429,8 @@ struct CDCPD_Moveit_Node {
   ObstacleConstraints find_nearest_points_and_normals(planning_scene::PlanningScenePtr planning_scene) {
     collision_detection::CollisionRequest req;
     req.contacts = true;
-    req.distance = true;
+    req.distance = false;
+
     req.max_contacts_per_pair = 1;
     collision_detection::CollisionResult res;
     auto const t0 = ros::Time::now();
@@ -566,6 +565,8 @@ struct CDCPD_Moveit_Node {
     // planning_scene_monitor::LockedPlanningSceneRW locked_planning_scene(scene_monitor_);
     // auto planning_scene = locked_planning_scene.operator->();
 
+    planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
+    planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
     scene_pub.publish(planning_scene_msg_);
     geometry_msgs::TransformStamped identity_transform_msg;
     identity_transform_msg.child_frame_id = "mock_camera_link";

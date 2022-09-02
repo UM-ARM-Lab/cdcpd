@@ -20,13 +20,14 @@ class ElementIterator {
     using pointer = sdf::ElementPtr*;
     using reference = sdf::ElementPtr&;
 
-    explicit Iterator(sdf::ElementPtr element) : element_(std::move(element)) {}
+    explicit Iterator(sdf::ElementPtr element, std::string name)
+        : element_(std::move(element)), name_(std::move(name)) {}
 
     reference operator*() { return element_; }
     pointer operator->() { return &element_; }
 
     Iterator& operator++() {
-      element_ = element_->GetNextElement("model");
+      element_ = element_->GetNextElement(name_);
       return *this;
     }
 
@@ -35,10 +36,11 @@ class ElementIterator {
 
    private:
     sdf::ElementPtr element_;
+    std::string name_;
   };
 
-  Iterator begin() { return Iterator(parent_->GetElement(name_)); }
-  Iterator end() { return Iterator(sdf::ElementPtr()); }
+  Iterator begin() { return Iterator(parent_->GetElement(name_), name_); }
+  Iterator end() { return Iterator(sdf::ElementPtr(), name_); }
 
  private:
   sdf::ElementPtr parent_;
@@ -80,15 +82,15 @@ planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_fi
       const auto link_name = link->Get<std::string>("name");
       const auto link_pose = link->Get<ignition::math::Pose3d>("pose");
       const auto link_collision = link->GetElement("collision");
+      const auto link_collision_name = link_collision->Get<std::string>("name");
       std::cout << " link " << link_name << " pose: " << link_pose << std::endl;
       auto link_pose_in_world_frame = model_pose + link_pose;
 
       for (auto const& link_collision_geometry : ElementIterator(link_collision, "geometry")) {
-        const auto link_geometry_name = link_collision_geometry->Get<std::string>("name");
-        std::cout << "  link collision geometry " << link_geometry_name << std::endl;
+        std::cout << "  link collision geometry " << std::endl;
 
         moveit_msgs::CollisionObject collision_object;
-        collision_object.id = model_name;
+        collision_object.id = model_name + "::" + link_name + "::" + link_collision_name;
         collision_object.header.frame_id = frame_id;
         collision_object.operation = moveit_msgs::CollisionObject::ADD;
         collision_object.pose.orientation.w = 1;
@@ -140,28 +142,40 @@ planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_fi
               mesh_msg.vertices.push_back(point_msg);
             }
             collision_object.meshes.push_back(mesh_msg);
-
             collision_object.mesh_poses.push_back(link_pose_msg);
           }
         } else if (link_collision_geometry->HasElement("box")) {
           auto const box_element = link_collision_geometry->GetElement("box");
-          auto const size_element = box_element->GetElement("size");
-          std::cout << "   box element " << size_element->Get<ignition::math::Vector3d>() << std::endl;
-          std::cout << " NOT IMPLEMENTED!!!\n";
-          // collision_object.primitive_poses.push_back()
+          auto size = box_element->GetElement("size")->Get<ignition::math::Vector3d>();
+          size *= 2;
+          std::cout << "  box element " << size << std::endl;
+          shape_msgs::SolidPrimitive primitive;
+          primitive.type = shape_msgs::SolidPrimitive::BOX;
+          primitive.dimensions.push_back(size.X());
+          primitive.dimensions.push_back(size.Y());
+          primitive.dimensions.push_back(size.Z());
+          collision_object.primitives.push_back(primitive);
+          collision_object.primitive_poses.push_back(link_pose_msg);
         } else if (link_collision_geometry->HasElement("sphere")) {
           auto const sphere_element = link_collision_geometry->GetElement("sphere");
           auto const radius = sphere_element->GetElement("radius")->Get<double>();
           std::cout << "   sphere element " << radius << std::endl;
-          std::cout << " NOT IMPLEMENTED!!!\n";
-          // collision_object.primitive_poses.push_back()
+          shape_msgs::SolidPrimitive primitive;
+          primitive.type = shape_msgs::SolidPrimitive::SPHERE;
+          primitive.dimensions.push_back(radius);
+          collision_object.primitives.push_back(primitive);
+          collision_object.primitive_poses.push_back(link_pose_msg);
         } else if (link_collision_geometry->HasElement("cylinder")) {
           auto const cylinder_element = link_collision_geometry->GetElement("cylinder");
+          auto const height = 2 * cylinder_element->GetElement("length")->Get<double>();
           auto const radius = cylinder_element->GetElement("radius")->Get<double>();
-          auto const length = cylinder_element->GetElement("length")->Get<double>();
-          std::cout << "   cylinder element " << radius << " " << length << std::endl;
-          std::cout << " NOT IMPLEMENTED!!!\n";
-          // collision_object.primitive_poses.push_back()
+          std::cout << "   cylinder element " << radius << " " << height << std::endl;
+          shape_msgs::SolidPrimitive primitive;
+          primitive.type = shape_msgs::SolidPrimitive::CYLINDER;
+          primitive.dimensions.push_back(height);
+          primitive.dimensions.push_back(radius);
+          collision_object.primitives.push_back(primitive);
+          collision_object.primitive_poses.push_back(link_pose_msg);
         }
 
         planning_scene_msg.world.collision_objects.push_back(collision_object);
