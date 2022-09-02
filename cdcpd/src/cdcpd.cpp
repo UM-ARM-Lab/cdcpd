@@ -441,6 +441,9 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
 
 Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseDelta &q_dot,
                          const smmap::AllGrippersSinglePose &q_config, const int pred_choice) {
+  Eigen::Vector3d delta{0, -0.002, 0};
+  Eigen::Matrix3Xd const newP = P.colwise() - delta;
+  return newP;
   if (pred_choice == 0) {
     return P;
   } else {
@@ -671,7 +674,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
     Eigen::Vector3f p{point.x, point.y, point.z};
     Eigen::Matrix3Xf const deltas_to_tracked_points = Y.array().colwise() - p.array();
     Eigen::VectorXf const distances_to_tracked_points = deltas_to_tracked_points.colwise().norm();
-    auto near_tracked_points = distances_to_tracked_points.minCoeff() < 0.06f;
+    auto near_tracked_points = distances_to_tracked_points.minCoeff() < 0.08f;
     return near_tracked_points;
   });
 

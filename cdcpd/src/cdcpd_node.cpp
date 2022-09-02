@@ -381,7 +381,7 @@ struct CDCPD_Moveit_Node {
 
       auto const hsv_mask = getHsvMask(ph, rgb);
       auto const out = cdcpd(rgb, depth, hsv_mask, intrinsics, tracked_points, obstacle_constraints, max_segment_length,
-                             q_dot, q_config, gripper_indices);
+                             q_dot, q_config, gripper_indices, 3);
       tracked_points = out.gurobi_output;
       publish_outputs(t0, out);
       reset_if_bad(out);
@@ -402,7 +402,7 @@ struct CDCPD_Moveit_Node {
       ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
       auto const out =
-          cdcpd(points, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_indices);
+          cdcpd(points, tracked_points, obstacle_constraints, max_segment_length, q_dot, q_config, gripper_indices, 3);
       tracked_points = out.gurobi_output;
       publish_outputs(t0, out);
       reset_if_bad(out);
