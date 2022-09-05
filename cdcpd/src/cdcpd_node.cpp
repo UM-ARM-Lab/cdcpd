@@ -1,4 +1,5 @@
 #include <arc_utilities/enumerate.h>
+#include <cdcpd/SetGripperConstraints.h>
 #include <cdcpd/cdcpd.h>
 #include <cdcpd/sdformat_to_planning_scene.h>
 #include <geometric_shapes/shapes.h>
@@ -29,6 +30,12 @@
 std::string const LOGNAME = "cdcpd_node";
 constexpr auto const MAX_CONTACTS_VIZ = 500;
 constexpr auto const PERF_LOGGER = "perf";
+
+struct ConstraintPosDotIndices {
+  smmap::AllGrippersSinglePose q_config;
+  smmap::AllGrippersSinglePoseDelta q_dot;
+  Eigen::MatrixXi gripper_indices;
+};
 
 Eigen::Vector3f extent_to_env_size(Eigen::Vector3f const& bbox_lower, Eigen::Vector3f const& bbox_upper) {
   return (bbox_upper - bbox_lower).cwiseAbs() + 2 * bounding_box_extend;
@@ -123,6 +130,8 @@ struct CDCPD_Moveit_Node {
   ros::Publisher contact_marker_pub;
   ros::Publisher bbox_pub;
   ros::Publisher scene_pub;
+  ros::ServiceServer gripper_service_;
+  std::vector<cdcpd::GripperConstraint> gripper_constraints_;
   planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
   robot_model_loader::RobotModelLoaderPtr model_loader_;
   robot_model::RobotModelPtr model_;
@@ -169,31 +178,30 @@ struct CDCPD_Moveit_Node {
     auto const depth_topic = ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw");
     auto const info_topic = ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info");
     camera_frame = ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame");
+    planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
+    planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
+
+    gripper_service_ = ph.advertiseService("set_gripper_constraints", &CDCPD_Moveit_Node::SetGripperConstraints, this);
 
     // For use with TF and "fixed points" for the constraint step
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << camera_frame);
-    auto const grippers_info_filename = ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node");
     auto const num_points = ROSHelpers::GetParam<int>(nh, "rope_num_points", 11);
 
-    ROS_INFO_STREAM_NAMED(LOGNAME, "Loading " << grippers_info_filename);
-    auto grippers_info = YAML::LoadFile(grippers_info_filename);
-    unsigned int gripper_count = grippers_info.size();
-    int gripper_idx = 0;
-    Eigen::MatrixXi gripper_indices(1, gripper_count);
-    for (auto const gripper_info_i : grippers_info) {
-      auto const tf_name = gripper_info_i.first.as<std::string>();
-      auto const node_idx = gripper_info_i.second.as<int>();
-      gripper_indices(0, gripper_idx) = node_idx;
-      gripper_idx++;
-    }
-    if (gripper_count == 0) {
-      gripper_indices = {};
-    }
+    cdcpd::GripperConstraint left_gripper_constraint;
+    left_gripper_constraint.frame_id = "mocap_left_hand_left_hand";
+    left_gripper_constraint.node_index = 0;
+    gripper_constraints_.push_back(left_gripper_constraint);
+    cdcpd::GripperConstraint right_gripper_constraint;
+    right_gripper_constraint.frame_id = "mocap_right_hand_right_hand";
+    right_gripper_constraint.node_index = 24;
+    gripper_constraints_.push_back(right_gripper_constraint);
 
     auto get_q_config = [&]() {
       smmap::AllGrippersSinglePose q_config;
-      for (auto const gripper_info_i : grippers_info) {
-        auto const tf_name = gripper_info_i.first.as<std::string>();
+      std::vector<int> gripper_indices_vec;
+      for (auto const gripper_constraint : gripper_constraints_) {
+        auto const tf_name = gripper_constraint.frame_id;
+        gripper_indices_vec.push_back(gripper_constraint.node_index);
         if (not tf_name.empty()) {
           try {
             auto const gripper = tf_buffer_.lookupTransform(camera_frame, tf_name, ros::Time(0), ros::Duration(10));
@@ -207,9 +215,14 @@ struct CDCPD_Moveit_Node {
         }
       }
 
-      const smmap::AllGrippersSinglePoseDelta q_dot{gripper_count, kinematics::Vector6d::Zero()};
+      const smmap::AllGrippersSinglePoseDelta q_dot{gripper_constraints_.size(), kinematics::Vector6d::Zero()};
 
-      return std::tuple{q_config, q_dot};
+      Eigen::MatrixXi gripper_indices_eigen;
+      gripper_indices_eigen.resize(1, gripper_indices_vec.size());
+      for (auto const [i, gripper_idx] : enumerate(gripper_indices_vec)) {
+        gripper_indices_eigen(0, i) = gripper_idx;
+      }
+      return ConstraintPosDotIndices{q_config, q_dot, gripper_indices_eigen};
     };
 
     // Initial connectivity model of rope
@@ -218,18 +231,19 @@ struct CDCPD_Moveit_Node {
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
 
     // initialize start and end points for rope
-    auto [init_q_config, init_q_dot] = get_q_config();
+    auto const init_gripper_constraints = get_q_config();
+    auto const init_q_config = init_gripper_constraints.q_config;
     Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
     Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
     end_position[2] += max_rope_length;
-    if (gripper_count == 2u) {
+    if (gripper_constraints_.size() == 2u) {
       start_position = init_q_config[0].translation().cast<float>();
       end_position = init_q_config[1].translation().cast<float>();
-    } else if (gripper_count == 1u) {
+    } else if (gripper_constraints_.size() == 1u) {
       start_position = init_q_config[0].translation().cast<float>();
       end_position = start_position;
       end_position[1] += max_rope_length;
-    } else if (gripper_count == 0u) {
+    } else if (gripper_constraints_.empty()) {
       start_position << -max_rope_length / 2, 0, 1.0;
       end_position << max_rope_length / 2, 0, 1.0;
     }
@@ -368,7 +382,7 @@ struct CDCPD_Moveit_Node {
 
     auto reset_if_bad = [&](CDCPD::Output const& out) {
       if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
-        // recreating
+        ROS_DEBUG_STREAM_NAMED(LOGNAME + ".reset", "Resetting! status code " << out.status);
         cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
                       alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
       }
@@ -376,7 +390,7 @@ struct CDCPD_Moveit_Node {
 
     auto const callback = [&](cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics) {
       auto const t0 = ros::Time::now();
-      auto [q_config, q_dot] = get_q_config();
+      auto [q_config, q_dot, gripper_indices] = get_q_config();
 
       publish_bbox();
 
@@ -392,7 +406,7 @@ struct CDCPD_Moveit_Node {
 
     auto const points_callback = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg) {
       auto const t0 = ros::Time::now();
-      auto [q_config, q_dot] = get_q_config();
+      auto [q_config, q_dot, gripper_indices] = get_q_config();
 
       publish_bbox();
       publish_template();
@@ -424,6 +438,11 @@ struct CDCPD_Moveit_Node {
       auto sub = nh.subscribe<sensor_msgs::PointCloud2>(points_name, 10, points_callback);
       ros::spin();
     }
+  }
+
+  bool SetGripperConstraints(cdcpd::SetGripperConstraints::Request& req, cdcpd::SetGripperConstraints::Response& res) {
+    gripper_constraints_ = req.constraints;
+    return true;
   }
 
   ObstacleConstraints find_nearest_points_and_normals(planning_scene::PlanningScenePtr planning_scene) {
@@ -565,8 +584,9 @@ struct CDCPD_Moveit_Node {
     // planning_scene_monitor::LockedPlanningSceneRW locked_planning_scene(scene_monitor_);
     // auto planning_scene = locked_planning_scene.operator->();
 
-    planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
-    planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
+    // planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
+    // planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
+
     scene_pub.publish(planning_scene_msg_);
     geometry_msgs::TransformStamped identity_transform_msg;
     identity_transform_msg.child_frame_id = "mock_camera_link";

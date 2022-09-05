@@ -84,7 +84,7 @@ planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_fi
       const auto link_collision = link->GetElement("collision");
       const auto link_collision_name = link_collision->Get<std::string>("name");
       std::cout << " link " << link_name << " pose: " << link_pose << std::endl;
-      auto link_pose_in_world_frame = model_pose + link_pose;
+      auto link_pose_in_world_frame =  link_pose + model_pose;
 
       for (auto const& link_collision_geometry : ElementIterator(link_collision, "geometry")) {
         std::cout << "  link collision geometry " << std::endl;

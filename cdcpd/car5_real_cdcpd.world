@@ -2,18 +2,7 @@
 <sdf version="1.4">
     <world name="default">
         <model name="car_scene5_real">
-            <pose>0 0 0 0 0 0</pose>
-            <!--            <link name="car_scene5_real_mesh">-->
-            <!--                <collision name="collision">-->
-            <!--                    <geometry>-->
-            <!--                        <mesh>-->
-            <!--                            <uri>-->
-            <!--                                /home/peter/catkin_ws/src/cdcpd/cdcpd/meshes/car5_real_mesh.stl-->
-            <!--                            </uri>-->
-            <!--                        </mesh>-->
-            <!--                    </geometry>-->
-            <!--                </collision>-->
-            <!--            </link>-->
+            <pose>0.01 -0.01 0.05 0 0 0</pose>
             <link name="Bumper0">
                 <pose>0.30 0.37 1.48 0.252 0.206 0.069</pose>
                 <collision name="Cube">
@@ -54,7 +43,7 @@
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube">
+            <link name="platform">
                 <pose>-0.052 0.4544 1.531 0.252 0.406 0.069</pose>
                 <collision name="Cube">
                     <geometry>
@@ -64,7 +53,7 @@
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube.001">
+            <link name="floor">
                 <pose>-0.084151 0.2652 1.7942 0.25794 0.41154 0.11685</pose>
                 <collision name="Cube">
                     <geometry>
@@ -84,7 +73,7 @@
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube.003">
+            <link name="back_left_box">
                 <pose>-0.62587 0.43423 1.2862 4.18591 1.09956 2.63165</pose>
                 <collision name="Cube">
                     <geometry>
@@ -94,7 +83,7 @@
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube.004">
+            <link name="engine_main_box">
                 <pose>-0.056949 0.31012 1.3856 1.81656 0.41158 0.07008</pose>
                 <collision name="Cube">
                     <geometry>
@@ -104,26 +93,26 @@
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube.005">
-                <pose>0.023584 0.28697 1.309 1.94129 0.35695 0.28075</pose>
+            <link name="engine_front_tilted_thing">
+                <pose>0.023584 0.286 1.315 1.94129 0.35695 0.28075</pose>
                 <collision name="Cube">
                     <geometry>
                         <box>
-                            <size>0.065 0.191 0.027</size>
+                            <size>0.063 0.171 0.025</size>
                         </box>
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube.006">
-                <pose>-0.29687 0.21136 1.6168 1.81656 0.41158 0.07008</pose>
-                <collision name="Cube">
-                    <geometry>
-                        <box>
-                            <size>0.11 0.095 0.172</size>
-                        </box>
-                    </geometry>
-                </collision>
-            </link>
+<!--            <link name="Cube.006">-->
+<!--                <pose>-0.29687 0.21136 1.6168 1.81656 0.41158 0.07008</pose>-->
+<!--                <collision name="Cube">-->
+<!--                    <geometry>-->
+<!--                        <box>-->
+<!--                            <size>0.11 0.095 0.172</size>-->
+<!--                        </box>-->
+<!--                    </geometry>-->
+<!--                </collision>-->
+<!--            </link>-->
             <link name="Cube.007">
                 <pose>-0.022476 0.35878 1.1627 1.81656 0.41158 0.07008</pose>
                 <collision name="Cube">
@@ -134,7 +123,7 @@
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube.008">
+            <link name="back_left_hook">
                 <pose>-0.26906 0.31247 1.2953 1.81656 0.41158 0.07008</pose>
                 <collision name="Cube">
                     <geometry>
@@ -164,8 +153,7 @@
                     </geometry>
                 </collision>
             </link>
-            <link name="Cube.011">
-                <pose>-0.048261 0.1697 1.3436 1.81656 0.41158 0.07008</pose>
+            <link name="Cube.011"> <pose>-0.048261 0.1697 1.3436 1.81656 0.41158 0.07008</pose>
                 <collision name="Cube">
                     <geometry>
                         <box>

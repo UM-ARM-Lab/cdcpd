@@ -1,12 +1,11 @@
 #include "cdcpd/cdcpd.h"
 
 #include <arc_utilities/enumerate.h>
+#include <pcl/filters/conditional_removal.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_types_conversion.h>
-#include <pcl/filters/conditional_removal.h>
-
 
 #include <Eigen/Dense>
 #include <algorithm>
@@ -666,11 +665,13 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
 
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
 
+  auto const max_dist_from_tracked_point = ROSHelpers::GetParamDebugLog<float>(ph, "max_dist_from_tracked_point", 0.09);
   auto range_cond = boost::make_shared<GenericCondition<PointHSV>>([&](const PointHSV &point) {
     Eigen::Vector3f p{point.x, point.y, point.z};
     Eigen::Matrix3Xf const deltas_to_tracked_points = Y.array().colwise() - p.array();
     Eigen::VectorXf const distances_to_tracked_points = deltas_to_tracked_points.colwise().norm();
-    auto near_tracked_points = distances_to_tracked_points.minCoeff() < 0.08f;
+    // NOTE: wouldn't it be better to just soften the CPD tracking somehow? so we care less about points far away?
+    auto near_tracked_points = distances_to_tracked_points.minCoeff() < max_dist_from_tracked_point;
     return near_tracked_points;
   });
 
@@ -680,6 +681,8 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   auto filtered_points_hsv2 = boost::make_shared<PointCloudHSV>();
   condition_removal.filter(*filtered_points_hsv2);
 
+  // this new filtering breaks tracking during reset procedure
+  // pcl::copyPointCloud(*filtered_points_hsv, *cloud);
   pcl::copyPointCloud(*filtered_points_hsv2, *cloud);
 
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
