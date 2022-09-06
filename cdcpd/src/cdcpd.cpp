@@ -677,6 +677,8 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   sor.filter(*cloud_downsampled);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "Points in filtered point cloud: " << cloud_downsampled->width);
+
+  // Exit with error status message if no points in the downsampled cloud.
   if (cloud_downsampled->width == 0) {
     ROS_ERROR_STREAM_NAMED(LOGNAME, "No points in the filtered point cloud");
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
@@ -686,8 +688,9 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
     return CDCPD::Output{
         points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, OutputStatus::NoPointInFilteredCloud};
   }
-  Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
+
   // Add points to X according to the previous template
+  Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
 
   std::vector<FixedPoint> pred_fixed_points;
   auto const num_grippers = std::min(static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));

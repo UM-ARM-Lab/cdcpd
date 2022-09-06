@@ -38,6 +38,7 @@ endif ()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 # TODO Components?
+find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES} message_generation)  # for gripper message
 find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
@@ -52,10 +53,27 @@ list(REMOVE_AT PCL_DEFINITIONS 0)
 
 catkin_python_setup()
 
+# Begin: for gripper constraints service
+add_message_files(
+  FILES
+  GripperConstraint.msg
+)
+
+add_service_files(
+  FILES
+  SetGripperConstraints.srv
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+)
+# end: for gripper constraints service
+
 catkin_package(
         INCLUDE_DIRS include
         LIBRARIES cdcpd
-        CATKIN_DEPENDS ${CATKIN_PACKAGES}
+        CATKIN_DEPENDS ${CATKIN_PACKAGES} message_runtime # msg runtime for gripper constraints
         DEPENDS OpenCV Eigen3 GUROBI FIASS Qt5 PCL # NOTE: adding CGAL errors, but it's working so whatever
 )
 

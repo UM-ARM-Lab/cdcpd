@@ -26,13 +26,22 @@
 #include <arc_utilities/ros_helpers.hpp>
 
 #include "cdcpd/cdcpd.h"
-#include "cdcpd_ros/camera_sub.h"
 #include "cdcpd/deformable_object_configuration.h"
+#include "cdcpd/SetGripperConstraints.h"
+#include "cdcpd_ros/camera_sub.h"
+#include "cdcpd/sdformat_to_planning_scene.h"
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
 namespace vm = visualization_msgs;
 namespace ehc = EigenHelpersConversions;
+
+struct ConstraintPosDotIndices
+{
+    smmap::AllGrippersSinglePose q_config;
+    smmap::AllGrippersSinglePoseDelta q_dot;
+    Eigen::MatrixXi gripper_indices;
+};
 
 struct CDCPD_Publishers
 {
@@ -83,8 +92,7 @@ public:
     ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points);
 
     // Returns the gripper configuration
-    std::tuple<smmap::AllGrippersSinglePose,
-               const smmap::AllGrippersSinglePoseDelta> get_q_config();
+    ConstraintPosDotIndices get_q_config();
 
     // Publishes the bounding box.
     void publish_bbox() const;
@@ -108,6 +116,11 @@ public:
     // Resets CDCPD tracking to initial tracking configuration if OutputStatus indicates a problem.
     void reset_if_bad(CDCPD::Output const& out);
 
+    // Retrieves the gripper constraints from the given request and returns a bool status where
+    // true means the request succeeded.
+    bool set_gripper_constraints(cdcpd::SetGripperConstraints::Request& req,
+        cdcpd::SetGripperConstraints::Response& res);
+
     std::string collision_body_prefix{"cdcpd_tracked_point_"};
     std::string robot_namespace_;
     std::string robot_description_;
@@ -128,7 +141,11 @@ public:
     // TODO(dylan.colli): refactor gripper information into another class.
     YAML::Node grippers_info;
     unsigned int gripper_count;
-    Eigen::MatrixXi gripper_indices;
+    // Eigen::MatrixXi gripper_indices;
+
+    // Added based on Peter's changed in peter_icra23 branch.
+    ros::ServiceServer gripper_service_;
+    std::vector<cdcpd::GripperConstraint> gripper_constraints_;
 
     RopeConfiguration rope_configuration;
 

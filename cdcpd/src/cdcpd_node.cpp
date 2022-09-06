@@ -110,29 +110,38 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     // For use with TF and "fixed points" for the constrain step
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << node_params.camera_frame);
 
-    ROS_INFO_STREAM_NAMED(LOGNAME, "Loading " << node_params.grippers_info_filename);
-    grippers_info = YAML::LoadFile(node_params.grippers_info_filename);
-    gripper_count = grippers_info.size();
-    int gripper_idx = 0;
-    gripper_indices(1, gripper_count);
-    for (auto const gripper_info_i : grippers_info) {
-        auto const tf_name = gripper_info_i.first.as<std::string>();
-        auto const node_idx = gripper_info_i.second.as<int>();
-        gripper_indices(0, gripper_idx) = node_idx;
-        gripper_idx++;
-    }
-    if (gripper_count == 0) {
-        gripper_indices = {};
-    }
+
+    // TODO(dylan.colli): Initialize gripper constraints here. This is what Peter has on his ICRA
+    // branch but this should be done via the service.
+    // cdcpd::GripperConstraint left_gripper_constraint;
+    // left_gripper_constraint.frame_id = "mocap_left_hand_left_hand";
+    // left_gripper_constraint.node_index = 0;
+    // gripper_constraints_.push_back(left_gripper_constraint);
+    // cdcpd::GripperConstraint right_gripper_constraint;
+    // right_gripper_constraint.frame_id = "mocap_right_hand_right_hand";
+    // right_gripper_constraint.node_index = 24;
+    // gripper_constraints_.push_back(right_gripper_constraint);
+
 
     // Initial connectivity model of rope
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << rope_configuration.max_segment_length);
 
+    // This is for the mesh loading refactor
+    // planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
+    // planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
+
+    gripper_service_ = ph.advertiseService("set_gripper_constraints",
+        &CDCPD_Moveit_Node::set_gripper_constraints, this);
+
     // initialize start and end points for rope
-    auto [init_q_config, init_q_dot] = get_q_config();
+    ConstraintPosDotIndices const init_gripper_constraints = get_q_config();
+    auto const init_q_config = init_gripper_constraints.q_config;
     Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
     Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
     end_position[2] += node_params.max_rope_length;
+    // TODO(dylan.colli): Since a gripper could technically hold more than one point, should we
+    // specify number of grippers in another way?
+    uint const gripper_count = gripper_constraints_.size();
     if (gripper_count == 2u) {
         start_position = init_q_config[0].translation().cast<float>();
         end_position = init_q_config[1].translation().cast<float>();
@@ -412,7 +421,7 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     cv::Matx33d const& intrinsics)
 {
     auto const t0 = ros::Time::now();
-    auto [q_config, q_dot] = get_q_config();
+    ConstraintPosDotIndices gripper_info = get_q_config();
 
     publish_bbox();
 
@@ -421,8 +430,9 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     auto const hsv_mask = getHsvMask(ph, rgb);
     auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
                               rope_configuration.tracked.points,
-                              obstacle_constraints, rope_configuration.max_segment_length, q_dot,
-                              q_config, gripper_indices);
+                              obstacle_constraints, rope_configuration.max_segment_length,
+                              gripper_info.q_dot, gripper_info.q_config,
+                              gripper_info.gripper_indices);
     rope_configuration.tracked.points = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
@@ -431,7 +441,7 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
 void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
 {
     auto const t0 = ros::Time::now();
-    auto [q_config, q_dot] = get_q_config();
+    ConstraintPosDotIndices gripper_info = get_q_config();
 
     publish_bbox();
     publish_template();
@@ -444,7 +454,8 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
     auto const out = (*cdcpd)(points, rope_configuration.tracked.points, obstacle_constraints,
-        rope_configuration.max_segment_length, q_dot, q_config, gripper_indices);
+        rope_configuration.max_segment_length, gripper_info.q_dot, gripper_info.q_config,
+        gripper_info.gripper_indices);
     rope_configuration.tracked.points = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
@@ -584,12 +595,13 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
     }
 }
 
-std::tuple<smmap::AllGrippersSinglePose,
-           const smmap::AllGrippersSinglePoseDelta> CDCPD_Moveit_Node::get_q_config()
+ConstraintPosDotIndices CDCPD_Moveit_Node::get_q_config()
 {
     smmap::AllGrippersSinglePose q_config;
-    for (auto const gripper_info_i : grippers_info) {
-        auto const tf_name = gripper_info_i.first.as<std::string>();
+    std::vector<int> gripper_indices_vec;
+    for (auto const gripper_constraint : gripper_constraints_) {
+        auto const tf_name = gripper_constraint.frame_id;
+        gripper_indices_vec.push_back(gripper_constraint.node_index);
         if (not tf_name.empty()) {
           try
           {
@@ -606,9 +618,22 @@ std::tuple<smmap::AllGrippersSinglePose,
         }
     }
 
-    const smmap::AllGrippersSinglePoseDelta q_dot{gripper_count, kinematics::Vector6d::Zero()};
+    const smmap::AllGrippersSinglePoseDelta q_dot{gripper_constraints_.size(),
+        kinematics::Vector6d::Zero()};
 
-    return std::tuple{q_config, q_dot};
+    Eigen::MatrixXi gripper_indices_eigen;
+    gripper_indices_eigen.resize(1, gripper_indices_vec.size());
+    for (auto const [i, gripper_idx] : enumerate(gripper_indices_vec)) {
+    gripper_indices_eigen(0, i) = gripper_idx;
+    }
+    return ConstraintPosDotIndices{q_config, q_dot, gripper_indices_eigen};
+}
+
+bool CDCPD_Moveit_Node::set_gripper_constraints(cdcpd::SetGripperConstraints::Request& req,
+        cdcpd::SetGripperConstraints::Response& res)
+{
+    gripper_constraints_ = req.constraints;
+    return true;
 }
 
 int main(int argc, char* argv[]) {

@@ -15,6 +15,10 @@
 
   <buildtool_depend>catkin</buildtool_depend>
 
+  <!-- For gripper messages -->
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+  <!-- End: for gripper messages -->
   <depend>geometry_msgs</depend>
   <depend>geometric_shapes</depend>
   <depend>image_geometry</depend>
