@@ -178,6 +178,9 @@ struct CDCPD_Moveit_Node {
     auto const depth_topic = ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw");
     auto const info_topic = ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info");
     camera_frame = ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame");
+
+    auto const max_rope_length = ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0);
+
     planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
     planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
 
@@ -225,34 +228,36 @@ struct CDCPD_Moveit_Node {
       return ConstraintPosDotIndices{q_config, q_dot, gripper_indices_eigen};
     };
 
+    auto get_start_end_points = [&]() {
+      // initialize start and end points for rope
+      auto const gripper_constraints = get_q_config();
+      auto const q_config = gripper_constraints.q_config;
+      Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
+      Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
+      end_position[2] += max_rope_length;
+      if (gripper_constraints_.size() == 2u) {
+        start_position = q_config[0].translation().cast<float>();
+        end_position = q_config[1].translation().cast<float>();
+      } else if (gripper_constraints_.size() == 1u) {
+        end_position = q_config[0].translation().cast<float>();
+        start_position = end_position;
+        start_position[1] += max_rope_length;
+      } else if (gripper_constraints_.empty()) {
+        start_position << -max_rope_length / 2, 0, 1.0;
+        end_position << max_rope_length / 2, 0, 1.0;
+      }
+
+      return std::tuple{start_position, end_position};
+    };
+
     // Initial connectivity model of rope
-    auto const max_rope_length = ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0);
     auto const max_segment_length = max_rope_length / static_cast<float>(num_points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
 
-    // initialize start and end points for rope
-    auto const init_gripper_constraints = get_q_config();
-    auto const init_q_config = init_gripper_constraints.q_config;
-    Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
-    Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
-    end_position[2] += max_rope_length;
-    if (gripper_constraints_.size() == 2u) {
-      start_position = init_q_config[0].translation().cast<float>();
-      end_position = init_q_config[1].translation().cast<float>();
-    } else if (gripper_constraints_.size() == 1u) {
-      start_position = init_q_config[0].translation().cast<float>();
-      end_position = start_position;
-      end_position[1] += max_rope_length;
-    } else if (gripper_constraints_.empty()) {
-      start_position << -max_rope_length / 2, 0, 1.0;
-      end_position << max_rope_length / 2, 0, 1.0;
-    }
-
-    auto const& initial_template_pair = makeRopeTemplate(num_points, start_position, end_position);
-    auto const& initial_template_vertices = initial_template_pair.first;
-    auto const& initial_template_edges = initial_template_pair.second;
-
-    // Construct the initial template as a PCL cloud
+    auto const& [start_position, end_position] = get_start_end_points();
+    auto const& initial_template = makeRopeTemplate(num_points, start_position, end_position);
+    auto const& initial_template_vertices = initial_template.first;
+    auto const& initial_template_edges = initial_template.second;
     auto const& initial_tracked_points = makeCloud(initial_template_vertices);
     PointCloud::Ptr tracked_points = initial_tracked_points;  // non-const, modified each time
 
@@ -382,8 +387,15 @@ struct CDCPD_Moveit_Node {
 
     auto reset_if_bad = [&](CDCPD::Output const& out) {
       if (out.status == OutputStatus::NoPointInFilteredCloud or out.status == OutputStatus::ObjectiveTooHigh) {
-        ROS_DEBUG_STREAM_NAMED(LOGNAME + ".reset", "Resetting! status code " << out.status);
-        cdcpd = CDCPD(nh, ph, initial_tracked_points, initial_template_edges, objective_value_threshold, use_recovery,
+        ROS_INFO_STREAM_NAMED(LOGNAME + ".reset", "Resetting! status code " << out.status);
+        auto const& [current_start_position, current_end_position] = get_start_end_points();
+        auto const& current_template_pair = makeRopeTemplate(num_points, current_start_position, current_end_position);
+        auto const& current_template_vertices = current_template_pair.first;
+        auto const& current_template_edges = current_template_pair.second;
+        auto const& current_tracked_points = makeCloud(current_template_vertices);
+        ROS_INFO_STREAM_NAMED(LOGNAME + ".reset", "current points " << current_start_position << " " << current_end_position);
+        tracked_points = current_tracked_points;
+        cdcpd = CDCPD(nh, ph, current_tracked_points, current_template_edges, objective_value_threshold, use_recovery,
                       alpha, beta, lambda, k_spring, zeta, obstacle_cost_weight, fixed_points_weight);
       }
     };
