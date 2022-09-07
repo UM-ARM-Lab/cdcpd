@@ -40,8 +40,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 # TODO Components?
 find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 find_package(OpenCV REQUIRED)
+find_package(ASSIMP REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(GUROBI REQUIRED)
+find_package(SDFormat9 REQUIRED)
 find_package(FAISS REQUIRED)
 find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
@@ -124,10 +126,28 @@ install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
 add_executable(cdcpd_node
         src/cdcpd_ros/camera_sub.cpp
         src/cdcpd_node.cpp
+        src/sdformat_to_planning_scene.cpp
         )
 add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
+target_include_directories(cdcpd_node PUBLIC ${ASSIMP_INCLUDE_DIRS}
+    ${SDFormat_INCLUDE_DIRS}
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_directories(cdcpd_node PUBLIC ${SDFormat_LIBRARY_DIRS})
+target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES} ${SDFormat_LIBRARIES} ${ASSIMP_LIBRARIES})
 
+add_executable(sdformat_to_planning_scene src/test_sdformat_to_planning_scene.cpp src/sdformat_to_planning_scene.cpp)
+target_include_directories(sdformat_to_planning_scene PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    ${SDFormat_INCLUDE_DIRS}
+    ${catkin_INCLUDE_DIRS}
+    ${ASSIMP_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
+    )
+target_compile_definitions(sdformat_to_planning_scene PUBLIC ${PCL_DEFINITIONS})
+target_link_directories(sdformat_to_planning_scene PUBLIC
+    ${PCL_LIBRARIES}
+    ${SDFormat_LIBRARY_DIRS})
+target_link_libraries(sdformat_to_planning_scene PRIVATE ${catkin_LIBRARIES} ${SDFormat_LIBRARIES} ${ASSIMP_LIBRARIES})
 
 ## Testing
 if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)

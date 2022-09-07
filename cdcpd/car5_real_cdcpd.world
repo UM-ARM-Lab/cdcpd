@@ -1,0 +1,362 @@
+<?xml version="1.0" ?>
+<sdf version="1.4">
+    <world name="default">
+        <model name="car_scene5_real">
+            <pose>0.01 -0.01 0.05 0 0 0</pose>
+            <link name="Bumper0">
+                <pose>0.30 0.37 1.48 0.252 0.206 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Bumper1">
+                <pose>0.24 0.44 1.31 0.252 0.406 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Bumper2">
+                <pose>0.14 0.49 1.14 0.252 0.606 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Bumper3">
+                <pose>0.03 0.53 1.01 0.252 0.806 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.05 0.1 0.1</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="platform">
+                <pose>-0.052 0.4544 1.531 0.252 0.406 0.069</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.347 0.105 0.522</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="floor">
+                <pose>-0.084151 0.2652 1.7942 0.25794 0.41154 0.11685</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.351 0.059 0.143</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cube.002">
+                <pose>-0.5152 0.46457 1.1422 1.81656 0.41158 0.07008</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.259 0.054 0.044</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="back_left_box">
+                <pose>-0.62587 0.43423 1.2862 4.18591 1.09956 2.63165</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.067 0.055 0.045</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="engine_main_box">
+                <pose>-0.056949 0.31012 1.3856 1.81656 0.41158 0.07008</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.119 0.162 0.098</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="engine_front_tilted_thing">
+                <pose>0.023584 0.286 1.315 1.94129 0.35695 0.28075</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.063 0.171 0.025</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+<!--            <link name="Cube.006">-->
+<!--                <pose>-0.29687 0.21136 1.6168 1.81656 0.41158 0.07008</pose>-->
+<!--                <collision name="Cube">-->
+<!--                    <geometry>-->
+<!--                        <box>-->
+<!--                            <size>0.11 0.095 0.172</size>-->
+<!--                        </box>-->
+<!--                    </geometry>-->
+<!--                </collision>-->
+<!--            </link>-->
+            <link name="Cube.007">
+                <pose>-0.022476 0.35878 1.1627 1.81656 0.41158 0.07008</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.047 0.071 0.019</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="back_left_hook">
+                <pose>-0.26906 0.31247 1.2953 1.81656 0.41158 0.07008</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.055 0.083 0.02</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cube.009">
+                <pose>-0.15671 0.22329 1.4143 1.81656 0.41158 0.07008</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.052 0.169 0.023</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cube.010">
+                <pose>-0.12226 0.23838 1.547 1.06232 2.04654 -0.48995</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.049 0.063 0.021</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cube.011"> <pose>-0.048261 0.1697 1.3436 1.81656 0.41158 0.07008</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.109 0.053 0.059</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cube.012">
+                <pose>0.040016 0.16143 1.2612 1.88528 0.18936 0.13231</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.027 0.053 0.042</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cube.013">
+                <pose>-0.012459 0.18757 1.4157 -1.06232 -2.04654 2.65165</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.039 0.130 0.039</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cube.014">
+                <pose>-0.47582 -0.074289 1.5189 -0.29062 0.37208 -1.18460</pose>
+                <collision name="Cube">
+                    <geometry>
+                        <box>
+                            <size>0.545 0.129 0.663</size>
+                        </box>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder">
+                <pose>-0.27781 0.42204 0.98266 1.81656 0.41159 0.0708</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <length>0.125</length>
+                            <radius>0.116</radius>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.001">
+                <pose>-0.31842 0.43433 1.2851 1.08965 -0.32784 1.44310</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.014</radius>
+                            <length>0.154</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.002">
+                <pose>-0.18549 0.11665 1.6436 0.37644 0.91908 0.27457</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.049</radius>
+                            <length>0.049</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.003">
+                <pose>-0.26055 0.30468 1.3352 -0.51317 2..04225 -0.49522</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.079</radius>
+                            <length>0.034</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.004">
+                <pose>-0.28628 0.35862 1.4606 0.22914 -0.19171 -0.07434</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.086</radius>
+                            <length>0.094</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.005">
+                <pose>-0.006829 0.14973 1.3305 1.14791 0.22487 -1.60073</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.046</radius>
+                            <length>0.112</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.006">
+                <pose>-0.054221 0.10976 1.4236 1.14791 0.22487 -1.60073</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.037</radius>
+                            <length>0.059</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.007">
+                <pose>-.1469 .26695 1.2655 1.14791 0.22487 -1.60073</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.039</radius>
+                            <length>0.111</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.008">
+                <pose>0.07636 0.1214 1.3505 1.14791 0.22487 -1.6</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.017</radius>
+                            <length>0.031</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.009">
+                <pose>-0.05595 0.09673 1.448 -3.3873 -2.73 0.07</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.019</radius>
+                            <length>0.036</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.010">
+                <pose>-0.13423 0.16266 1.5515 -4.95815 -2.73 0.07</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.03</radius>
+                            <length>0.055</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.011">
+                <pose>-.11176 0.17488 1.2839 1.49887 0.22487 -1.6</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.02</radius>
+                            <length>0.06</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.012">
+                <pose>-.13821 0.23089 1.31 1.14791 0.22487 -1.6</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.041</radius>
+                            <length>0.111</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.014">
+                <pose>-.045156 0.13096 1.3301 1.14791 0.22487 -1.6</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.048</radius>
+                            <length>0.112</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+            <link name="Cylinder.015">
+                <pose>-.004922 0.29303 1.1645 1.90208 0.21198 0.07653</pose>
+                <collision name="Cylinder">
+                    <geometry>
+                        <cylinder>
+                            <radius>0.016</radius>
+                            <length>0.037</length>
+                        </cylinder>
+                    </geometry>
+                </collision>
+            </link>
+        </model>
+    </world>
+</sdf>

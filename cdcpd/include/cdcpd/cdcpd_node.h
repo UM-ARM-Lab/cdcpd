@@ -18,6 +18,8 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_ros/transform_broadcaster.h> // TODO(dylan.colli) verify this is necessary.
+// The above was added when trying to merge in Peter's mesh work.
 #include <visualization_msgs/Marker.h>
 #include <yaml-cpp/yaml.h>
 
@@ -26,8 +28,9 @@
 #include <arc_utilities/ros_helpers.hpp>
 
 #include "cdcpd/cdcpd.h"
-#include "cdcpd_ros/camera_sub.h"
 #include "cdcpd/deformable_object_configuration.h"
+#include "cdcpd/sdformat_to_planning_scene.h"
+#include "cdcpd_ros/camera_sub.h"
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
@@ -47,6 +50,7 @@ struct CDCPD_Publishers
     ros::Publisher order_pub;
     ros::Publisher contact_marker_pub;
     ros::Publisher bbox_pub;
+    ros::Publisher scene_pub;
 };
 
 struct CDCPD_Node_Parameters
@@ -70,15 +74,16 @@ struct CDCPD_Moveit_Node {
 public:
     explicit CDCPD_Moveit_Node(std::string const& robot_namespace);
 
-    ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-                                                      Eigen::Isometry3d const& cdcpd_to_moveit);
+    // ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+    //                                                   Eigen::Isometry3d const& cdcpd_to_moveit);
+    ObstacleConstraints find_nearest_points_and_normals(
+        planning_scene::PlanningScenePtr planning_scene);
 
 
-
-    std::pair<vm::Marker, vm::Marker> arrow_and_normal(int contact_idx, const Eigen::Vector3d& tracked_point_moveit_frame,
-                                                     const Eigen::Vector3d& object_point_moveit_frame,
-                                                     const Eigen::Vector3d& object_point_cdcpd_frame,
-                                                     const Eigen::Vector3d& normal_cdcpd_frame) const;
+    std::pair<vm::Marker, vm::Marker> arrow_and_normal(int contact_idx,
+        const Eigen::Vector3d& tracked_point_cdcpd_frame,
+        const Eigen::Vector3d& object_point_cdcpd_frame,
+        const Eigen::Vector3d& normal_cdcpd_frame) const;
 
     ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points);
 
@@ -123,7 +128,8 @@ public:
     moveit_visual_tools::MoveItVisualTools visual_tools_;
     std::string moveit_frame{"robot_root"};
     double min_distance_threshold{0.01};
-    bool moveit_ready{false};
+    // Taken out in Peter's mesh work.
+    // bool moveit_ready{false};
 
     // TODO(dylan.colli): refactor gripper information into another class.
     YAML::Node grippers_info;
@@ -134,4 +140,10 @@ public:
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
+
+    // TEMP: SDF Initialization
+    std::string sdf_filename;
+    planning_scene::PlanningScenePtr planning_scene_;
+    moveit_msgs::PlanningScene planning_scene_msg_;
+    tf2_ros::TransformBroadcaster br_;
 };

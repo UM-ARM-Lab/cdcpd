@@ -66,6 +66,7 @@ CDCPD_Publishers::CDCPD_Publishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
     order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
     bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
+    scene_pub = ph.advertise<moveit_msgs::PlanningScene>("scene", 10);
 }
 
 
@@ -96,16 +97,23 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
       visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
       tf_listener_(tf_buffer_)
 {
+    // TEMP: SDF Initialization
+    {
+        sdf_filename="/home/dcolli23/catkin_ws/src/cdcpd/cdcpd/car5_real_cdcpd.world";
+    }
+
+
     auto const scene_topic = ros::names::append(robot_namespace,
         "move_group/monitored_planning_scene");
     auto const service_name = ros::names::append(robot_namespace, "get_planning_scene");
-    scene_monitor_->startSceneMonitor(scene_topic);
-    moveit_ready = scene_monitor_->requestPlanningSceneState(service_name);
-    if (not moveit_ready)
-    {
-        ROS_WARN_NAMED(LOGNAME,
-            "Could not get the moveit planning scene. This means no obstacle constraints.");
-    }
+    // This was taken out in Peter's mesh work.
+    // scene_monitor_->startSceneMonitor(scene_topic);
+    // moveit_ready = scene_monitor_->requestPlanningSceneState(service_name);
+    // if (not moveit_ready)
+    // {
+    //     ROS_WARN_NAMED(LOGNAME,
+    //         "Could not get the moveit planning scene. This means no obstacle constraints.");
+    // }
 
     // For use with TF and "fixed points" for the constrain step
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "Using frame " << node_params.camera_frame);
@@ -183,24 +191,34 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     }
   }
 
+// ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
+//     planning_scene_monitor::LockedPlanningSceneRW planning_scene,
+//     Eigen::Isometry3d const& cdcpd_to_moveit)
 ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
-    planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-    Eigen::Isometry3d const& cdcpd_to_moveit)
+    planning_scene::PlanningScenePtr planning_scene)
 {
     collision_detection::CollisionRequest req;
     req.contacts = true;
-    req.distance = true;
+    // req.distance = true;
+    req.distance = false;
+
     req.max_contacts_per_pair = 1;
     collision_detection::CollisionResult res;
+    auto const t0 = ros::Time::now();
     planning_scene->checkCollisionUnpadded(req, res);
+    auto const t1 = ros::Time::now();
+    auto const dt = t1 - t0;
+    ROS_DEBUG_STREAM_NAMED(PERF_LOGGER, "checkCollision = " << dt.toSec() << "s");
 
     // first fill up the contact markers with "zero" markers
     // rviz makes deleting markers hard, so it's easier to just publish a fixed number of markers
     // in the array
     vm::MarkerArray contact_markers;
     for (auto i{0}; i < MAX_CONTACTS_VIZ; ++i) {
+    //   auto const [arrow, normal] = arrow_and_normal(i, Eigen::Vector3d::Zero(),
+    //       Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
       auto const [arrow, normal] = arrow_and_normal(i, Eigen::Vector3d::Zero(),
-          Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+        Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
       contact_markers.markers.push_back(arrow);
       contact_markers.markers.push_back(normal);
     }
@@ -214,16 +232,16 @@ ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
 
       auto const contact = contacts[0];
       auto add_interaction_constraint = [&](int contact_idx, int body_idx, std::string body_name,
-                                            Eigen::Vector3d const& tracked_point_moveit_frame,
-                                            Eigen::Vector3d const& object_point_moveit_frame) {
+                                            Eigen::Vector3d const& tracked_point_cdcpd_frame,
+                                            Eigen::Vector3d const& object_point_cdcpd_frame) {
         // NOTE: if the tracked_point is inside the object, contact.depth will be negative. In this
         // case, the normal points in the opposite direction, starting at object_point and going
         // _away_ from tracked_point.
         auto const normal_dir = contact.depth > 0.0 ? 1.0 : -1.0;
-        Eigen::Vector3d const object_point_cdcpd_frame =
-            cdcpd_to_moveit.inverse() * object_point_moveit_frame;
-        Eigen::Vector3d const tracked_point_cdcpd_frame =
-            cdcpd_to_moveit.inverse() * tracked_point_moveit_frame;
+        // Eigen::Vector3d const object_point_cdcpd_frame =
+        //     cdcpd_to_moveit.inverse() * object_point_moveit_frame;
+        // Eigen::Vector3d const tracked_point_cdcpd_frame =
+        //     cdcpd_to_moveit.inverse() * tracked_point_moveit_frame;
         Eigen::Vector3d const normal_cdcpd_frame =
             ((tracked_point_cdcpd_frame - object_point_cdcpd_frame) * normal_dir).normalized();
         auto get_point_idx = [&]() {
@@ -245,10 +263,12 @@ ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
                   << " on " << contact.body_name_1 << " and " << contact.nearest_points[1].x()
                   << ", " << contact.nearest_points[1].y() << ", " << contact.nearest_points[1].z()
                   << " on " << contact.body_name_2 << " depth " << contact.depth
-                  << " (in moveit frame)");
-          auto const [arrow, normal] =
-              arrow_and_normal(contact_idx, tracked_point_moveit_frame, object_point_moveit_frame,
-                               object_point_cdcpd_frame, normal_cdcpd_frame);
+                  << " (in camera frame)");
+        //   auto const [arrow, normal] =
+        //       arrow_and_normal(contact_idx, tracked_point_moveit_frame, object_point_moveit_frame,
+        //                        object_point_cdcpd_frame, normal_cdcpd_frame);
+          auto const [arrow, normal] = arrow_and_normal(contact_idx, tracked_point_cdcpd_frame,
+            object_point_cdcpd_frame, normal_cdcpd_frame);
           if (contact_idx < MAX_CONTACTS_VIZ) {
             contact_markers.markers[2 * contact_idx] = arrow;
             contact_markers.markers[2 * contact_idx + 1] = normal;
@@ -285,8 +305,7 @@ ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
   }
 
 std::pair<vm::Marker, vm::Marker> CDCPD_Moveit_Node::arrow_and_normal(int contact_idx,
-    const Eigen::Vector3d& tracked_point_moveit_frame,
-    const Eigen::Vector3d& object_point_moveit_frame,
+    const Eigen::Vector3d& tracked_point_cdcpd_frame,
     const Eigen::Vector3d& object_point_cdcpd_frame,
     const Eigen::Vector3d& normal_cdcpd_frame) const
 {
@@ -295,7 +314,7 @@ std::pair<vm::Marker, vm::Marker> CDCPD_Moveit_Node::arrow_and_normal(int contac
     arrow.action = vm::Marker::ADD;
     arrow.type = vm::Marker::ARROW;
     arrow.ns = "arrow";
-    arrow.header.frame_id = moveit_frame;
+    arrow.header.frame_id = node_params.camera_frame;
     arrow.header.stamp = ros::Time::now();
     arrow.color.r = 1.0;
     arrow.color.g = 0.0;
@@ -305,8 +324,8 @@ std::pair<vm::Marker, vm::Marker> CDCPD_Moveit_Node::arrow_and_normal(int contac
     arrow.scale.y = 0.002;
     arrow.scale.z = 0.002;
     arrow.pose.orientation.w = 1;
-    arrow.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_moveit_frame));
-    arrow.points.push_back(ConvertTo<geometry_msgs::Point>(tracked_point_moveit_frame));
+    arrow.points.push_back(ConvertTo<geometry_msgs::Point>(object_point_cdcpd_frame));
+    arrow.points.push_back(ConvertTo<geometry_msgs::Point>(tracked_point_cdcpd_frame));
     normal.id = 100 * contact_idx + 0;
     normal.action = vm::Marker::ADD;
     normal.type = vm::Marker::ARROW;
@@ -332,22 +351,34 @@ std::pair<vm::Marker, vm::Marker> CDCPD_Moveit_Node::arrow_and_normal(int contac
 ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
     PointCloud::ConstPtr tracked_points)
 {
-    Eigen::Isometry3d cdcpd_to_moveit;
-    try {
-      auto const cdcpd_to_moveit_msg =
-          tf_buffer_.lookupTransform(moveit_frame, node_params.camera_frame, ros::Time(0),
-              ros::Duration(10));
-      cdcpd_to_moveit = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit_msg.transform);
-    } catch (tf2::TransformException const& ex) {
-      ROS_WARN_STREAM_THROTTLE(10.0, "Unable to lookup transform from " << node_params.camera_frame
-          << " to " << moveit_frame << ": " << ex.what());
-      return {};
-    }
+    // Eigen::Isometry3d cdcpd_to_moveit;
+    // try {
+    //   auto const cdcpd_to_moveit_msg =
+    //       tf_buffer_.lookupTransform(moveit_frame, node_params.camera_frame, ros::Time(0),
+    //           ros::Duration(10));
+    //   cdcpd_to_moveit = ehc::GeometryTransformToEigenIsometry3d(cdcpd_to_moveit_msg.transform);
+    // } catch (tf2::TransformException const& ex) {
+    //   ROS_WARN_STREAM_THROTTLE(10.0, "Unable to lookup transform from " << node_params.camera_frame
+    //       << " to " << moveit_frame << ": " << ex.what());
+    //   return {};
+    // }
+    // planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor_);
 
-    planning_scene_monitor::LockedPlanningSceneRW planning_scene(scene_monitor_);
+    // Added from peter's mesh work:
+    // planning_scene_monitor::LockedPlanningSceneRW locked_planning_scene(scene_monitor_);
+    // auto planning_scene = locked_planning_scene.operator->();
+    planning_scene_ = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
+    planning_scene_->getPlanningSceneMsg(planning_scene_msg_);
+    publishers.scene_pub.publish(planning_scene_msg_);
+    geometry_msgs::TransformStamped identity_transform_msg;
+    identity_transform_msg.child_frame_id = "mock_camera_link";
+    identity_transform_msg.header.frame_id = node_params.camera_frame;
+    identity_transform_msg.header.stamp = ros::Time::now();
+    identity_transform_msg.transform.rotation.w = 1;
+    br_.sendTransform(identity_transform_msg);
 
     // customize by excluding some objects
-    auto& world = planning_scene->getWorldNonConst();
+    auto& world = planning_scene_->getWorldNonConst();
     std::vector<std::string> objects_to_ignore{
         "collision_sphere.link_1",
         "ground_plane.link",
@@ -363,7 +394,7 @@ ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
       }
     }
 
-    auto& robot_state = planning_scene->getCurrentStateNonConst();
+    auto& robot_state = planning_scene_->getCurrentStateNonConst();
 
     // remove the attached "tool boxes"
     std::vector<std::string> objects_to_detach{"left_tool_box", "right_tool_box"};
@@ -377,35 +408,53 @@ ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
       }
     }
 
-    planning_scene->setActiveCollisionDetector(
+    planning_scene_->setActiveCollisionDetector(
         collision_detection::CollisionDetectorAllocatorBullet::create());
+
+    // Peter mesh work.
+    // std::vector<pcl::PointXYZ> my_tracked_points;
+    // for (double x = -0.1; x < 0.1; x += 0.05) {
+    //   for (double y = -0.1; y < 0.1; y += 0.05) {
+    //     for (double z = 1; z < 1.5; z += 0.05) {
+    //       my_tracked_points.emplace_back(x, y, z);
+    //     }
+    //   }
+    // }
+    //
 
     // attach to the robot base link, sort of hacky but MoveIt only has API for checking robot vs self/world,
     // so we have to make the tracked points part of the robot, hence "attached collision objects"
+    // for (auto const& [tracked_point_idx, point] : enumerate(*tracked_points)) {
+    //   Eigen::Vector3d const tracked_point_cdcpd_frame = point.getVector3fMap().cast<double>();
+    //   Eigen::Vector3d const tracked_point_moveit_frame =
+    //     cdcpd_to_moveit * tracked_point_cdcpd_frame;
+    //   Eigen::Isometry3d tracked_point_pose_moveit_frame = Eigen::Isometry3d::Identity();
+    //   tracked_point_pose_moveit_frame.translation() = tracked_point_moveit_frame;
     for (auto const& [tracked_point_idx, point] : enumerate(*tracked_points)) {
-      Eigen::Vector3d const tracked_point_cdcpd_frame = point.getVector3fMap().cast<double>();
-      Eigen::Vector3d const tracked_point_moveit_frame =
-        cdcpd_to_moveit * tracked_point_cdcpd_frame;
-      Eigen::Isometry3d tracked_point_pose_moveit_frame = Eigen::Isometry3d::Identity();
-      tracked_point_pose_moveit_frame.translation() = tracked_point_moveit_frame;
+      Eigen::Isometry3d tracked_point_pose_cdcpd_frame = Eigen::Isometry3d::Identity();
+      tracked_point_pose_cdcpd_frame.translation() = point.getVector3fMap().cast<double>();
 
       std::stringstream collision_body_name_stream;
       collision_body_name_stream << collision_body_prefix << tracked_point_idx;
       auto const collision_body_name = collision_body_name_stream.str();
 
       // FIXME: not moveit frame, but the base link_frame, could those be different?
-      auto sphere = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
+    //   auto sphere = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
+      auto collision_shape = std::make_shared<shapes::Box>(0.01, 0.01, 0.01);
 
-      robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {sphere},
-                             {tracked_point_pose_moveit_frame}, std::vector<std::string>{},
-                             "base_link");
+    //   robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {sphere},
+    //                          {tracked_point_pose_moveit_frame}, std::vector<std::string>{},
+    //                          "base_link");
+      robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {collision_shape},
+                             {tracked_point_pose_cdcpd_frame}, std::vector<std::string>{}, "mock_camera_link");
     }
 
     // visualize
     //    visual_tools_.publishRobotState(robot_state, rviz_visual_tools::CYAN);
 
     ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Finding nearest points and normals");
-    return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
+    // return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
+    return find_nearest_points_and_normals(planning_scene_);
   }
 
 void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
@@ -481,7 +530,7 @@ void CDCPD_Moveit_Node::publish_template() const
 ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
 {
     ObstacleConstraints obstacle_constraints;
-    if (moveit_ready and node_params.moveit_enabled)
+    if (node_params.moveit_enabled) //and moveit_ready) Taken out in Peter's Mesh work.
     {
         obstacle_constraints = get_moveit_obstacle_constriants(rope_configuration.tracked.points);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
