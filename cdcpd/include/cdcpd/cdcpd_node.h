@@ -68,6 +68,7 @@ struct CDCPD_Node_Parameters
     int const num_points;
     float const max_rope_length;
     bool const moveit_enabled;
+    std::string const sdf_filename;
 };
 
 struct CDCPD_Moveit_Node {
