@@ -15,6 +15,9 @@ The master branch is the version the users outside the lab should use.
   - [Gurobi Licence](#gurobi-licence)
   - [Building](#building)
   - [Testing](#testing)
+- [Usage](#usage)
+  - [Rope Tracking](#rope-tracking)
+  - [Cloth Tracking](#cloth-tracking)
 - [Demos](#demos)
   - [Virtual Demos](#virtual-demos)
     - [Downloading The rosbags](#downloading-the-rosbags)
@@ -80,6 +83,41 @@ This will build and execute all CDCPD unit tests to ensure the package was insta
 
 Note: there isn't much special about the `test_cdcpd.sh` bash script, it simply starts a roscore and executes the `catkin test cdcpd` command with some added flags for simplifying things.
 
+## Usage
+
+To configure CDCPD for tracking rope versus cloth, several rosparams must be set (recommended to be in your launch file).
+
+### Rope Tracking
+
+ROS params and descriptions:
+- "deformable_object_type"
+  - The type of the deformable object being tracked. In this case, a rope.
+  - Type: string
+  - Value: "rope"
+- "num_points"
+  - The number of points the tracked rope will have.
+  - Type: int
+- "max_rope_length"
+  - The maximum length of the rope in meters.
+  - Type: float
+
+### Cloth Tracking
+
+ROS params and descriptions:
+- "deformable_object_type"
+  - The type of the deformable object being tracked. In this case, a cloth.
+  - Type: string
+  - Value: "cloth"
+- "length_initial_cloth"
+  - The initial length of the cloth in meters.
+  - Type: float
+- "width_initial_cloth"
+  - The initial width of the cloth in meters.
+  - Type: float
+- "grid_size_initial_guess_cloth"
+  - The size (in meters) of one square of the cloth template grid. Note! This is only providing an initial guess for the cloth template grid size. The actual grid size will be adjusted based on how well the grid size guess divides the supplied initial length and width.
+  - Type: float
+
 ## Demos
 
 ### Virtual Demos
@@ -129,7 +167,7 @@ To run with a realsense, without the obstacle or gripper constraints, try this:
 
 ```
 roslaunch realsense2_camera rs_camera.launch enable_pointcloud:=true
-roslaunch rviz -d cdcpd/rviz/realsense.rviz
+rviz -d cdcpd/rviz/realsense.rviz  # From local cdcpd directory
 roslaunch cdcpd realsense.launch
 ```
 
@@ -138,7 +176,7 @@ We also provide an example for the kinect, in our case the kinectv2, but as long
 
 ```
 roslaunch kinect2_calibration_files kinect2_bridge_tripodA.launch  # ARMLab internal usage
-roslaunch rviz -d cdcpd/rviz/kinect.rviz
+rviz -d cdcpd/rviz/kinect.rviz  # From local cdcpd directory
 roslaunch cdcpd kinect.launch
 ```
 

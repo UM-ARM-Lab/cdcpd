@@ -23,8 +23,8 @@ RopeConfiguration getInitialTracking(float const max_rope_length, int const num_
     start_position << -max_rope_length / 2, 0, 1.0;
     end_position << max_rope_length / 2, 0, 1.0;
 
-    RopeConfiguration rope_configuration(num_points, max_rope_length);
-    rope_configuration.initializeTracking(start_position, end_position);
+    RopeConfiguration rope_configuration(num_points, max_rope_length, start_position, end_position);
+    rope_configuration.initializeTracking();
 
     return rope_configuration;
 }
@@ -34,7 +34,7 @@ CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_ini
     if (PRINT_DEBUG_MESSAGES)
     {
         std::stringstream ss;
-        ss << rope_tracking_initial.edges;
+        ss << rope_tracking_initial.edges_;
         ROS_WARN("Initial template edges");
         ROS_WARN(ss.str().c_str());
     }
@@ -50,7 +50,7 @@ CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_ini
     float const obstacle_cost_weight = 0.001;
     float const fixed_points_weight = 10.0;
 
-    CDCPD cdcpd = CDCPD(rope_tracking_initial.points, rope_tracking_initial.edges,
+    CDCPD cdcpd = CDCPD(rope_tracking_initial.points_, rope_tracking_initial.edges_,
         objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
         fixed_points_weight);
 
@@ -108,11 +108,11 @@ TEST(StaticRope, testResimPointEquivalency)
     float const max_rope_length = 0.46F;  // Taken from kinect_tripodB.launch
     int const num_points = 15;  // Taken from kinect_tripodB.launch
     RopeConfiguration rope_configuration = getInitialTracking(max_rope_length, num_points);
-    CDCPD cdcpd_sim = initializeCdcpdSimulator(rope_configuration.initial);
+    CDCPD cdcpd_sim = initializeCdcpdSimulator(rope_configuration.initial_);
 
     auto input_clouds = readCdcpdInputPointClouds(bag);
     PointCloud::Ptr tracked_points = resimulateCdcpd(cdcpd_sim, input_clouds,
-        rope_configuration.initial.points, max_rope_length, num_points);
+        rope_configuration.initial_.points_, max_rope_length, num_points);
 
     expectPointCloudsEqual(*pt_cloud_last, *tracked_points);
 

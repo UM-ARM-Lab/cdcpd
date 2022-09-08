@@ -5,6 +5,8 @@
 #include "MeshConversionTest.h"
 #include "BoxNearestPointsTest.h"
 #include "DeformableObjectTrackingTest.h"
+#include "RopeConfigurationTest.h"
+#include "ClothConfigurationTest.h"
 
 int main(int argc, char **argv){
   testing::InitGoogleTest(&argc, argv);

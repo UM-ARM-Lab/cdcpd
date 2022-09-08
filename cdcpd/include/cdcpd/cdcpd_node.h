@@ -63,12 +63,26 @@ struct CDCPD_Node_Parameters
     std::string const grippers_info_filename;
     int const num_points;
     float const max_rope_length;
+    float const length_initial_cloth;
+    float const width_initial_cloth;
+    float const grid_size_initial_guess_cloth;
     bool const moveit_enabled;
+    DeformableObjectType const deformable_object_type;
+
+private:
+    std::map<std::string, DeformableObjectType> obj_type_map_{
+        {"rope", DeformableObjectType::rope},
+        {"cloth", DeformableObjectType::cloth},
+    };
 };
 
 struct CDCPD_Moveit_Node {
 public:
     explicit CDCPD_Moveit_Node(std::string const& robot_namespace);
+
+    // Initializes the deformable object template based on the type selected when launching CDCPD
+    void initialize_deformable_object_configuration(Eigen::Vector3f const& rope_start_position,
+        Eigen::Vector3f const& rope_end_position);
 
     ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
                                                       Eigen::Isometry3d const& cdcpd_to_moveit);
@@ -130,7 +144,8 @@ public:
     unsigned int gripper_count;
     Eigen::MatrixXi gripper_indices;
 
-    RopeConfiguration rope_configuration;
+    std::unique_ptr<DeformableObjectConfiguration> deformable_object_configuration_;
+    // RopeConfiguration rope_configuration;
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
