@@ -70,13 +70,15 @@ Once you've cloned, it might be a good idea to `rosdep install -r --from-paths c
 
 ### Testing
 
-CDCPD uses gtest for its testing framework. This is convenient because catkin offers very easy gtest integration with ROS. To run all unit tests for CDCPD, execute the following from your `catkin_ws/src` directory:
+CDCPD uses gtest for its testing framework. This is convenient because catkin offers very easy gtest integration with ROS. To run all unit tests for CDCPD, execute the following from your `cdcpd` directory:
 
 ```
-catkin test cdcpd
+./test_cdcpd.sh
 ```
 
 This will build and execute all CDCPD unit tests to ensure the package was installed without error.
+
+Note: there isn't much special about the `test_cdcpd.sh` bash script, it simply starts a roscore and executes the `catkin test cdcpd` command with some added flags for simplifying things.
 
 ## Demos
 
