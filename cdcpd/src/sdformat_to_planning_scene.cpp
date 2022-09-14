@@ -145,6 +145,7 @@ planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_fi
             collision_object.meshes.push_back(mesh_msg);
             collision_object.mesh_poses.push_back(link_pose_msg);
           }
+          std::cout << "Done here\n";
         } else if (link_collision_geometry->HasElement("box")) {
           auto const box_element = link_collision_geometry->GetElement("box");
           auto size = box_element->GetElement("size")->Get<ignition::math::Vector3d>();
@@ -184,10 +185,16 @@ planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_fi
     }
   }
 
+  std::cout << "Done with big code block\n";
+
   auto model_loader = std::make_shared<robot_model_loader::RobotModelLoader>("fake_robot_description");
+  std::cout << "before getModel\n";
   auto robot_model = model_loader->getModel();
+  std::cout<<"before moveit_world construction\n";
   auto moveit_world = std::make_shared<collision_detection::World>();
+  std::cout <<"before planning_scene construction\n";
   auto planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model, moveit_world);
+  std::cout <<"before usePlanningSceneMsg\n";
   planning_scene->usePlanningSceneMsg(planning_scene_msg);
 
   return planning_scene;

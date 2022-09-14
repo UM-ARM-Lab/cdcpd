@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<sdf version="1.4">
+    <world name="default">
+        <model name="car_scene5_real">
+<!--            <pose>0.095 0.76 -0.35 0 0 -1.570796</pose>-->
+            <pose>0 0 0 0 0 0</pose>
+            <link name="car_scene5_real_mesh">
+                <collision name="collision">
+                    <geometry>
+                        <mesh>
+                            <uri>
+                                /home/dcolli23/catkin_ws/src/cdcpd/cdcpd/meshes/car5_real_mesh.stl
+                            </uri>
+                        </mesh>
+                    </geometry>
+                </collision>
+            </link>
+        </model>
+    </world>
+</sdf>
