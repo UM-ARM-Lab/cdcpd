@@ -1,7 +1,16 @@
 #include <iostream>
 
+// Flag for compiling VHACD header-only file.
+// #ifndef ENABLE_VHACD_IMPLEMENTATION
+//   #define ENABLE_VHACD_IMPLEMENTATION 1
+// #else
+//   #undef ENABLE_VHACD_IMPLEMENTATION
+//   #define ENABLE_VHACD_IMPLEMENTATION 0
+// #endif
+
 #include <arc_utilities/enumerate.h>
 #include <cdcpd/sdformat_to_planning_scene.h>
+#include "cdcpd/sdformat_convex_decomposer.h"
 #include <interactive_markers/interactive_marker_server.h>
 #include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
 #include <pcl/point_types.h>
@@ -36,7 +45,11 @@ vm::InteractiveMarkerControl& makeSphereControl(vm::InteractiveMarker& msg) {
 }
 
 int main(int argc, char* argv[]) {
-  std::string sdf_filename = "car5_real_cdcpd_mesh.world";
+  // std::string sdf_filename = "car5_real_cdcpd_mesh.world";
+  // std::string sdf_filename = "cube_simple.world";
+  // std::string sdf_filename = "torus.world";
+  std::string sdf_filename = "torus_higher_res.world";
+  // std::string sdf_filename = "compound_cylinder_sphere.world";
   ros::init(argc, argv, "test_sdf_to_planning_scene");
 
   ros::NodeHandle nh;
@@ -82,8 +95,17 @@ int main(int argc, char* argv[]) {
   control.name = "move_y";
   control.interaction_mode = vm::InteractiveMarkerControl::MOVE_AXIS;
   int_marker.controls.push_back(control);
+
+  // Test convex decomposition of mesh
+  std::string sdf_filename_out = "temp.world";
+  SDFormatConvexDecomposer decomposer(sdf_filename, sdf_filename_out);
+  decomposer.decompose();
+
+  // Don't use convex decomposition
+  // std::string sdf_filename_out = sdf_filename;
+
   std::cout << "Before planning scene" << std::endl;
-  auto const planning_scene = sdf_to_planning_scene(sdf_filename, "mock_camera_link");
+  auto const planning_scene = sdf_to_planning_scene(sdf_filename_out, "mock_camera_link");
   std::cout << "After planning scene" << std::endl;
 
   moveit_msgs::PlanningScene planning_scene_msg;
@@ -144,9 +166,9 @@ int main(int argc, char* argv[]) {
       normal_marker.header.stamp = ros::Time::now();
       normal_marker.color.a = 1;
       normal_marker.color.r = 1;
-      normal_marker.scale.x = 0.001;
-      normal_marker.scale.y = 0.002;
-      normal_marker.scale.z = 0.002;
+      normal_marker.scale.x = 2 * 0.001;
+      normal_marker.scale.y = 2 * 0.002;
+      normal_marker.scale.z = 2 * 0.002;
       normal_marker.action = vm::Marker::ADD;
       normal_marker.type = vm::Marker::ARROW;
       normal_marker.pose.orientation.w = 1;
@@ -189,7 +211,7 @@ int main(int argc, char* argv[]) {
   };
   server->setCallback(int_marker.name, processFeedback);
   server->applyChanges();
-
+  std::cout << "Spinning!" << std::endl;
   ros::spin();
 
   return EXIT_SUCCESS;

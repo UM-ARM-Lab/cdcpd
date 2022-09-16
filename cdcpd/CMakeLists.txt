@@ -127,6 +127,8 @@ add_executable(cdcpd_node
         src/cdcpd_ros/camera_sub.cpp
         src/cdcpd_node.cpp
         src/sdformat_to_planning_scene.cpp
+        src/sdformat_convex_decomposer.cpp
+        src/v-hacd/FloatMath.cpp
         )
 add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
 target_include_directories(cdcpd_node PUBLIC ${ASSIMP_INCLUDE_DIRS}
@@ -135,7 +137,12 @@ target_include_directories(cdcpd_node PUBLIC ${ASSIMP_INCLUDE_DIRS}
 target_link_directories(cdcpd_node PUBLIC ${SDFormat_LIBRARY_DIRS})
 target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES} ${SDFormat_LIBRARIES} ${ASSIMP_LIBRARIES})
 
-add_executable(sdformat_to_planning_scene src/test_sdformat_to_planning_scene.cpp src/sdformat_to_planning_scene.cpp)
+# SDFormat Mesh to Planning Scene Debugging
+add_executable(sdformat_to_planning_scene
+               src/test_sdformat_to_planning_scene.cpp
+               src/sdformat_to_planning_scene.cpp
+               src/sdformat_convex_decomposer.cpp
+               src/v-hacd/FloatMath.cpp)
 target_include_directories(sdformat_to_planning_scene PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     ${SDFormat_INCLUDE_DIRS}
