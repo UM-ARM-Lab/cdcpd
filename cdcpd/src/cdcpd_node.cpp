@@ -251,7 +251,7 @@ struct CDCPD_Moveit_Node {
     };
 
     // Initial connectivity model of rope
-    auto const max_segment_length = max_rope_length / static_cast<float>(num_points);
+    auto const max_segment_length = max_rope_length / static_cast<float>(num_points - 1);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << max_segment_length);
 
     auto const& [start_position, end_position] = get_start_end_points();
