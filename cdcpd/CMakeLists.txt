@@ -129,6 +129,7 @@ add_executable(cdcpd_node
         src/sdformat_to_planning_scene.cpp
         src/sdformat_convex_decomposer.cpp
         src/v-hacd/FloatMath.cpp
+        src/obstacle_constraint_helper.cpp
         )
 add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
 target_include_directories(cdcpd_node PUBLIC ${ASSIMP_INCLUDE_DIRS}

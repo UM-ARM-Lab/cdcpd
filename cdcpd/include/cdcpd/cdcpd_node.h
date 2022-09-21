@@ -18,7 +18,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf2_ros/transform_listener.h>
-#include <tf2_ros/transform_broadcaster.h> // TODO(dylan.colli) verify this is necessary.
+#include <tf2_ros/transform_broadcaster.h>
 // The above was added when trying to merge in Peter's mesh work.
 #include <visualization_msgs/Marker.h>
 #include <yaml-cpp/yaml.h>
@@ -29,6 +29,7 @@
 
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/deformable_object_configuration.h"
+#include "cdcpd/obstacle_constraint_helper.h"
 #include "cdcpd/sdformat_to_planning_scene.h"
 #include "cdcpd_ros/camera_sub.h"
 
@@ -75,19 +76,6 @@ struct CDCPD_Moveit_Node {
 public:
     explicit CDCPD_Moveit_Node(std::string const& robot_namespace);
 
-    // ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
-    //                                                   Eigen::Isometry3d const& cdcpd_to_moveit);
-    ObstacleConstraints find_nearest_points_and_normals(
-        planning_scene::PlanningScenePtr planning_scene);
-
-
-    std::pair<vm::Marker, vm::Marker> arrow_and_normal(int contact_idx,
-        const Eigen::Vector3d& tracked_point_cdcpd_frame,
-        const Eigen::Vector3d& object_point_cdcpd_frame,
-        const Eigen::Vector3d& normal_cdcpd_frame) const;
-
-    ObstacleConstraints get_moveit_obstacle_constriants(PointCloud::ConstPtr tracked_points);
-
     // Returns the gripper configuration
     std::tuple<smmap::AllGrippersSinglePose,
                const smmap::AllGrippersSinglePoseDelta> get_q_config();
@@ -98,9 +86,6 @@ public:
     // Publishes the tracked points of the deformable object.
     // NOTE: Meant to be called before CDCPD runs as CDCPD modifies the tracked points.
     void publish_template() const;
-
-    // Return a vector of ObstacleConstraint objects.
-    ObstacleConstraints get_obstacle_constraints();
 
     // Publishes the CDCPD outputs.
     void publish_outputs(ros::Time const& t0, CDCPD::Output const& out);
@@ -115,22 +100,12 @@ public:
     void reset_if_bad(CDCPD::Output const& out);
 
     std::string collision_body_prefix{"cdcpd_tracked_point_"};
-    std::string robot_namespace_;
-    std::string robot_description_;
     ros::NodeHandle nh;
     ros::NodeHandle ph;
     CDCPD_Publishers publishers;
     CDCPD_Node_Parameters const node_params;
     CDCPD_Parameters const cdcpd_params;
     std::unique_ptr<CDCPD> cdcpd;
-    planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
-    robot_model_loader::RobotModelLoaderPtr model_loader_;
-    robot_model::RobotModelPtr model_;
-    moveit_visual_tools::MoveItVisualTools visual_tools_;
-    std::string moveit_frame{"robot_root"};
-    double min_distance_threshold{0.01};
-    // Taken out in Peter's mesh work.
-    // bool moveit_ready{false};
 
     // TODO(dylan.colli): refactor gripper information into another class.
     YAML::Node grippers_info;
@@ -142,9 +117,5 @@ public:
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
 
-    // TEMP: SDF Initialization
-    std::string sdf_filename;
-    planning_scene::PlanningScenePtr planning_scene_;
-    moveit_msgs::PlanningScene planning_scene_msg_;
-    tf2_ros::TransformBroadcaster br_;
+    ObstacleConstraintHelper obstacle_constraint_helper_;
 };
