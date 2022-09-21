@@ -80,7 +80,7 @@ CDCPD_Node_Parameters::CDCPD_Node_Parameters(ros::NodeHandle& nh, ros::NodeHandl
       num_points(ROSHelpers::GetParam<int>(nh, "rope_num_points", 11)),
       max_rope_length(ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0)),
       moveit_enabled(ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false)),
-      sdf_filename(ROSHelpers::GetParam<std::string>(nh, "sdf_filename", ""))
+      sdf_filename(ROSHelpers::GetParam<std::string>(ph, "sdf_filename", ""))
 {}
 
 

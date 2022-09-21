@@ -2,16 +2,10 @@
 
 #include <string>
 
-#include <arc_utilities/enumerate.h>
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <jsk_recognition_msgs/BoundingBox.h>
-#include <moveit/collision_detection/collision_common.h>
-#include <moveit/collision_detection/collision_tools.h>
-#include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
-#include <moveit/collision_detection_bullet/collision_env_bullet.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-#include <moveit_visual_tools/moveit_visual_tools.h>
 #include <opencv2/imgproc/types_c.h>
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
@@ -19,13 +13,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
-// The above was added when trying to merge in Peter's mesh work.
-#include <visualization_msgs/Marker.h>
 #include <yaml-cpp/yaml.h>
-
-#include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <arc_utilities/eigen_ros_conversions.hpp>
-#include <arc_utilities/ros_helpers.hpp>
 
 #include "cdcpd/cdcpd.h"
 #include "cdcpd/deformable_object_configuration.h"

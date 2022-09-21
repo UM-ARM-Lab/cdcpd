@@ -3,7 +3,9 @@
 
 std::string const LOGNAME = "sdformat_to_planning_scene";
 
-planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_filename, std::string const& frame_id) {
+planning_scene::PlanningScenePtr sdf_to_planning_scene(std::string const& sdf_filename,
+  std::string const& frame_id)
+{
   std::cout << "Loading SDF\n";
 
   moveit_msgs::PlanningScene planning_scene_msg;

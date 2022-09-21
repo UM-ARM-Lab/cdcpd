@@ -8,6 +8,7 @@
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 #include <arc_utilities/eigen_ros_conversions.hpp>
+#include <arc_utilities/enumerate.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
 
