@@ -72,6 +72,7 @@ add_library(cdcpd SHARED
 target_include_directories(cdcpd PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>)
+message("Gurobi include directories: ${GUROBI_INCLUDE_DIRS}")
 target_include_directories(cdcpd SYSTEM PUBLIC
         ${PCL_INCLUDE_DIRS}
         ${OpenCV_INCLUDE_DIRS}
@@ -143,6 +144,7 @@ add_executable(sdformat_to_planning_scene
                src/test_sdformat_to_planning_scene.cpp
                src/sdformat_to_planning_scene.cpp
                src/sdformat_convex_decomposer.cpp
+               src/obstacle_constraint_helper.cpp
                src/v-hacd/FloatMath.cpp)
 target_include_directories(sdformat_to_planning_scene PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -150,6 +152,7 @@ target_include_directories(sdformat_to_planning_scene PUBLIC
     ${catkin_INCLUDE_DIRS}
     ${ASSIMP_INCLUDE_DIRS}
     ${PCL_INCLUDE_DIRS}
+    ${GUROBI_INCLUDE_DIRS}
     )
 target_compile_definitions(sdformat_to_planning_scene PUBLIC ${PCL_DEFINITIONS})
 target_link_directories(sdformat_to_planning_scene PUBLIC

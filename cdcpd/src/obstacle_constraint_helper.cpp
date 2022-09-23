@@ -269,6 +269,79 @@ ObstacleConstraints ObstacleConstraintHelper::find_nearest_points_and_normals_co
     return obstacle_constraints;
 }
 
+bool ObstacleConstraintHelper::is_point_inside_scene_mesh(pcl::PointXYZ const& point)
+{
+    // 1. Get RobotState and World
+    auto& robot_state = planning_scene_->getCurrentStateNonConst();
+
+    //---- 2. Clear the robotstate of everything. ----------------------------------------------
+    // robot_state.clearAttachedBodies();
+
+    //---- 3. Add just one ray from the tracked point to a point off in infinity ---------------
+    // NOTE: Ray here is actually just a really skinny box.
+    Eigen::Isometry3d tracked_point_pose_cdcpd_frame = Eigen::Isometry3d::Identity();
+    tracked_point_pose_cdcpd_frame.translation() = point.getVector3fMap().cast<double>();
+
+    std::stringstream collision_body_name_stream;
+    collision_body_name_stream << collision_body_prefix;// << tracked_point_idx;
+    auto const collision_body_name = collision_body_name_stream.str();
+
+    // FIXME: not moveit frame, but the base link_frame, could those be different?
+    auto collision_shape = std::make_shared<shapes::Box>(0.001, 0.001, 1000.0);
+
+    robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {collision_shape},
+                            {tracked_point_pose_cdcpd_frame}, std::vector<std::string>{},
+                            "mock_camera_link");
+    std::stringstream msg;
+    msg << "Checking collisions!";
+        ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".contacts", msg.str().c_str());
+    //---- 4. Do collision request, if collision detected:
+    collision_detection::CollisionResult res = check_moveit_collision();
+
+    int num_intersections = 0;
+    while (res.collision)
+    {
+        //---- 5. Count intersection -----------------------------------------------------------
+        ++num_intersections;
+
+        std::stringstream msg2;
+        msg2 << "Encountered crossing";
+        ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".contacts", msg2.str().c_str());
+
+        //---- 6. Remove ray from robot state
+        // robot_state.clearAttachedBodies();
+
+        // 7. Add ray from collision point + small perturbation in ray direction to infinity
+        for (auto const& [contact_names, contacts] : res.contacts)
+        {
+          if (contacts.empty())
+          {
+            continue;
+          }
+          auto const contact = contacts[0];
+          auto const start = ConvertTo<geometry_msgs::Point>(contact.pos);
+          Eigen::Vector3d perturbation{0,0,0.01};
+          Eigen::Vector3d end_eigen = contact.pos + perturbation;
+          Eigen::Isometry3d tracked_point_pose_cdcpd_frame = Eigen::Isometry3d::Identity();
+          tracked_point_pose_cdcpd_frame.translation() = end_eigen;
+
+          robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {collision_shape},
+                            {tracked_point_pose_cdcpd_frame}, std::vector<std::string>{},
+                            "mock_camera_link");
+        }
+
+        res = check_moveit_collision();
+
+    }
+    std::stringstream msg3;
+        msg3 << "Num corssings: " << num_intersections;
+        ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".contacts", msg3.str().c_str());
+
+    bool is_inside_mesh = num_intersections % 2;
+    return is_inside_mesh;
+
+}
+
 ObstacleConstraints ObstacleConstraintHelper::find_nearest_points_and_normals_no_collision_detected(PointCloud::ConstPtr tracked_points)
 {
     ObstacleConstraints obstacle_constraints;

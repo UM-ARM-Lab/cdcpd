@@ -18,6 +18,8 @@
 
 #include <arc_utilities/eigen_ros_conversions.hpp>
 
+#include "cdcpd/obstacle_constraint_helper.h"
+
 namespace vm = visualization_msgs;
 
 vm::Marker makeSphere(vm::InteractiveMarker& msg) {
@@ -47,8 +49,9 @@ vm::InteractiveMarkerControl& makeSphereControl(vm::InteractiveMarker& msg) {
 int main(int argc, char* argv[]) {
   // std::string sdf_filename = "car5_real_cdcpd_mesh.world";
   // std::string sdf_filename = "cube_simple.world";
-  // std::string sdf_filename = "torus.world";
-  std::string sdf_filename = "torus_higher_res.world";
+  std::string sdf_filename = "torus.world";
+  // std::string sdf_filename = "torus_higher_res.world";
+  // std::string sdf_filename = "stacked_spheres.world";
   // std::string sdf_filename = "compound_cylinder_sphere.world";
   ros::init(argc, argv, "test_sdf_to_planning_scene");
 
@@ -97,54 +100,63 @@ int main(int argc, char* argv[]) {
   int_marker.controls.push_back(control);
 
   // Test convex decomposition of mesh
-  std::string sdf_filename_out = "temp.world";
-  SDFormatConvexDecomposer decomposer(sdf_filename, sdf_filename_out);
-  decomposer.decompose();
+  // std::string sdf_filename_out = "temp.world";
+  // SDFormatConvexDecomposer decomposer(sdf_filename, sdf_filename_out);
+  // decomposer.decompose();
 
   // Don't use convex decomposition
-  // std::string sdf_filename_out = sdf_filename;
+  std::string sdf_filename_out = sdf_filename;
 
-  std::cout << "Before planning scene" << std::endl;
-  auto const planning_scene = sdf_to_planning_scene(sdf_filename_out, "mock_camera_link");
-  std::cout << "After planning scene" << std::endl;
+
+  ObstacleConstraintHelper constraint_helper(true, contact_marker_pub, scene_pub,
+      "kinect2_tripodA_rgb_optical_frame", sdf_filename_out, 0.01);
+
+  // std::cout << "Before planning scene" << std::endl;
+  // auto const planning_scene = sdf_to_planning_scene(sdf_filename_out, "mock_camera_link");
+  // std::cout << "After planning scene" << std::endl;
 
   moveit_msgs::PlanningScene planning_scene_msg;
-  planning_scene->getPlanningSceneMsg(planning_scene_msg);
+  constraint_helper.planning_scene_->getPlanningSceneMsg(planning_scene_msg);
   scene_pub.publish(planning_scene_msg);
 
-  planning_scene->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
+  constraint_helper.planning_scene_->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
 
   server->insert(int_marker);
   auto processFeedback = [&](const vm::InteractiveMarkerFeedbackConstPtr& feedback) {
     if (feedback->event_type == vm::InteractiveMarkerFeedback::POSE_UPDATE) {
-      auto& robot_state = planning_scene->getCurrentStateNonConst();
+      auto& robot_state = constraint_helper.planning_scene_->getCurrentStateNonConst();
       std::vector<pcl::PointXYZ> my_tracked_points;
       my_tracked_points.emplace_back(feedback->pose.position.x, feedback->pose.position.y, feedback->pose.position.z);
 
       std::string collision_body_prefix = "test_point";
 
-      // attach to the robot base link, sort of hacky but MoveIt only has API for checking robot vs self/world,
-      // so we have to make the tracked points part of the robot, hence "attached collision objects"
+      // // attach to the robot base link, sort of hacky but MoveIt only has API for checking robot vs self/world,
+      // // so we have to make the tracked points part of the robot, hence "attached collision objects"
+      bool is_point_inside_mesh;
       for (auto const& [tracked_point_idx, point] : enumerate(my_tracked_points)) {
         Eigen::Isometry3d tracked_point_pose_cdcpd_frame = Eigen::Isometry3d::Identity();
         tracked_point_pose_cdcpd_frame.translation() = point.getVector3fMap().cast<double>();
 
-        std::stringstream collision_body_name_stream;
-        collision_body_name_stream << collision_body_prefix << tracked_point_idx;
-        auto const collision_body_name = collision_body_name_stream.str();
+        // std::stringstream collision_body_name_stream;
+        // collision_body_name_stream << collision_body_prefix << tracked_point_idx;
+        // auto const collision_body_name = collision_body_name_stream.str();
 
-        auto collision_shape = std::make_shared<shapes::Sphere>(0.01);
+        // // auto collision_shape = std::make_shared<shapes::Sphere>(0.01);
+        // // Make a ray here instead. approximated by a very skinny box.
+        // auto collision_shape = std::make_shared<shapes::Box>(0.001, 0.001, 1000.0);
 
-        robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {collision_shape},
-                               {tracked_point_pose_cdcpd_frame}, std::vector<std::string>{}, "mock_camera_link");
+        // robot_state.attachBody(collision_body_name, Eigen::Isometry3d::Identity(), {collision_shape},
+        //                        {tracked_point_pose_cdcpd_frame}, std::vector<std::string>{}, "mock_camera_link");
+        is_point_inside_mesh = constraint_helper.is_point_inside_scene_mesh(point);
       }
 
-      collision_detection::CollisionRequest req;
-      req.contacts = true;
-      req.distance = false;
-      req.max_contacts_per_pair = 1;
-      collision_detection::CollisionResult res;
-      planning_scene->checkCollisionUnpadded(req, res);
+      // collision_detection::CollisionRequest req;
+      // req.contacts = true;
+      // req.distance = false;
+      // req.max_contacts_per_pair = 1;
+      // collision_detection::CollisionResult res;
+      // constraint_helper.planning_scene_->checkCollisionUnpadded(req, res);
+
 
       vm::Marker contact_marker;
       contact_marker.header.frame_id = "kinect2_tripodA_rgb_optical_frame";
@@ -176,30 +188,40 @@ int main(int argc, char* argv[]) {
       normal_marker.points.push_back(zero_point);
       normal_marker.points.push_back(zero_point);
 
-      for (auto const& [contact_names, contacts] : res.contacts) {
-        if (contacts.empty()) {
-          continue;
-        }
-        auto const contact = contacts[0];
-        auto const start = ConvertTo<geometry_msgs::Point>(contact.pos);
-        Eigen::Vector3d end_eigen = contact.pos + contact.normal * 0.02;
-        auto const end = ConvertTo<geometry_msgs::Point>(end_eigen);
-        normal_marker.points[0] = start;
-        normal_marker.points[1] = end;
+      // for (auto const& [contact_names, contacts] : res.contacts) {
+      //   if (contacts.empty()) {
+      //     continue;
+      //   }
+      //   auto const contact = contacts[0];
+      //   auto const start = ConvertTo<geometry_msgs::Point>(contact.pos);
+      //   Eigen::Vector3d end_eigen = contact.pos + contact.normal * 0.02;
+      //   auto const end = ConvertTo<geometry_msgs::Point>(end_eigen);
+      //   normal_marker.points[0] = start;
+      //   normal_marker.points[1] = end;
 
-        if (contact.body_name_1.find(collision_body_prefix) != std::string::npos) {
-          geometry_msgs::Point point;
-          point.x = contact.nearest_points[1][0];
-          point.y = contact.nearest_points[1][1];
-          point.z = contact.nearest_points[1][2];
-          contact_marker.points[0] = point;
-        } else if (contact.body_name_2.find(collision_body_prefix) != std::string::npos) {
-          geometry_msgs::Point point;
-          point.x = contact.nearest_points[0][0];
-          point.y = contact.nearest_points[0][1];
-          point.z = contact.nearest_points[0][2];
-          contact_marker.points[0] = point;
-        }
+      //   if (contact.body_name_1.find(collision_body_prefix) != std::string::npos) {
+      //     geometry_msgs::Point point;
+      //     point.x = contact.nearest_points[1][0];
+      //     point.y = contact.nearest_points[1][1];
+      //     point.z = contact.nearest_points[1][2];
+      //     contact_marker.points[0] = point;
+      //   } else if (contact.body_name_2.find(collision_body_prefix) != std::string::npos) {
+      //     geometry_msgs::Point point;
+      //     point.x = contact.nearest_points[0][0];
+      //     point.y = contact.nearest_points[0][1];
+      //     point.z = contact.nearest_points[0][2];
+      //     contact_marker.points[0] = point;
+      //   }
+      // }
+      if (is_point_inside_mesh)
+      {
+        // Make color of sphere 1
+        int_marker.controls[0].markers[0].color.r = 0;
+      }
+      else
+      {
+        // Make color of sphere 2
+        int_marker.controls[0].markers[0].color.r = 1.0;
       }
 
       scene_pub.publish(planning_scene_msg);

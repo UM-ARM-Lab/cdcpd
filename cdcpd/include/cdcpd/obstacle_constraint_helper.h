@@ -44,6 +44,9 @@ public:
     // Returns a vector of ObstacleConstraint objects.
     ObstacleConstraints get_obstacle_constraints(pcl::shared_ptr<PointCloud> tracked_points);
 
+    // Checks if a point is inside of the scene's mesh
+    bool is_point_inside_scene_mesh(pcl::PointXYZ const& point);
+
     std::string sdf_filename_;
     planning_scene::PlanningScenePtr planning_scene_;
     moveit_msgs::PlanningScene planning_scene_msg_;
@@ -61,9 +64,6 @@ public:
 private:
     // Loads the SDFormat file, given by sdf_filename_ member, into the planning_scene_ member.
     void load_sdformat_file();
-
-    // Checks if a point is inside of the scene's mesh
-    bool is_point_inside_scene_mesh();
 
     collision_detection::CollisionResult check_moveit_collision();
 
