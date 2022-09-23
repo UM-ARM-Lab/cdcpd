@@ -32,7 +32,7 @@ public:
 
     // Finds the nearest points and normals of all tracked points relative to the planning scene
     // pointed to by the planning_scene_ member variable.
-    ObstacleConstraints find_nearest_points_and_normals();
+    ObstacleConstraints find_nearest_points_and_normals(PointCloud::ConstPtr tracked_points);
 
     std::pair<vm::Marker, vm::Marker> arrow_and_normal(int contact_idx,
         const Eigen::Vector3d& tracked_point_cdcpd_frame,
@@ -61,4 +61,23 @@ public:
 private:
     // Loads the SDFormat file, given by sdf_filename_ member, into the planning_scene_ member.
     void load_sdformat_file();
+
+    // Checks if a point is inside of the scene's mesh
+    bool is_point_inside_scene_mesh();
+
+    collision_detection::CollisionResult check_moveit_collision();
+
+    // Returns ObstacleConstraints for a Moveit-detected collision
+    // This works if the collision sphere is outside of the mesh. If the collision sphere centroid
+    // is inside of the mesh, we need to use find_nearest_points_and_normals_no_collision_detected()
+    ObstacleConstraints find_nearest_points_and_normals_collision_detected(collision_detection::CollisionResult res);
+
+    // Returns ObstacleConstraints when Moveit detects no collision but the collision sphere
+    // centroid is inside the scene's mesh
+    ObstacleConstraints find_nearest_points_and_normals_no_collision_detected(PointCloud::ConstPtr tracked_points);
+
+    // Fills up rviz contact markers with "zero" markers
+    // rviz makes deleting markers hard, so it's easier to just publish a fixed number of markers
+    // in the array
+    vm::MarkerArray populate_empty_contact_markers();
 };
