@@ -68,12 +68,6 @@ struct CDCPD_Node_Parameters
     float const grid_size_initial_guess_cloth;
     bool const moveit_enabled;
     DeformableObjectType const deformable_object_type;
-
-private:
-    std::map<std::string, DeformableObjectType> obj_type_map_{
-        {"rope", DeformableObjectType::rope},
-        {"cloth", DeformableObjectType::cloth},
-    };
 };
 
 struct CDCPD_Moveit_Node {

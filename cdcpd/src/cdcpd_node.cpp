@@ -87,8 +87,8 @@ CDCPD_Node_Parameters::CDCPD_Node_Parameters(ros::NodeHandle& nh, ros::NodeHandl
       grid_size_initial_guess_cloth(
           ROSHelpers::GetParam<float>(ph, "grid_size_initial_guess_cloth", 0.0)),
       moveit_enabled(ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false)),
-      deformable_object_type(obj_type_map_[
-          ROSHelpers::GetParam<std::string>(ph, "deformable_object_type", "rope")])
+      deformable_object_type(get_deformable_object_type(
+          ROSHelpers::GetParam<std::string>(ph, "deformable_object_type", "rope")))
 {}
 
 
@@ -208,6 +208,16 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
             std::unique_ptr<ClothConfiguration>(
                 new ClothConfiguration(node_params.length_initial_cloth,
                     node_params.width_initial_cloth, node_params.grid_size_initial_guess_cloth));
+
+        // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
+        // Z direction as we apply a bounding-box filter (where the box is centered at the camera
+        // frame. That excludes the actual segmentation of the cloth in the current implementation.
+        configuration->template_affine_transform_ = (cv::Mat_<float>(4, 4) <<
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 1,
+            0, 0, 0, 1);
+
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
