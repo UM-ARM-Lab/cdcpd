@@ -72,13 +72,23 @@ CDCPD_Publishers::CDCPD_Publishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
 CDCPD_Node_Parameters::CDCPD_Node_Parameters(ros::NodeHandle& nh, ros::NodeHandle& ph)
     : points_name(ROSHelpers::GetParam<std::string>(ph, "points", "")),
       rgb_topic(ROSHelpers::GetParam<std::string>(ph, "rgb_topic", "/camera/color/image_raw")),
-      depth_topic(ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw")),
-      info_topic(ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info")),
-      camera_frame(ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame")),
-      grippers_info_filename(ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node")),
+      depth_topic(
+            ROSHelpers::GetParam<std::string>(ph, "depth_topic", "/camera/depth/image_rect_raw")),
+      info_topic(
+            ROSHelpers::GetParam<std::string>(ph, "info_topic", "/camera/depth/camera_info")),
+      camera_frame(
+            ROSHelpers::GetParam<std::string>(ph, "camera_frame", "camera_color_optical_frame")),
+      grippers_info_filename(
+            ROSHelpers::GetParamRequired<std::string>(ph, "grippers_info", "cdcpd_node")),
       num_points(ROSHelpers::GetParam<int>(nh, "rope_num_points", 11)),
       max_rope_length(ROSHelpers::GetParam<float>(nh, "max_rope_length", 1.0)),
-      moveit_enabled(ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false))
+      length_initial_cloth(ROSHelpers::GetParam<float>(ph, "length_initial_cloth", 0.0)),
+      width_initial_cloth(ROSHelpers::GetParam<float>(ph, "width_initial_cloth", 0.0)),
+      grid_size_initial_guess_cloth(
+          ROSHelpers::GetParam<float>(ph, "grid_size_initial_guess_cloth", 0.0)),
+      moveit_enabled(ROSHelpers::GetParam<bool>(ph, "moveit_enabled", false)),
+      deformable_object_type(get_deformable_object_type(
+          ROSHelpers::GetParam<std::string>(ph, "deformable_object_type", "rope")))
 {}
 
 
@@ -89,7 +99,6 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
       publishers(nh, ph),
       node_params(nh, ph),
       cdcpd_params(ph),
-      rope_configuration(node_params.num_points, node_params.max_rope_length),
       scene_monitor_(std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_description_)),
       model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
       model_(model_loader_->getModel()),
@@ -125,9 +134,6 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         gripper_indices = {};
     }
 
-    // Initial connectivity model of rope
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "max segment length " << rope_configuration.max_segment_length);
-
     // initialize start and end points for rope
     auto [init_q_config, init_q_dot] = get_q_config();
     Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
@@ -145,15 +151,14 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         end_position << node_params.max_rope_length / 2, 0, 1.0;
     }
 
-    // TODO: decide on rope versus cloth configuration here.
-    rope_configuration.initializeTracking(start_position, end_position);
+    initialize_deformable_object_configuration(start_position, end_position);
 
-    std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, rope_configuration.initial.points,
-        rope_configuration.initial.edges,
+    cdcpd = std::make_unique<CDCPD>(nh, ph,
+        deformable_object_configuration_->initial_.points_,
+        deformable_object_configuration_->initial_.edges_,
         cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
         cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-        cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
-    cdcpd = std::move(cdcpd_new);
+        cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
 
     // Define the callback wrappers we need to pass to ROS nodes.
     auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
@@ -182,6 +187,40 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         ros::spin();
     }
   }
+
+void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
+    Eigen::Vector3f const& rope_start_position, Eigen::Vector3f const& rope_end_position)
+{
+    if (node_params.deformable_object_type == DeformableObjectType::rope)
+    {
+        auto configuration = std::unique_ptr<RopeConfiguration>(new RopeConfiguration(
+            node_params.num_points, node_params.max_rope_length, rope_start_position,
+            rope_end_position));
+        // Have to call initializeTracking() before casting to base class since it relies on virtual
+        // functions.
+        configuration->initializeTracking();
+        deformable_object_configuration_ = std::move(configuration);
+    }
+    else if (node_params.deformable_object_type == DeformableObjectType::cloth)
+    {
+        auto configuration = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
+            node_params.length_initial_cloth, node_params.width_initial_cloth,
+            node_params.grid_size_initial_guess_cloth));
+
+        // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
+        // Z direction as we apply a bounding-box filter (where the box is centered at the camera
+        // frame. That excludes the actual segmentation of the cloth in the current implementation.
+        configuration->template_affine_transform_ = (cv::Mat_<float>(4, 4) << 1, 0, 0, 0,
+                                                                              0, 1, 0, 0,
+                                                                              0, 0, 1, 1,
+                                                                              0, 0, 0, 1);
+
+        // Have to call initializeTracking() before casting to base class since it relies on virtual
+        // functions.
+        configuration->initializeTracking();
+        deformable_object_configuration_ = std::move(configuration);
+    }
+}
 
 ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
     planning_scene_monitor::LockedPlanningSceneRW planning_scene,
@@ -420,10 +459,11 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
 
     auto const hsv_mask = getHsvMask(ph, rgb);
     auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
-                              rope_configuration.tracked.points,
-                              obstacle_constraints, rope_configuration.max_segment_length, q_dot,
+                              deformable_object_configuration_->tracked_.points_,
+                              obstacle_constraints,
+                              deformable_object_configuration_->max_segment_length_, q_dot,
                               q_config, gripper_indices);
-    rope_configuration.tracked.points = out.gurobi_output;
+    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
 };
@@ -443,9 +483,10 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     pcl::fromPCLPointCloud2(points_v2, *points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
-    auto const out = (*cdcpd)(points, rope_configuration.tracked.points, obstacle_constraints,
-        rope_configuration.max_segment_length, q_dot, q_config, gripper_indices);
-    rope_configuration.tracked.points = out.gurobi_output;
+    auto const out = (*cdcpd)(points, deformable_object_configuration_->tracked_.points_,
+        obstacle_constraints, deformable_object_configuration_->max_segment_length_, q_dot,
+        q_config, gripper_indices);
+    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
     publish_outputs(t0, out);
     reset_if_bad(out);
 }
@@ -473,9 +514,9 @@ void CDCPD_Moveit_Node::publish_bbox() const
 void CDCPD_Moveit_Node::publish_template() const
 {
     auto time = ros::Time::now();
-    rope_configuration.tracked.points->header.frame_id = node_params.camera_frame;
-    pcl_conversions::toPCL(time, rope_configuration.tracked.points->header.stamp);
-    publishers.pre_template_publisher.publish(rope_configuration.tracked.points);
+    deformable_object_configuration_->tracked_.points_->header.frame_id = node_params.camera_frame;
+    pcl_conversions::toPCL(time, deformable_object_configuration_->tracked_.points_->header.stamp);
+    publishers.pre_template_publisher.publish(deformable_object_configuration_->tracked_.points_);
 }
 
 ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
@@ -483,7 +524,8 @@ ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
     ObstacleConstraints obstacle_constraints;
     if (moveit_ready and node_params.moveit_enabled)
     {
-        obstacle_constraints = get_moveit_obstacle_constriants(rope_configuration.tracked.points);
+        obstacle_constraints = get_moveit_obstacle_constriants(
+            deformable_object_configuration_->tracked_.points_);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
     }
     return obstacle_constraints;
@@ -553,12 +595,14 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
 
     // compute length and print that for debugging purposes
     auto output_length{0.0};
-    for (auto point_idx{0}; point_idx < rope_configuration.tracked.points->size() - 1; ++point_idx)
+    for (auto point_idx{0};
+         point_idx < deformable_object_configuration_->tracked_.points_->size() - 1;
+         ++point_idx)
     {
         Eigen::Vector3f const p =
-          rope_configuration.tracked.points->at(point_idx + 1).getVector3fMap();
+          deformable_object_configuration_->tracked_.points_->at(point_idx + 1).getVector3fMap();
         Eigen::Vector3f const p_next =
-          rope_configuration.tracked.points->at(point_idx).getVector3fMap();
+          deformable_object_configuration_->tracked_.points_->at(point_idx).getVector3fMap();
         output_length += (p_next - p).norm();
     }
     ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
@@ -575,8 +619,9 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
         out.status == OutputStatus::ObjectiveTooHigh)
     {
         // Recreate CDCPD from initial tracking.
-        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, rope_configuration.initial.points,
-            rope_configuration.initial.edges,
+        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph,
+            deformable_object_configuration_->initial_.points_,
+            deformable_object_configuration_->initial_.edges_,
             cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
             cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
             cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
