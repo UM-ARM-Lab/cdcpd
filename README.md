@@ -24,6 +24,9 @@ The master branch is the version the users outside the lab should use.
     - [Running The Demos](#running-the-demos)
     - [Demo Descriptions](#demo-descriptions)
   - [Demos With Sensors](#demos-with-sensors)
+    - [RealSense](#realsense)
+    - [Kinectv2](#kinectv2)
+    - [Azure Kinect](#azure-kinect)
 - [Adding gtest Unit Tests](#adding-gtest-unit-tests)
 - [FAQ & Misc Notes](#faq--misc-notes)
 
@@ -163,6 +166,10 @@ Note that demos loop! If you see the tracking jump around in rviz, it's likely d
 
 ### Demos With Sensors
 
+This section contains commands necessary to launch CDCPD with several different sensors. However, as long as your camera node publishes RGB/D or point clouds it should be easy to adapt one of these launch files.
+
+#### RealSense
+
 To run with a realsense, without the obstacle or gripper constraints, try this:
 
 ```
@@ -171,13 +178,20 @@ rviz -d cdcpd/rviz/realsense.rviz  # From local cdcpd directory
 roslaunch cdcpd realsense.launch
 ```
 
-
-We also provide an example for the kinect, in our case the kinectv2, but as long as your camera node published RGB/D or point clouds it should be easy to adapt the launch file.
+#### Kinectv2
 
 ```
 roslaunch kinect2_calibration_files kinect2_bridge_tripodA.launch  # ARMLab internal usage
 rviz -d cdcpd/rviz/kinect.rviz  # From local cdcpd directory
 roslaunch cdcpd kinect.launch
+```
+
+#### Azure Kinect
+
+The Azure Kinect launch file contains all node launches necessary to run the Azure Kinect driver, CDCPD, and RVIZ. As such, you only need to execute the following command:
+
+```
+roslaunch cdcpd azure_2_cloth.launch
 ```
 
 ## Adding gtest Unit Tests
