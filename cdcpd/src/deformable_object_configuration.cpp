@@ -75,7 +75,6 @@ RopeConfiguration::RopeConfiguration(int const num_points, float const max_rope_
     max_segment_length_ = max_rope_length / (static_cast<float>(num_points) - 1);
 }
 
-
 DeformableObjectTracking RopeConfiguration::makeTemplate()
 {
     Eigen::Matrix3Xf template_vertices(3, num_points_);  // Y^0 in the paper
@@ -106,8 +105,8 @@ ClothConfiguration::ClothConfiguration(float const length_initial, float const w
       length_initial_{length_initial},
       width_initial_{width_initial},
       grid_size_initial_guess_{grid_size_initial_guess},
-      num_points_length_{std::round(length_initial / grid_size_initial_guess) + 2},
-      num_points_width_{std::round(width_initial / grid_size_initial_guess) + 2},
+      num_points_length_{std::ceil(length_initial / grid_size_initial_guess) + 1},
+      num_points_width_{std::ceil(width_initial / grid_size_initial_guess) + 1},
       num_edges_{(num_points_length_ - 1) * num_points_width_
                   + (num_points_width_ - 1) * num_points_length_}
 {
@@ -128,7 +127,7 @@ DeformableObjectTracking ClothConfiguration::makeTemplate()
 {
     DeformableObjectTracking configuration;
     std::vector<std::tuple<int, int>> edges_list;
-    
+
     std::vector<cv::Point3f> template_original_points;
     int idx = 0;
     for (int i = 0; i < num_points_length_; ++i)

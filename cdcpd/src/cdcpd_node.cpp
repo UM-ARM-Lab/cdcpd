@@ -153,13 +153,12 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
 
     initialize_deformable_object_configuration(start_position, end_position);
 
-    std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph,
+    cdcpd = std::make_unique<CDCPD>(nh, ph,
         deformable_object_configuration_->initial_.points_,
         deformable_object_configuration_->initial_.edges_,
         cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
         cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-        cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
-    cdcpd = std::move(cdcpd_new);
+        cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
 
     // Define the callback wrappers we need to pass to ROS nodes.
     auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
@@ -194,9 +193,9 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
 {
     if (node_params.deformable_object_type == DeformableObjectType::rope)
     {
-        std::unique_ptr<RopeConfiguration> configuration = std::unique_ptr<RopeConfiguration>(
-            new RopeConfiguration(node_params.num_points, node_params.max_rope_length,
-                rope_start_position, rope_end_position));
+        auto configuration = std::unique_ptr<RopeConfiguration>(new RopeConfiguration(
+            node_params.num_points, node_params.max_rope_length, rope_start_position,
+            rope_end_position));
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
@@ -204,19 +203,17 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
     }
     else if (node_params.deformable_object_type == DeformableObjectType::cloth)
     {
-        std::unique_ptr<ClothConfiguration> configuration =
-            std::unique_ptr<ClothConfiguration>(
-                new ClothConfiguration(node_params.length_initial_cloth,
-                    node_params.width_initial_cloth, node_params.grid_size_initial_guess_cloth));
+        auto configuration = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
+            node_params.length_initial_cloth, node_params.width_initial_cloth,
+            node_params.grid_size_initial_guess_cloth));
 
         // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
         // Z direction as we apply a bounding-box filter (where the box is centered at the camera
         // frame. That excludes the actual segmentation of the cloth in the current implementation.
-        configuration->template_affine_transform_ = (cv::Mat_<float>(4, 4) <<
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 1,
-            0, 0, 0, 1);
+        configuration->template_affine_transform_ = (cv::Mat_<float>(4, 4) << 1, 0, 0, 0,
+                                                                              0, 1, 0, 0,
+                                                                              0, 0, 1, 1,
+                                                                              0, 0, 0, 1);
 
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
