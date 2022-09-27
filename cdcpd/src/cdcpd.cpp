@@ -605,7 +605,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
       last_upper_bounding_box);
   segmenter->segment(points);
 
-  // drop color info at this point
+  // Drop color info from the point cloud.
   // NOTE: We use a boost pointer here because that's what our version of pcl is expecting in
   // the `setInputCloud` function call.
   auto cloud = boost::make_shared<PointCloud>();
@@ -614,13 +614,8 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
       "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
 
-  /// VoxelGrid filter downsampling
+  /// Perform VoxelGrid filter downsampling.
   PointCloud::Ptr cloud_downsampled(new PointCloud);
-  const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
-  // TODO: check whether the change is needed here for unit conversion
-  auto const Y_emit_prior = Eigen::VectorXf::Ones(template_cloud->size());
-  ROS_DEBUG_STREAM_NAMED(LOGNAME, "Y_emit_prior " << Y_emit_prior);
-
   pcl::VoxelGrid<pcl::PointXYZ> sor;
   ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: "
       << cloud->width);
@@ -629,6 +624,12 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   sor.filter(*cloud_downsampled);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "Points in filtered point cloud: " << cloud_downsampled->width);
+
+  const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+  // TODO: check whether the change is needed here for unit conversion
+  auto const Y_emit_prior = Eigen::VectorXf::Ones(template_cloud->size());
+  ROS_DEBUG_STREAM_NAMED(LOGNAME, "Y_emit_prior " << Y_emit_prior);
+
   if (cloud_downsampled->width == 0) {
     ROS_ERROR_STREAM_NAMED(LOGNAME, "No points in the filtered point cloud");
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
@@ -638,8 +639,9 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
     return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out,
         OutputStatus::NoPointInFilteredCloud};
   }
-  Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
+
   // Add points to X according to the previous template
+  Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
 
   std::vector<FixedPoint> pred_fixed_points;
   auto const num_grippers = std::min(
@@ -658,9 +660,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   TY = cpd(X, Y, TY_pred, Y_emit_prior);
 
   // Next step: optimization.
-
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
-
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
   Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
@@ -671,14 +671,14 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
 
-  // NOTE: set stateful member variables for next time
+  // Set stateful member variables for next iteration of CDCPD
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();
   last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
 
+  // Gather information for forming output struct.
   PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
   PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
   PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
-
   auto status = OutputStatus::Success;
   if (total_frames_ > 10 and objective_value > objective_value_threshold_) {
     ROS_WARN_STREAM_NAMED(LOGNAME + ".objective", "Objective too high!");
