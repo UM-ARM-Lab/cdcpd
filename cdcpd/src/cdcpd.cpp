@@ -20,6 +20,7 @@
 #include <string>
 
 #include "cdcpd/obs_util.h"
+#include "cdcpd/segmenter.h"
 
 std::string const LOGNAME = "cdcpd";
 
@@ -599,66 +600,14 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   // template_edges: (2, K) matrix corresponding to E in the paper
   total_frames_ += 1;
 
-  // filter the point cloud by color
-  auto points_cropped = boost::make_shared<PointCloudRGB>();
-  auto points_hsv = boost::make_shared<PointCloudHSV>();
-  auto filtered_points_h = boost::make_shared<PointCloudHSV>();
-  auto filtered_points_hs = boost::make_shared<PointCloudHSV>();
-  auto filtered_points_hsv = boost::make_shared<PointCloudHSV>();
-  auto cloud = boost::make_shared<PointCloud>();
-
-  const Eigen::Vector4f box_min = (last_lower_bounding_box - bounding_box_extend).homogeneous();
-  const Eigen::Vector4f box_max = (last_upper_bounding_box + bounding_box_extend).homogeneous();
-  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".points", "box min: " << box_min.head(3) << " box max " << box_max.head(3));
-
-  // BBOX filter
-  pcl::CropBox<PointRGB> box_filter;
-  box_filter.setMin(box_min);
-  box_filter.setMax(box_max);
-  box_filter.setInputCloud(points);
-  box_filter.filter(*points_cropped);
-
-  // convert to HSV
-  pcl::PointCloudXYZRGBtoXYZHSV(*points_cropped, *points_hsv);
-
-  // HSV filter
-  auto const hue_min = ROSHelpers::GetParamDebugLog<float>(ph, "hue_min", 340.0);
-  auto const hue_max = ROSHelpers::GetParamDebugLog<float>(ph, "hue_max", 20.0);
-  auto const sat_min = ROSHelpers::GetParamDebugLog<float>(ph, "saturation_min", 0.3);
-  auto const sat_max = ROSHelpers::GetParamDebugLog<float>(ph, "saturation_max", 1.0);
-  auto const val_min = ROSHelpers::GetParamDebugLog<float>(ph, "value_min", 0.4);
-  auto const val_max = ROSHelpers::GetParamDebugLog<float>(ph, "value_max", 1.0);
-
-  auto const hue_negative = hue_min > hue_max;
-  auto const sat_negative = sat_min > sat_max;
-  auto const val_negative = val_min > val_max;
-
-  pcl::PassThrough<PointHSV> hue_filter;
-  hue_filter.setInputCloud(points_hsv);
-  hue_filter.setFilterFieldName("h");
-  hue_filter.setFilterLimits(std::min(hue_min, hue_max), std::max(hue_min, hue_max));
-  hue_filter.setFilterLimitsNegative(hue_negative);
-  hue_filter.filter(*filtered_points_h);
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "hue filtered " << filtered_points_h->size());
-
-  pcl::PassThrough<PointHSV> sat_filter;
-  sat_filter.setInputCloud(filtered_points_h);
-  sat_filter.setFilterFieldName("s");
-  sat_filter.setFilterLimits(std::min(sat_min, sat_max), std::max(sat_min, sat_max));
-  sat_filter.setFilterLimitsNegative(sat_negative);
-  sat_filter.filter(*filtered_points_hs);
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "sat filtered " << filtered_points_hs->size());
-
-  pcl::PassThrough<PointHSV> val_filter;
-  val_filter.setInputCloud(filtered_points_hs);
-  val_filter.setFilterFieldName("v");
-  val_filter.setFilterLimits(std::min(val_min, val_max), std::max(val_min, val_max));
-  val_filter.setFilterLimitsNegative(val_negative);
-  val_filter.filter(*filtered_points_hsv);
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "val filtered " << filtered_points_hsv->size());
+  // Perform segmentation
+  auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box, last_upper_bounding_box);
+  segmenter->segment(points);
 
   // drop color info at this point
-  pcl::copyPointCloud(*filtered_points_hsv, *cloud);
+  // NOTE: We use a boost pointer here because that's what our version of pcl is expecting.
+  auto cloud = boost::make_shared<PointCloud>();
+  pcl::copyPointCloud(segmenter->get_segmented_cloud(), *cloud);
 
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
