@@ -21,12 +21,7 @@ typedef pcl::PointCloud<PointHSV> PointCloudHSV;
 inline Eigen::Vector3f const bounding_box_extend(0.1, 0.2, 0.1);
 std::string const LOGNAME_SEGMENTER = "cdcpd_segmenter";
 
-// class SegmentationOutput
-// {
-
-// };
-
-// The base calss that all Segmenter classes should inherit from. This defines the functions with
+// The base class that all Segmenter classes should inherit from. This defines the functions with
 // which the user will interact with the Segmenter.
 // Template argument here is for the type of the segmented point cloud.
 template<typename T>
@@ -36,12 +31,12 @@ public:
     Segmenter(){}
     virtual ~Segmenter(){}
 
-    // Copies the segmented point cloud. This prevents accidentally making changes to the output
-    // of the segmentation.
+    // Return a copy of the segmented point cloud. This prevents accidentally making changes to the
+    // output of the segmentation.
     virtual T get_segmented_cloud() const = 0;
 
     // Do the segmentation and store output as member variables of this class.
-     virtual void segment(const PointCloudRGB::Ptr & inputs_points) = 0;
+    virtual void segment(const PointCloudRGB::Ptr & inputs_points) = 0;
 
 protected:
     // The segmented point cloud.
@@ -72,7 +67,7 @@ public:
 
     virtual PointCloudHSV get_segmented_cloud() const override;
 
-    void segment(const PointCloudRGB::Ptr & input_points);
+    virtual void segment(const PointCloudRGB::Ptr & input_points);
 
     Eigen::Vector3f const last_lower_bounding_box_;
     Eigen::Vector3f const last_upper_bounding_box_;

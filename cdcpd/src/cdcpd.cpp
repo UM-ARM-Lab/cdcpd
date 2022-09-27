@@ -600,17 +600,19 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   // template_edges: (2, K) matrix corresponding to E in the paper
   total_frames_ += 1;
 
-  // Perform segmentation
-  auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box, last_upper_bounding_box);
+  // Perform HSV segmentation
+  auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box,
+      last_upper_bounding_box);
   segmenter->segment(points);
 
   // drop color info at this point
-  // NOTE: We use a boost pointer here because that's what our version of pcl is expecting.
+  // NOTE: We use a boost pointer here because that's what our version of pcl is expecting in
+  // the `setInputCloud` function call.
   auto cloud = boost::make_shared<PointCloud>();
   pcl::copyPointCloud(segmenter->get_segmented_cloud(), *cloud);
 
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-                                 "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
+      "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
 
   /// VoxelGrid filter downsampling
   PointCloud::Ptr cloud_downsampled(new PointCloud);
@@ -620,7 +622,8 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "Y_emit_prior " << Y_emit_prior);
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: " << cloud->width);
+  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: "
+      << cloud->width);
   sor.setInputCloud(cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
   sor.filter(*cloud_downsampled);
@@ -632,14 +635,15 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
 
-    return CDCPD::Output{
-        points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, OutputStatus::NoPointInFilteredCloud};
+    return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out,
+        OutputStatus::NoPointInFilteredCloud};
   }
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
   // Add points to X according to the previous template
 
   std::vector<FixedPoint> pred_fixed_points;
-  auto const num_grippers = std::min(static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
+  auto const num_grippers = std::min(
+      static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
   for (auto col = 0u; col < num_grippers; ++col) {
     FixedPoint pt;
     pt.template_index = gripper_idx(0, col);
@@ -660,7 +664,8 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
   Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
-  auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
+  auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints,
+      max_segment_length);
   Matrix3Xf Y_opt = opt_out.first;
   double objective_value = opt_out.second;
 
