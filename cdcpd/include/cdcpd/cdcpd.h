@@ -35,7 +35,6 @@ typedef pcl::PointXYZHSV PointHSV;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointCloud<PointRGB> PointCloudRGB;
 typedef pcl::PointCloud<PointHSV> PointCloudHSV;
-inline Eigen::Vector3f const bounding_box_extend(0.1, 0.2, 0.1);
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::FT FT;
