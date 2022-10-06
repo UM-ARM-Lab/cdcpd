@@ -171,33 +171,127 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     }
 
     // Define the callback wrappers we need to pass to ROS nodes.
-    auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
-        cv::Matx33d const& intrinsics)
-    {
-        // callback(rgb, depth, intrinsics);
-        return;
-    };
+    // auto const callback_read_rgb_and_depth_images_wrapper = [&](cv::Mat const& rgb,
+    //     cv::Mat const& depth, cv::Matx33d const& intrinsics)
+    // {
+    //     callback_read_rgb_and_depth_images(rgb, depth, intrinsics);
+    // };
+
     auto const points_callback_wrapper = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg)
     {
         points_callback(points_msg);
     };
 
-    if (node_params.points_name.empty()) {
-        ROS_INFO_NAMED(LOGNAME, "subscribing to RGB + Depth");
-        auto camera_sub_setup = CameraSubSetup(node_params.rgb_topic, node_params.depth_topic,
-          node_params.info_topic);
-        // wait a second so the TF buffer can fill
-        ros::Duration(0.5).sleep();
+    // auto const points_rgb_and_depth_callback_wrapper =
+    //     [&](const sensor_msgs::PointCloud2ConstPtr& points_msg, cv::Mat const& rgb,
+    //         cv::Mat const& depth, cv::Matx33d const& intrinsics)
+    // {
+    //     // Just store the rgb and depth images in this object.
+    //     callback_read_rgb_and_depth_images(rgb, depth, intrinsics);
+    //     // Do the point cloud routine somewhat like normal, with corner candidate detection using
+    //     // RGB
+    //     points_callback(points_msg);
+    // };
 
-        KinectSub sub(callback_wrapper, camera_sub_setup);
-        ros::waitForShutdown();
-    } else {
-        ROS_INFO_NAMED(LOGNAME, "subscribing to points");
-        auto sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 10,
-            points_callback_wrapper);
-        ros::spin();
-    }
-  }
+    // if (node_params.points_name.empty()) {
+    //     ROS_INFO_NAMED(LOGNAME, "subscribing to RGB + Depth");
+    //     auto camera_sub_setup = CameraSubSetup(node_params.rgb_topic, node_params.depth_topic,
+    //       node_params.info_topic);
+    //     // wait a second so the TF buffer can fill
+    //     ros::Duration(0.5).sleep();
+
+    //     KinectSub sub(callback_wrapper, camera_sub_setup);
+    //     ros::waitForShutdown();
+    // } else {
+    //     ROS_INFO_NAMED(LOGNAME, "subscribing to points");
+    //     auto sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 10,
+    //         points_callback_wrapper);
+    //     ros::spin();
+    // }
+
+    // New plan, do the dumb thing and make 3 callbacks, doing everything KinectSub did plus point
+    // clouds
+
+
+    auto const rgb_callback_wrapper = [&](const sensor_msgs::ImageConstPtr& rgb_msg)
+    {
+        cv_bridge::CvImagePtr cv_rgb_ptr;
+        try {
+            cv_rgb_ptr = cv_bridge::toCvCopy(rgb_msg, sensor_msgs::image_encodings::RGB8);
+        } catch (cv_bridge::Exception& e) {
+            ROS_ERROR("RGB cv_bridge exception: %s", e.what());
+            return;
+        }
+
+        rgb_img_ = cv_rgb_ptr->image;
+    };
+
+    auto const depth_callback_wrapper = [&](const sensor_msgs::ImageConstPtr& depth_msg)
+    {
+        cv_bridge::CvImagePtr cv_depth_ptr;
+        try {
+            cv_depth_ptr = cv_bridge::toCvCopy(depth_msg, depth_msg->encoding);
+        } catch (cv_bridge::Exception& e) {
+            ROS_ERROR("Depth cv_bridge exception: %s", e.what());
+            return;
+        }
+
+        if (depth_msg->encoding != sensor_msgs::image_encodings::TYPE_16UC1) {
+            ROS_INFO("Depth message is not in %s format. Converting.", sensor_msgs::image_encodings::TYPE_16UC1.c_str());
+            if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+            cv::Mat convertedDepthImg(cv_depth_ptr->image.size(), CV_16UC1);
+
+            const int V = cv_depth_ptr->image.size().height;
+            const int U = cv_depth_ptr->image.size().width;
+
+            for (int v = 0; v < V; ++v) {
+                for (int u = 0; u < U; ++u) {
+                convertedDepthImg.at<uint16_t>(v, u) =
+                    depth_image_proc::DepthTraits<uint16_t>::fromMeters(cv_depth_ptr->image.at<float>(v, u));
+                }
+            }
+
+            cv_depth_ptr->encoding = sensor_msgs::image_encodings::TYPE_16UC1;
+            cv_depth_ptr->image = convertedDepthImg;
+            } else {
+            ROS_ERROR_THROTTLE(10, "Unhandled depth message format %s", depth_msg->encoding.c_str());
+            return;
+            }
+        }
+
+        depth_img_ = cv_depth_ptr->image;
+    };
+
+    // Now we subscribe to each of the point cloud, RGB, and depth topics in a single thread. This
+    // will be slow but since we're using a static camera for now it should be fine.
+
+    // Subscribing to both RGB, Depth, and point cloud inputs here. KinectSub uses an AsyncSpinner
+    // which is multi-threaded to avoid callbacks preventing other callbacks from being called.
+    // As such, we can just initialize the KinectSub object, subscribe to the point cloud topic then
+    // wait for shutdown. No need to spin as that's just a single threaded spinner and we've already
+    // got a spinner spinning.
+    ROS_INFO_NAMED(LOGNAME, "subscribing to points, RGB, and Depth!!");
+    // auto camera_sub_setup = CameraSubSetup(node_params.points_name, node_params.rgb_topic, node_params.depth_topic,
+    //     node_params.info_topic);
+    // wait a second so the TF buffer can fill
+    // ros::Duration(0.5).sleep();
+    // KinectSub kinect_sub(points_rgb_and_depth_callback_wrapper, camera_sub_setup);
+    auto rgb_sub = nh.subscribe<sensor_msgs::Image>(node_params.rgb_topic, 1, rgb_callback_wrapper);
+    auto depth_sub = nh.subscribe<sensor_msgs::Image>(node_params.depth_topic, 1,
+        depth_callback_wrapper);
+    auto points_sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 1,
+        points_callback_wrapper);
+
+    ros::spin();
+
+}
+
+void CDCPD_Moveit_Node::callback_read_rgb_and_depth_images(cv::Mat const& rgb,
+        cv::Mat const& depth, cv::Matx33d const& intrinsics)
+{
+    rgb_img_ = rgb;
+    depth_img_ = depth;
+}
 
 std::shared_ptr<DeformableObjectConfiguration>
     CDCPD_Moveit_Node::initialize_deformable_object_configuration(
@@ -510,17 +604,18 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
 
     pcl::PCLPointCloud2 points_v2;
     pcl_conversions::toPCL(*points_msg, points_v2);
-    auto points = boost::make_shared<PointCloudRGB>();
-    pcl::fromPCLPointCloud2(points_v2, *points);
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
+    auto points_full_cloud = boost::make_shared<PointCloudRGB>();
+    pcl::fromPCLPointCloud2(points_v2, *points_full_cloud);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points_full_cloud->size());
 
     // Get the point cloud clusters and their local point cloud neighborhood from the corner
     // candidate detection routine
     // NOTE: Zixuan's routine works on the RGB/D images. May do translation here or may do in the
     // corner_candidate_detection routine.
-    // auto const corner_candidate_detections = do_corner_candidate_detection(points_v2)
+    auto const corner_candidate_detections = do_corner_candidate_detection(points_full_cloud);
 
     // Associate the point cloud clusters to tracked templates
+    auto const associated_pairs = associate_corner_candidates_with_tracked_objects();
 
     // associated_pairs is a vector of tuples with {corner_candidate_detection, DeformableObjectConfiguration}
     // Or maybe just a vector of tuples with {cluster_idx, configuration_id} so we don't have to
@@ -575,7 +670,7 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     //     {
     //         // We received data for this tracked configuration, run the associated CDCPD instance
     //         // with the local point cloud.
-    //         auto const out = (*cdcpd)(points, deformable_object_configuration_->tracked_.points_,
+    //         auto const out = (*cdcpd)(points_full_cloud, deformable_object_configuration_->tracked_.points_,
     //             obstacle_constraints, deformable_object_configuration_->max_segment_length_, q_dot,
     //             q_config, gripper_indices);
 
@@ -598,7 +693,7 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     // int def_obj_id = 0;
     auto& object_configuration = deformable_object_configurations_.at(def_obj_id);
     auto& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
-    auto const out = (*cdcpd_instance)(points, object_configuration->tracked_.points_,
+    auto const out = (*cdcpd_instance)(points_full_cloud, object_configuration->tracked_.points_,
         obstacle_constraints, object_configuration->max_segment_length_, q_dot,
         q_config, gripper_indices);
     object_configuration->tracked_.points_ = out.gurobi_output;
@@ -763,6 +858,75 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
         //     cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
         // cdcpd = std::move(cdcpd_new);
     }
+}
+
+std::vector<std::tuple<int const, int const>>
+    CDCPD_Moveit_Node::associate_corner_candidates_with_tracked_objects()
+{
+    std::vector<std::tuple<int const, int const>> associated_pairs;
+
+    // Could just do something really dumb at first and find minimum distance between each tracked
+    // object and the clusters
+    // for (auto const& candidate : corner_candidates)
+    // {
+    //     double min_dist = 1e15;
+    //     bool association_made = false;
+    //     for (auto const& def_obj_pair : deformable_object_configurations_)
+    //     {
+    //         // Calculate distance between candidate centroid and tracked_object_centroid
+    //     }
+    // }
+    return associated_pairs;
+}
+
+std::vector<CornerCandidateDetection> CDCPD_Moveit_Node::do_corner_candidate_detection(
+        const PointCloudRGB::Ptr &points_full_cloud)
+{
+    std::vector<CornerCandidateDetection> candidate_detections;
+
+    std::string root_dir = "/home/dcolli23/cdcpd_corner_detector_runtime_data/";
+    std::string full_cloud_output_path = root_dir + "points_full_cloud.pcd";
+    std::string rgb_output_path = root_dir + "rgb_img.png";
+    std::string depth_output_path = root_dir + "depth_img.png";
+
+    auto t_start = ros::Time::now();
+    // Write the point cloud, RGB, and Depth images for the segmentation routine to use.
+    // Might not even have to write the point cloud file.
+    pcl::io::savePLYFileBinary(full_cloud_output_path, *points_full_cloud);
+    cv::imwrite(rgb_output_path, rgb_img_);
+    cv::imwrite(depth_output_path, depth_img_);
+
+    // Call the corner candidate detection script, passing in the path to the recently written
+    // full point cloud.
+
+    // Read the YAML file output by the corner detection script (saved in a pre-determined location)
+    // This contains the information in an array for all corner candidate detections.
+
+    // Loop through the corner candidate information array
+    // for (auto const& candidate_info : candidate_info_array)
+    // {
+    //     // Read the local point cloud neighborhood.
+    //     // Read the corner candidate mask
+    //     // Convert the centroid_camera_frame into an Eigen::Vector3f variable
+    //     // Convert the template_to_corner_candidate_affine_transform into cv::Mat variable
+    //     // Initialize a new CornerCandidateDetection with the read variables
+    //     // Store the candidate detection in our vector.
+    // }
+
+
+    auto t_end = ros::Time::now();
+
+    // Outputting time of execution
+    {
+
+        auto t_delta = t_end - t_start;
+        double num_secs = static_cast<double>(t_delta.nsec) / 1e9;
+        std::stringstream msg;
+        msg << "Took " << num_secs << " seconds to execute corner candidate detection routines";
+        ROS_INFO(msg.str().c_str());
+    }
+
+    return candidate_detections;
 }
 
 std::tuple<smmap::AllGrippersSinglePose,

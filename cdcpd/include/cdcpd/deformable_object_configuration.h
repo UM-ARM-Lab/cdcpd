@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <tuple>
 
 #include <Eigen/Dense>
@@ -8,7 +9,9 @@
 #include "opencv2/imgproc.hpp"
 #include <opencv2/core/eigen.hpp>
 
+typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
+typedef pcl::PointCloud<PointRGB> PointCloudRGB;
 
 enum DeformableObjectType
 {
@@ -116,4 +119,28 @@ public:
 
     // The supplied initial guess for the grid size.
     float const grid_size_initial_guess_;
+};
+
+// Temporarily storing in this file until I refactor.
+class CornerCandidateDetection
+{
+public:
+    CornerCandidateDetection();
+
+
+    Eigen::Vector3f const centroid_camera_frame;
+
+    // The affine transform to go from template initial position (TBD) (0, 0, 0)? to the position in
+    // the camera frame that would align the template with the corner candidate.
+    // The purpose of this is to provide a solid initialization for the tracked template instead of
+    // hoping the tracking converges from some naiive initialized position.
+    cv::Mat const template_to_corner_candidate_affine_transform_;
+
+    // The local neighborhood of the detected corner candidate. Used to pass in partial point clouds
+    // to the CDCPD::operator()
+    PointCloudRGB const local_cloud_neighborhood;
+
+    // The points indicating the detected corner. This should be of the same type expected from
+    // Segmenter outputs so that this will work seemlessly in the CDCPD::operator() routines.
+    PointCloud const detection_mask;
 };

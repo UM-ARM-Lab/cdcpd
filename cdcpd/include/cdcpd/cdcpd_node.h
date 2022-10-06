@@ -14,6 +14,8 @@
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 #include <opencv2/imgproc/types_c.h>
+#include <opencv2/imgcodecs.hpp>
+#include <cv_bridge/cv_bridge.h>
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
 #include <ros/ros.h>
@@ -26,10 +28,15 @@
 #include <arc_utilities/eigen_ros_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 
+// #include <opencv2/
+
 #include "cdcpd/cdcpd.h"
 #include "cdcpd_ros/camera_sub.h"
 #include "cdcpd/deformable_object_configuration.h"
 #include "cdcpd/segmenter.h"
+
+// Separating as I'm not sure I'll keep this around.
+#include <pcl/io/ply_io.h>
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
@@ -76,6 +83,10 @@ struct CDCPD_Moveit_Node {
 public:
     explicit CDCPD_Moveit_Node(std::string const& robot_namespace);
 
+    // Stores the provided RGB and Depth images in this object.
+    // TODO: refactor?
+    void callback_read_rgb_and_depth_images(cv::Mat const& rgb,
+        cv::Mat const& depth, cv::Matx33d const& intrinsics);
 
     // void initialize_deformable_object_configuration(Eigen::Vector3f const& rope_start_position,
     //     Eigen::Vector3f const& rope_end_position);
@@ -122,6 +133,16 @@ public:
     // Resets CDCPD tracking to initial tracking configuration if OutputStatus indicates a problem.
     void reset_if_bad(CDCPD::Output const& out);
 
+    // Returns a vector of tuples of 2 ints, <cluster index, deformable object index>
+    // -1 for either of the indexes indicates no association was found for the cluster/tracked
+    // object.
+    std::vector<std::tuple<int const, int const>> associate_corner_candidates_with_tracked_objects();
+
+    // Executes the corner candidate detection routine Zixuan prototyped
+    // Do I want to make this a vector of pointers?
+    std::vector<CornerCandidateDetection> do_corner_candidate_detection(
+        const PointCloudRGB::Ptr &points_full_cloud);
+
     std::string collision_body_prefix{"cdcpd_tracked_point_"};
     std::string robot_namespace_;
     std::string robot_description_;
@@ -153,6 +174,10 @@ public:
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
+
+    // Temporarily storing the RGB and Depth images here for easier corner candidate detection
+    cv::Mat rgb_img_;
+    cv::Mat depth_img_;
 
 protected:
     // Returns a new, unique ID to be associated to the new deformable object that's being tracked

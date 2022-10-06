@@ -164,3 +164,6 @@ DeformableObjectTracking ClothConfiguration::makeTemplate()
 
     return configuration;
 }
+
+CornerCandidateDetection::CornerCandidateDetection()
+{}

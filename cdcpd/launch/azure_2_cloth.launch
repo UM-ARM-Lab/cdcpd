@@ -20,8 +20,8 @@
         <!-- This file uses the point cloud, but you can also use the RGB and Depth input by
         commenting the "points" param and uncommenting the "rgb_topic" and "depth_topic" params. -->
         <param name="points" value="/points2"/>
-        <!-- <param name="rgb_topic" value="/rgb_to_depth/image_raw"/> -->
-        <!-- <param name="depth_topic" value="/depth/image_raw"/> -->
+        <param name="rgb_topic" value="/rgb_to_depth/image_raw"/>
+        <param name="depth_topic" value="/depth/image_raw"/>
         <param name="info_topic" value="/depth/camera_info"/>
         <param name="camera_frame" value="camera_body"/>
 
