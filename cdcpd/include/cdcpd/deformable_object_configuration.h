@@ -8,6 +8,8 @@
 #include <pcl/point_types.h>
 #include "opencv2/imgproc.hpp"
 #include <opencv2/core/eigen.hpp>
+#include <pcl/filters/crop_box.h>
+#include <pcl/point_types_conversion.h>
 
 typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
@@ -125,22 +127,32 @@ public:
 class CornerCandidateDetection
 {
 public:
-    CornerCandidateDetection();
+    CornerCandidateDetection(Eigen::Vector3f const corner_point_camera_frame,
+        cv::Mat const template_affine_transform,
+        std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds,
+        std::vector<Eigen::Vector3f> const detection_mask_bounds);
 
+    // Do a bounding box filter to get the local neighborhood.
+    boost::shared_ptr<PointCloudRGB> get_local_point_cloud_neighborhood(boost::shared_ptr<PointCloudRGB> point_cloud_full);
 
-    Eigen::Vector3f const centroid_camera_frame;
+    // Do a bounding box filter to get the masked points.
+    boost::shared_ptr<PointCloud> get_masked_points(boost::shared_ptr<PointCloudRGB> point_cloud_full);
+
+    Eigen::Vector3f const corner_point_camera_frame_;
 
     // The affine transform to go from template initial position (TBD) (0, 0, 0)? to the position in
     // the camera frame that would align the template with the corner candidate.
     // The purpose of this is to provide a solid initialization for the tracked template instead of
     // hoping the tracking converges from some naiive initialized position.
-    cv::Mat const template_to_corner_candidate_affine_transform_;
+    cv::Mat const template_affine_transform_;
 
-    // The local neighborhood of the detected corner candidate. Used to pass in partial point clouds
-    // to the CDCPD::operator()
-    PointCloudRGB const local_cloud_neighborhood;
+    // The bounds of the local neighborhood of the detected corner candidate. Used to pass in
+    // partial point clouds to the CDCPD::operator()
+    // We'll use an expanded bounding box filter on to grab the appropriate points in the point
+    // cloud.
+    std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds_;
 
-    // The points indicating the detected corner. This should be of the same type expected from
-    // Segmenter outputs so that this will work seemlessly in the CDCPD::operator() routines.
-    PointCloud const detection_mask;
+    // The bounds of the detection mask that we'll use an expanded bounding box filter on to grab
+    // the appropriate points in the point cloud.
+    std::vector<Eigen::Vector3f> const detection_mask_bounds_;
 };

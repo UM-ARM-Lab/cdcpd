@@ -165,5 +165,91 @@ DeformableObjectTracking ClothConfiguration::makeTemplate()
     return configuration;
 }
 
-CornerCandidateDetection::CornerCandidateDetection()
+CornerCandidateDetection::CornerCandidateDetection(Eigen::Vector3f const corner_point_camera_frame,
+    cv::Mat const template_affine_transform,
+    std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds,
+    std::vector<Eigen::Vector3f> const detection_mask_bounds)
+        : corner_point_camera_frame_(corner_point_camera_frame),
+          template_affine_transform_(template_affine_transform),
+          local_cloud_neighborhood_bounds_(local_cloud_neighborhood_bounds),
+          detection_mask_bounds_(detection_mask_bounds)
 {}
+
+// Do a bounding box filter to get the local neighborhood.
+boost::shared_ptr<PointCloudRGB> CornerCandidateDetection::get_local_point_cloud_neighborhood(boost::shared_ptr<PointCloudRGB> point_cloud_full)
+{
+    auto points_cropped = boost::make_shared<PointCloudRGB>();
+
+    // Find points closest and furthest from the origin (camera frame).
+    Eigen::Vector3f pt_min;
+    float pt_min_norm = 1e15;
+    Eigen::Vector3f pt_max;
+    float pt_max_norm = -1e15;
+    for (auto const pt : local_cloud_neighborhood_bounds_)
+    {
+        float pt_norm = pt.norm();
+
+        if (pt_norm < pt_min_norm)
+        {
+            pt_min = pt;
+            pt_min_norm = pt_norm;
+        }
+        else if (pt_norm > pt_max_norm)
+        {
+            pt_max = pt;
+            pt_max_norm = pt_norm;
+        }
+    }
+    Eigen::Vector4f bounding_box_z_extend(0, 0, 50, 1);
+    Eigen::Vector4f box_min = pt_min.homogeneous() - bounding_box_z_extend;
+    Eigen::Vector4f box_max = pt_max.homogeneous() + bounding_box_z_extend;
+
+    pcl::CropBox<PointRGB> box_filter;
+    box_filter.setMin(box_min);
+    box_filter.setMax(box_max);
+    box_filter.setInputCloud(point_cloud_full);
+    box_filter.filter(*points_cropped);
+
+    return points_cropped;
+}
+
+// Do a bounding box filter to get the masked points.
+boost::shared_ptr<PointCloud> CornerCandidateDetection::get_masked_points(boost::shared_ptr<PointCloudRGB> point_cloud_full)
+{
+    auto points_cropped_rgb = boost::make_shared<PointCloudRGB>();
+    auto points_cropped = boost::make_shared<PointCloud>();
+
+    // Find points closest and furthest from the origin (camera frame).
+    Eigen::Vector3f pt_min;
+    float pt_min_norm = 1e15;
+    Eigen::Vector3f pt_max;
+    float pt_max_norm = -1e15;
+    for (auto const pt : detection_mask_bounds_)
+    {
+        float pt_norm = pt.norm();
+
+        if (pt_norm < pt_min_norm)
+        {
+            pt_min = pt;
+            pt_min_norm = pt_norm;
+        }
+        else if (pt_norm > pt_max_norm)
+        {
+            pt_max = pt;
+            pt_max_norm = pt_norm;
+        }
+    }
+    Eigen::Vector4f bounding_box_z_extend(0, 0, 50, 1);
+    Eigen::Vector4f box_min = pt_min.homogeneous() - bounding_box_z_extend;
+    Eigen::Vector4f box_max = pt_max.homogeneous() + bounding_box_z_extend;
+
+    pcl::CropBox<PointRGB> box_filter;
+    box_filter.setMin(box_min);
+    box_filter.setMax(box_max);
+    box_filter.setInputCloud(point_cloud_full);
+    box_filter.filter(*points_cropped_rgb);
+
+    pcl::copyPointCloud(*points_cropped, *points_cropped);
+
+    return points_cropped;
+}

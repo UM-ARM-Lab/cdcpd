@@ -14,6 +14,7 @@
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 #include <opencv2/imgproc/types_c.h>
+#include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <pcl/point_types.h>
@@ -27,8 +28,6 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/eigen_ros_conversions.hpp>
 #include <arc_utilities/ros_helpers.hpp>
-
-// #include <opencv2/
 
 #include "cdcpd/cdcpd.h"
 #include "cdcpd_ros/camera_sub.h"
@@ -83,11 +82,6 @@ struct CDCPD_Moveit_Node {
 public:
     explicit CDCPD_Moveit_Node(std::string const& robot_namespace);
 
-    // Stores the provided RGB and Depth images in this object.
-    // TODO: refactor?
-    void callback_read_rgb_and_depth_images(cv::Mat const& rgb,
-        cv::Mat const& depth, cv::Matx33d const& intrinsics);
-
     // void initialize_deformable_object_configuration(Eigen::Vector3f const& rope_start_position,
     //     Eigen::Vector3f const& rope_end_position);
     // Returns initialized deformable object template based on type selected when launching CDCPD
@@ -136,7 +130,8 @@ public:
     // Returns a vector of tuples of 2 ints, <cluster index, deformable object index>
     // -1 for either of the indexes indicates no association was found for the cluster/tracked
     // object.
-    std::vector<std::tuple<int const, int const>> associate_corner_candidates_with_tracked_objects();
+    std::vector<std::tuple<int const, int const>> associate_corner_candidates_with_tracked_objects(
+        std::vector<CornerCandidateDetection> const& corner_candidate_detections);
 
     // Executes the corner candidate detection routine Zixuan prototyped
     // Do I want to make this a vector of pointers?

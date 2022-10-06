@@ -73,3 +73,8 @@ public:
     Eigen::Vector3f const last_upper_bounding_box_;
     SegmenterParameters const params_;
 };
+
+// class SegmenterPython : public Segmenter<>
+// {
+
+// };

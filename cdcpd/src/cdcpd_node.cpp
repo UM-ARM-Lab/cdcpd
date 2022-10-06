@@ -223,7 +223,7 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
             return;
         }
 
-        rgb_img_ = cv_rgb_ptr->image;
+        cv::cvtColor(cv_rgb_ptr->image, rgb_img_, cv::COLOR_BGR2RGB);
     };
 
     auto const depth_callback_wrapper = [&](const sensor_msgs::ImageConstPtr& depth_msg)
@@ -284,13 +284,6 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
 
     ros::spin();
 
-}
-
-void CDCPD_Moveit_Node::callback_read_rgb_and_depth_images(cv::Mat const& rgb,
-        cv::Mat const& depth, cv::Matx33d const& intrinsics)
-{
-    rgb_img_ = rgb;
-    depth_img_ = depth;
 }
 
 std::shared_ptr<DeformableObjectConfiguration>
@@ -615,89 +608,109 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     auto const corner_candidate_detections = do_corner_candidate_detection(points_full_cloud);
 
     // Associate the point cloud clusters to tracked templates
-    auto const associated_pairs = associate_corner_candidates_with_tracked_objects();
+    auto const associated_pairs =
+        associate_corner_candidates_with_tracked_objects(corner_candidate_detections);
 
     // associated_pairs is a vector of tuples with {corner_candidate_detection, DeformableObjectConfiguration}
     // Or maybe just a vector of tuples with {cluster_idx, configuration_id} so we don't have to
     // default-construct the candidate_detection and configurations when there's nothing there.
     // OR it could just be null ptrs to invalid objects.
-    // for (auto const& assoc_pair : associated_pairs)
-    // {
-    //     auto const& cluster = std::get<0>(assoc_pair);
-    //     auto const& object_config = std::get<1>(assoc_pair);
+    for (auto const& assoc_pair : associated_pairs)
+    {
+        int const& candidate_idx = std::get<0>(assoc_pair);
+        int const& def_obj_id = std::get<1>(assoc_pair);
 
-    //     if (cluster.is_empty() && !object_config.is_empty())
-    //     {
-    //         // To check occlusion, we need the full point cloud. This will likely be non-trivial
-    //         if (!object_config.is_occluded())
-    //         {
-    //             // Come up with some routine for reducing existence probability.
-    //             object_config.reduce_existence_probability();
-    //         }
-    //         else
-    //         {
-    //             // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
-    //             // it
-    //         }
-    //     }
-    //     else if (object_config.is_empty() && !cluster.is_empty())
-    //     {
-    //         // Get the affine transform for the cluster that will define where we place the template
-    //         // in the camera frame.
+        if (candidate_idx == -1 && def_obj_id != -1)
+        {
+            // To check occlusion, we need the full point cloud. This will likely be non-trivial
+            // if (!def_obj_id.is_occluded())
+            // {
+            //     // Come up with some routine for reducing existence probability.
+            //     def_obj_id.reduce_existence_probability();
+            // }
+            // else
+            // {
+            //     // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
+            //     // it
+            // }
+        }
+        else if (def_obj_id == -1 && candidate_idx != -1)
+        {
+            // Get the affine transform for the candidate_idx that will define where we place the template
+            // in the camera frame.
 
-    //         // Initialize new deformable object configuration based on the unassociated
-    //         // cluster received from segmentation routine.
-    //         // TODO: this should initialize based on the affine transform we just got and return
-    //         // the new deformable object configuration
-    //         initialize_deformable_object_configuration(start_position, end_position);
+            // Initialize new deformable object configuration based on the unassociated
+            // candidate_idx received from segmentation routine.
+            // TODO: this should initialize based on the affine transform we just got and return
+            // the new deformable object configuration
+            // auto def_obj_new = initialize_deformable_object_configuration(start_position, end_position);
+            auto def_obj_new = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
+                node_params.length_initial_cloth, node_params.width_initial_cloth,
+                node_params.grid_size_initial_guess_cloth));
 
-    //         // Get a new unique ID for the template we're tracking.
+            // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
+            // Z direction as we apply a bounding-box filter (where the box is centered at the camera
+            // frame. That excludes the actual segmentation of the cloth in the current implementation.
 
-    //         // Add the deformable object configuration to our map of configurations with
-    //         // {new_id, new_configuration}
+            def_obj_new->template_affine_transform_ = corner_candidate_detections[candidate_idx].template_affine_transform_;
 
-    //         // Initialize CDCPD for our new template.
-    //         auto cdcpd_instance = std::make_unique<CDCPD>(nh, ph,
-    //             deformable_object_configuration_->initial_.points_,
-    //             deformable_object_configuration_->initial_.edges_,
-    //             cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
-    //             cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-    //             cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+            // Have to call initializeTracking() before casting to base class since it relies on virtual
+            // functions.
+            def_obj_new->initializeTracking();
 
-    //         // Add the CDCPD instance to our map of instances
-    //     }
-    //     else if (!object_config.is_empty() && !cluster.is_empty())
-    //     {
-    //         // We received data for this tracked configuration, run the associated CDCPD instance
-    //         // with the local point cloud.
-    //         auto const out = (*cdcpd)(points_full_cloud, deformable_object_configuration_->tracked_.points_,
-    //             obstacle_constraints, deformable_object_configuration_->max_segment_length_, q_dot,
-    //             q_config, gripper_indices);
+            // Get a new unique ID for the template we're tracking.
+            int const def_obj_new_id = get_new_deformable_object_configuration_id();
 
-    //         // Get the associated ID with our object_configuration.
-    //         int configuration_id; // = get_configuration_id();
+            // Add the deformable object configuration to our map of configurations with
+            // {new_id, new_configuration}
+            // deformable_object_configurations_.emplace({def_obj_new_id, def_obj_new});
+            deformable_object_configurations_[def_obj_new_id] = std::move(def_obj_new);
 
-    //         // Store in our output structure.
-    //         cdcpd_outputs_[configuration_id] = out;
+            // Initialize CDCPD for our new template.
+            auto cdcpd_instance = std::make_unique<CDCPD>(nh, ph,
+                def_obj_new->initial_.points_, def_obj_new->initial_.edges_,
+                cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+                cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+                cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
 
-    //         // Update the tracked configuration for this configuration
-    //         deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
-    //     }
-    //     else
-    //     {
-    //         // This shouldn't happen. Something is wrong with association.
-    //     }
-    // }
+            // Add the CDCPD instance to our map of instances
+            cdcpd_instances_[def_obj_new_id] = std::move(cdcpd_instance);
+        }
+        else if (def_obj_id != -1 && candidate_idx != -1)
+        {
+            // Grab the mask and local neighborhood point cloud from the corner candidate detection.
+            corner_candidate_detections[candidate_idx];
+            // We received data for this tracked configuration, run the associated CDCPD instance
+            // with the local point cloud.
+            auto const out = (*cdcpd_instances_.at(def_obj_id))(points_full_cloud,
+                deformable_object_configurations_.at(def_obj_id)->tracked_.points_,
+                obstacle_constraints, deformable_object_configurations_.at(def_obj_id)->max_segment_length_, q_dot,
+                q_config, gripper_indices);
+
+            // Get the associated ID with our object_configuration.
+            int configuration_id; // = get_configuration_id();
+
+            // Store in our output structure.
+            cdcpd_outputs_[configuration_id] = out;
+
+            // Update the tracked configuration for this configuration
+            deformable_object_configurations_.at(def_obj_id)->tracked_.points_ = out.gurobi_output;
+        }
+        else
+        {
+            // This shouldn't happen. Something is wrong with association.
+        }
+    }
 
     // Testing with just one configuration for now.
     // int def_obj_id = 0;
-    auto& object_configuration = deformable_object_configurations_.at(def_obj_id);
-    auto& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
-    auto const out = (*cdcpd_instance)(points_full_cloud, object_configuration->tracked_.points_,
-        obstacle_constraints, object_configuration->max_segment_length_, q_dot,
-        q_config, gripper_indices);
-    object_configuration->tracked_.points_ = out.gurobi_output;
-    cdcpd_outputs_.emplace(def_obj_id, out);
+    // auto& object_configuration = deformable_object_configurations_.at(def_obj_id);
+    // auto& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+    // auto const out = (*cdcpd_instance)(points_full_cloud, object_configuration->tracked_.points_,
+    //     obstacle_constraints, object_configuration->max_segment_length_, q_dot,
+    //     q_config, gripper_indices);
+    // object_configuration->tracked_.points_ = out.gurobi_output;
+    // cdcpd_outputs_.emplace(def_obj_id, out);
     // publish_outputs(t0, out);
     publish_outputs(t0);
 
@@ -861,21 +874,41 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
 }
 
 std::vector<std::tuple<int const, int const>>
-    CDCPD_Moveit_Node::associate_corner_candidates_with_tracked_objects()
+    CDCPD_Moveit_Node::associate_corner_candidates_with_tracked_objects(
+        std::vector<CornerCandidateDetection> const& corner_candidate_detections)
 {
     std::vector<std::tuple<int const, int const>> associated_pairs;
 
     // Could just do something really dumb at first and find minimum distance between each tracked
     // object and the clusters
-    // for (auto const& candidate : corner_candidates)
-    // {
-    //     double min_dist = 1e15;
-    //     bool association_made = false;
-    //     for (auto const& def_obj_pair : deformable_object_configurations_)
-    //     {
-    //         // Calculate distance between candidate centroid and tracked_object_centroid
-    //     }
-    // }
+    int candidate_idx = 0;
+    for (auto const& candidate : corner_candidate_detections)
+    {
+        double min_dist = 1e15;
+        int min_dist_def_obj_id = -1;  // Initialize to invalid value.
+        bool association_made = false;
+        for (auto const& def_obj_pair : deformable_object_configurations_)
+        {
+            // Should probably take centroid or something.
+            auto const& def_obj_pnt = def_obj_pair.second->tracked_.vertices_.col(0);
+
+            float const dist = (candidate.corner_point_camera_frame_ - def_obj_pnt).norm();
+
+            // Calculate distance between candidate centroid and tracked_object_centroid
+            min_dist_def_obj_id = dist < min_dist ? def_obj_pair.first : min_dist_def_obj_id;
+            min_dist = dist < min_dist ? dist : min_dist;
+        }
+
+        if (min_dist > 100.0F)  // [mm]
+        {
+            min_dist_def_obj_id = -1;
+        }
+
+        // Make the tuple and store in the associated_pairs vector
+        associated_pairs.push_back({candidate_idx, min_dist_def_obj_id});
+
+        ++candidate_idx;
+    }
     return associated_pairs;
 }
 
@@ -898,20 +931,87 @@ std::vector<CornerCandidateDetection> CDCPD_Moveit_Node::do_corner_candidate_det
 
     // Call the corner candidate detection script, passing in the path to the recently written
     // full point cloud.
+    std::string cmd = "python3 /home/dcolli23/code/lab/iros_cloth_classic/launcher_interface.py";
+    system(cmd.c_str());
+    ROS_INFO("Finished running python script!");
 
     // Read the YAML file output by the corner detection script (saved in a pre-determined location)
     // This contains the information in an array for all corner candidate detections.
-
+    YAML::Node root_node = YAML::LoadFile(root_dir + "corner_candidate_detections.yaml")[
+        "corner_candidate_detections"];
+    assert(root_node.IsSequence());
     // Loop through the corner candidate information array
-    // for (auto const& candidate_info : candidate_info_array)
-    // {
-    //     // Read the local point cloud neighborhood.
-    //     // Read the corner candidate mask
-    //     // Convert the centroid_camera_frame into an Eigen::Vector3f variable
-    //     // Convert the template_to_corner_candidate_affine_transform into cv::Mat variable
-    //     // Initialize a new CornerCandidateDetection with the read variables
-    //     // Store the candidate detection in our vector.
-    // }
+    // for(YAML::const_iterator it = root_node.begin(); it != root_node.end(); ++it)
+    for (size_t det_num = 0; det_num < root_node.size(); ++det_num)
+    {
+        YAML::Node det_node = root_node[det_num];
+        // {
+        //     std::stringstream outmsg;
+        //     outmsg << "det_node type: " << det_node.Type();
+        //     ROS_INFO(outmsg.str().c_str());
+        // }
+
+        // Read the corner point in the camera frame.
+        YAML::Node const& cam_point_node = det_node["corner_point_camera_frame"];
+
+        Eigen::Vector3f corner_point_camera_frame;
+        for (size_t i = 0; i < cam_point_node.size(); ++i)
+        {
+            corner_point_camera_frame(i) = cam_point_node[i].as<float>();
+        }
+        // {
+        //     std::stringstream outmsg;
+        //     outmsg << "Point: " << corner_point_camera_frame;
+        //     ROS_INFO(outmsg.str().c_str());
+        // }
+
+        // Read the local point cloud neighborhood.
+        std::vector<Eigen::Vector3f> local_point_cloud_bounds;
+        YAML::Node const& local_node = det_node["local_bbox_coordinates_camera_frame"];
+        for (size_t i = 0; i < local_node.size(); ++i)
+        {
+            Eigen::Vector3f local_bound;
+            local_bound(0) = local_node[i][0].as<float>();
+            local_bound(1) = local_node[i][1].as<float>();
+            local_bound(2) = local_node[i][2].as<float>();
+            local_point_cloud_bounds.push_back(local_bound);
+        }
+
+
+        // Read the corner candidate mask
+        std::vector<Eigen::Vector3f> mask_bounds;
+        YAML::Node const& mask_node = det_node["mask_bbox_coordinates_camera_frame"];
+        for (size_t i = 0; i < mask_node.size(); ++i)
+        {
+            Eigen::Vector3f mask_bound;
+            mask_bound(0) = mask_node[i][0].as<float>();
+            mask_bound(1) = mask_node[i][1].as<float>();
+            mask_bound(2) = mask_node[i][2].as<float>();
+            mask_bounds.push_back(mask_bound);
+        }
+
+        // Convert the template_to_corner_candidate_affine_transform into cv::Mat variable
+        Eigen::Matrix<float, 4, 4> affine_transform_eigen;
+        YAML::Node const& transform_node = det_node["P_corner_to_camera"];
+        for (size_t i = 0; i < 4; ++i)
+        {
+            for (size_t j = 0; j < 4; ++j)
+            {
+                affine_transform_eigen(i, j) = transform_node[i][j].as<float>();
+            }
+        }
+        cv::Mat affine_transform;
+        cv::eigen2cv(affine_transform_eigen, affine_transform);
+
+
+        // CornerCandidateDetection candidate(corner_point_camera_frame, affine_transform,
+        //     local_point_cloud_bounds, mask_bounds);
+
+        // Initialize a new CornerCandidateDetection with the read variables and store the
+        // candidate detection in our vector.
+        candidate_detections.push_back({corner_point_camera_frame, affine_transform,
+            local_point_cloud_bounds, mask_bounds});
+    }
 
 
     auto t_end = ros::Time::now();
