@@ -6,6 +6,7 @@
 #include <geometric_shapes/shapes.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <jsk_recognition_msgs/BoundingBox.h>
+#include <jsk_recognition_msgs/BoundingBoxArray.h>
 #include <moveit/collision_detection/collision_common.h>
 #include <moveit/collision_detection/collision_tools.h>
 #include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
@@ -75,9 +76,13 @@ struct CDCPD_Moveit_Node {
 public:
     explicit CDCPD_Moveit_Node(std::string const& robot_namespace);
 
-    // Initializes the deformable object template based on the type selected when launching CDCPD
-    void initialize_deformable_object_configuration(Eigen::Vector3f const& rope_start_position,
-        Eigen::Vector3f const& rope_end_position);
+
+    // void initialize_deformable_object_configuration(Eigen::Vector3f const& rope_start_position,
+    //     Eigen::Vector3f const& rope_end_position);
+    // Returns initialized deformable object template based on type selected when launching CDCPD
+    std::shared_ptr<DeformableObjectConfiguration> initialize_deformable_object_configuration(
+        Eigen::Vector3f const& rope_start_position, Eigen::Vector3f const& rope_end_position);
+
 
     ObstacleConstraints find_nearest_points_and_normals(planning_scene_monitor::LockedPlanningSceneRW planning_scene,
                                                       Eigen::Isometry3d const& cdcpd_to_moveit);
@@ -102,14 +107,14 @@ public:
     // NOTE: Meant to be called before CDCPD runs as CDCPD modifies the tracked points.
     void publish_template() const;
 
-    // Return a vector of ObstacleConstraint objects.
-    ObstacleConstraints get_obstacle_constraints();
+    // Return a vector of ObstacleConstraint objects for the given tracked object.
+    ObstacleConstraints get_obstacle_constraints(int const deformable_object_id);
 
-    // Publishes the CDCPD outputs.
-    void publish_outputs(ros::Time const& t0, CDCPD::Output const& out);
+    // Publishes all CDCPD outputs in `cdcpd_outputs_` member.
+    void publish_outputs(ros::Time const& t0); //, CDCPD::Output const& out);
 
     // Main callback for RGB and Depth Mat inputs.
-    void callback(cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics);
+    // void callback(cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics);
 
     // Main callback for point cloud inputs.
     void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg);
@@ -125,7 +130,6 @@ public:
     CDCPD_Publishers publishers;
     CDCPD_Node_Parameters const node_params;
     CDCPD_Parameters const cdcpd_params;
-    std::unique_ptr<CDCPD> cdcpd;
     planning_scene_monitor::PlanningSceneMonitorPtr scene_monitor_;
     robot_model_loader::RobotModelLoaderPtr model_loader_;
     robot_model::RobotModelPtr model_;
@@ -139,8 +143,22 @@ public:
     unsigned int gripper_count;
     Eigen::MatrixXi gripper_indices;
 
-    std::unique_ptr<DeformableObjectConfiguration> deformable_object_configuration_;
+    // Map with configuration ID and configuration object
+    std::map<int const, std::shared_ptr<DeformableObjectConfiguration>> deformable_object_configurations_;
+
+    // Map with configuration ID and the CDCPD instance used to track the configuration
+    std::map<int const, std::shared_ptr<CDCPD>> cdcpd_instances_;
+
+    std::map<int const, CDCPD::Output> cdcpd_outputs_;
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
+
+protected:
+    // Returns a new, unique ID to be associated to the new deformable object that's being tracked
+    // and increments the internal variable to produce the next ID to be assigned.
+    int get_new_deformable_object_configuration_id(){ return next_deformable_object_id_++; }
+
+    // The deformable object ID for the next object we encounter.
+    int next_deformable_object_id_;
 };

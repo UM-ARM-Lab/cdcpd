@@ -103,7 +103,8 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
       model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
       model_(model_loader_->getModel()),
       visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
-      tf_listener_(tf_buffer_)
+      tf_listener_(tf_buffer_),
+      next_deformable_object_id_(0)
 {
     auto const scene_topic = ros::names::append(robot_namespace,
         "move_group/monitored_planning_scene");
@@ -151,20 +152,30 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         end_position << node_params.max_rope_length / 2, 0, 1.0;
     }
 
-    initialize_deformable_object_configuration(start_position, end_position);
+    // Move this code into a loop within the points callback function and initialize new templates
+    // based on unassociated clusters.
+    {
+        auto new_configuration = initialize_deformable_object_configuration(start_position,
+            end_position);
 
-    cdcpd = std::make_unique<CDCPD>(nh, ph,
-        deformable_object_configuration_->initial_.points_,
-        deformable_object_configuration_->initial_.edges_,
-        cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
-        cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-        cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+        auto cdcpd_instance = std::make_shared<CDCPD>(nh, ph, new_configuration->initial_.points_,
+            new_configuration->initial_.edges_,
+            cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+            cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+            cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+
+        // Add the CDCPD instance and deformable object configuration to our maps with a unique ID
+        int const new_id = get_new_deformable_object_configuration_id();
+        deformable_object_configurations_.emplace(new_id, new_configuration);
+        cdcpd_instances_.emplace(new_id, cdcpd_instance);
+    }
 
     // Define the callback wrappers we need to pass to ROS nodes.
     auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
         cv::Matx33d const& intrinsics)
     {
-        callback(rgb, depth, intrinsics);
+        // callback(rgb, depth, intrinsics);
+        return;
     };
     auto const points_callback_wrapper = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg)
     {
@@ -188,9 +199,11 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     }
   }
 
-void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
-    Eigen::Vector3f const& rope_start_position, Eigen::Vector3f const& rope_end_position)
+std::shared_ptr<DeformableObjectConfiguration>
+    CDCPD_Moveit_Node::initialize_deformable_object_configuration(
+        Eigen::Vector3f const& rope_start_position, Eigen::Vector3f const& rope_end_position)
 {
+    std::unique_ptr<DeformableObjectConfiguration> def_obj_config;
     if (node_params.deformable_object_type == DeformableObjectType::rope)
     {
         auto configuration = std::unique_ptr<RopeConfiguration>(new RopeConfiguration(
@@ -199,7 +212,7 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
-        deformable_object_configuration_ = std::move(configuration);
+        def_obj_config = std::move(configuration);
     }
     else if (node_params.deformable_object_type == DeformableObjectType::cloth)
     {
@@ -218,8 +231,19 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
-        deformable_object_configuration_ = std::move(configuration);
+        def_obj_config = std::move(configuration);
     }
+    else
+    {
+        std::stringstream msg;
+        msg << "Error occurred with initialize_deformable_object_configuration()!\n"
+            << "node_params.deformable_object_type = " << node_params.deformable_object_type
+            << " not understood! This is likely due to a developer introducing a new deformable "
+            << "object type.";
+        ROS_ERROR(msg.str().c_str());
+    }
+
+    return def_obj_config;
 }
 
 ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
@@ -447,35 +471,42 @@ ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
     return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
   }
 
-void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
-    cv::Matx33d const& intrinsics)
-{
-    auto const t0 = ros::Time::now();
-    auto [q_config, q_dot] = get_q_config();
+// void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
+//     cv::Matx33d const& intrinsics)
+// {
+//     auto const t0 = ros::Time::now();
+//     auto [q_config, q_dot] = get_q_config();
 
-    publish_bbox();
+//     publish_bbox();
 
-    auto obstacle_constraints = get_obstacle_constraints();
+//     auto obstacle_constraints = get_obstacle_constraints();
 
-    auto const hsv_mask = getHsvMask(ph, rgb);
-    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
-                              deformable_object_configuration_->tracked_.points_,
-                              obstacle_constraints,
-                              deformable_object_configuration_->max_segment_length_, q_dot,
-                              q_config, gripper_indices);
-    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
-    publish_outputs(t0, out);
-    reset_if_bad(out);
-};
+//     auto const hsv_mask = getHsvMask(ph, rgb);
+//     auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
+//                               deformable_object_configuration_->tracked_.points_,
+//                               obstacle_constraints,
+//                               deformable_object_configuration_->max_segment_length_, q_dot,
+//                               q_config, gripper_indices);
+//     deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
+//     publish_outputs(t0, out);
+//     reset_if_bad(out);
+// };
 
 void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
 {
     auto const t0 = ros::Time::now();
-    auto [q_config, q_dot] = get_q_config();
+
+    // Testing with just one configuration for now.
+    int def_obj_id = 0;
+
+    // Clear the CDCPD outputs from the previous iteration.
+    cdcpd_outputs_.clear();
 
     publish_bbox();
-    publish_template();
-    auto obstacle_constraints = get_obstacle_constraints();
+    // publish_template();
+
+    auto [q_config, q_dot] = get_q_config();
+    auto obstacle_constraints = get_obstacle_constraints(def_obj_id);
 
     pcl::PCLPointCloud2 points_v2;
     pcl_conversions::toPCL(*points_msg, points_v2);
@@ -483,24 +514,121 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     pcl::fromPCLPointCloud2(points_v2, *points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
-    auto const out = (*cdcpd)(points, deformable_object_configuration_->tracked_.points_,
-        obstacle_constraints, deformable_object_configuration_->max_segment_length_, q_dot,
+    // Get the point cloud clusters and their local point cloud neighborhood from the corner
+    // candidate detection routine
+    // NOTE: Zixuan's routine works on the RGB/D images. May do translation here or may do in the
+    // corner_candidate_detection routine.
+    // auto const corner_candidate_detections = do_corner_candidate_detection(points_v2)
+
+    // Associate the point cloud clusters to tracked templates
+
+    // associated_pairs is a vector of tuples with {corner_candidate_detection, DeformableObjectConfiguration}
+    // Or maybe just a vector of tuples with {cluster_idx, configuration_id} so we don't have to
+    // default-construct the candidate_detection and configurations when there's nothing there.
+    // OR it could just be null ptrs to invalid objects.
+    // for (auto const& assoc_pair : associated_pairs)
+    // {
+    //     auto const& cluster = std::get<0>(assoc_pair);
+    //     auto const& object_config = std::get<1>(assoc_pair);
+
+    //     if (cluster.is_empty() && !object_config.is_empty())
+    //     {
+    //         // To check occlusion, we need the full point cloud. This will likely be non-trivial
+    //         if (!object_config.is_occluded())
+    //         {
+    //             // Come up with some routine for reducing existence probability.
+    //             object_config.reduce_existence_probability();
+    //         }
+    //         else
+    //         {
+    //             // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
+    //             // it
+    //         }
+    //     }
+    //     else if (object_config.is_empty() && !cluster.is_empty())
+    //     {
+    //         // Get the affine transform for the cluster that will define where we place the template
+    //         // in the camera frame.
+
+    //         // Initialize new deformable object configuration based on the unassociated
+    //         // cluster received from segmentation routine.
+    //         // TODO: this should initialize based on the affine transform we just got and return
+    //         // the new deformable object configuration
+    //         initialize_deformable_object_configuration(start_position, end_position);
+
+    //         // Get a new unique ID for the template we're tracking.
+
+    //         // Add the deformable object configuration to our map of configurations with
+    //         // {new_id, new_configuration}
+
+    //         // Initialize CDCPD for our new template.
+    //         auto cdcpd_instance = std::make_unique<CDCPD>(nh, ph,
+    //             deformable_object_configuration_->initial_.points_,
+    //             deformable_object_configuration_->initial_.edges_,
+    //             cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+    //             cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+    //             cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+
+    //         // Add the CDCPD instance to our map of instances
+    //     }
+    //     else if (!object_config.is_empty() && !cluster.is_empty())
+    //     {
+    //         // We received data for this tracked configuration, run the associated CDCPD instance
+    //         // with the local point cloud.
+    //         auto const out = (*cdcpd)(points, deformable_object_configuration_->tracked_.points_,
+    //             obstacle_constraints, deformable_object_configuration_->max_segment_length_, q_dot,
+    //             q_config, gripper_indices);
+
+    //         // Get the associated ID with our object_configuration.
+    //         int configuration_id; // = get_configuration_id();
+
+    //         // Store in our output structure.
+    //         cdcpd_outputs_[configuration_id] = out;
+
+    //         // Update the tracked configuration for this configuration
+    //         deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
+    //     }
+    //     else
+    //     {
+    //         // This shouldn't happen. Something is wrong with association.
+    //     }
+    // }
+
+    // Testing with just one configuration for now.
+    // int def_obj_id = 0;
+    auto& object_configuration = deformable_object_configurations_.at(def_obj_id);
+    auto& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+    auto const out = (*cdcpd_instance)(points, object_configuration->tracked_.points_,
+        obstacle_constraints, object_configuration->max_segment_length_, q_dot,
         q_config, gripper_indices);
-    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
-    publish_outputs(t0, out);
-    reset_if_bad(out);
+    object_configuration->tracked_.points_ = out.gurobi_output;
+    cdcpd_outputs_.emplace(def_obj_id, out);
+    // publish_outputs(t0, out);
+    publish_outputs(t0);
+
+    // Ignoring this for now as I don't have this implemented.
+    // reset_if_bad(out);
 }
 
 void CDCPD_Moveit_Node::publish_bbox() const
 {
+    // TODO: Loop through and add a bounding box for each tracked configuration.
+    // jsk_recognition_msgs::BoundingBoxArray bbox_array_msg;
+
+
     jsk_recognition_msgs::BoundingBox bbox_msg;
+
+    // Get the CDCPD instance associated with this ID
+    int def_obj_id = 0;
+    auto const& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+
     bbox_msg.header.stamp = ros::Time::now();
     bbox_msg.header.frame_id = node_params.camera_frame;
 
-    auto const bbox_size = extent_to_env_size(cdcpd->last_lower_bounding_box,
-        cdcpd->last_upper_bounding_box);
-    auto const bbox_center = extent_to_center(cdcpd->last_lower_bounding_box,
-        cdcpd->last_upper_bounding_box);
+    auto const bbox_size = extent_to_env_size(cdcpd_instance->last_lower_bounding_box,
+        cdcpd_instance->last_upper_bounding_box);
+    auto const bbox_center = extent_to_center(cdcpd_instance->last_lower_bounding_box,
+        cdcpd_instance->last_upper_bounding_box);
     bbox_msg.pose.position.x = bbox_center.x();
     bbox_msg.pose.position.y = bbox_center.y();
     bbox_msg.pose.position.z = bbox_center.z();
@@ -514,25 +642,32 @@ void CDCPD_Moveit_Node::publish_bbox() const
 void CDCPD_Moveit_Node::publish_template() const
 {
     auto time = ros::Time::now();
-    deformable_object_configuration_->tracked_.points_->header.frame_id = node_params.camera_frame;
-    pcl_conversions::toPCL(time, deformable_object_configuration_->tracked_.points_->header.stamp);
-    publishers.pre_template_publisher.publish(deformable_object_configuration_->tracked_.points_);
+
+    // Commented out so I don't have to fix this while prototyping.
+    // deformable_object_configuration_->tracked_.points_->header.frame_id = node_params.camera_frame;
+    // pcl_conversions::toPCL(time, deformable_object_configuration_->tracked_.points_->header.stamp);
+    // publishers.pre_template_publisher.publish(deformable_object_configuration_->tracked_.points_);
 }
 
-ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
+// TODO: make a CDCPDRunner class that handles this for us. The Node should just worry about
+// initialization and ROS spinning/callbacks.
+ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints(int const deformable_object_id)
 {
     ObstacleConstraints obstacle_constraints;
     if (moveit_ready and node_params.moveit_enabled)
     {
-        obstacle_constraints = get_moveit_obstacle_constriants(
-            deformable_object_configuration_->tracked_.points_);
+        auto& def_obj_config = deformable_object_configurations_.at(deformable_object_id);
+        obstacle_constraints = get_moveit_obstacle_constriants(def_obj_config->tracked_.points_);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
     }
     return obstacle_constraints;
 }
 
-void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const& out)
+void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0)
 {
+    int const def_obj_id = 0;
+    auto& def_obj_config = deformable_object_configurations_.at(def_obj_id);
+    auto& out = cdcpd_outputs_.at(def_obj_id);
     // Update the frame ids
     {
         out.original_cloud->header.frame_id = node_params.camera_frame;
@@ -596,13 +731,13 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
     // compute length and print that for debugging purposes
     auto output_length{0.0};
     for (auto point_idx{0};
-         point_idx < deformable_object_configuration_->tracked_.points_->size() - 1;
+         point_idx < def_obj_config->tracked_.points_->size() - 1;
          ++point_idx)
     {
         Eigen::Vector3f const p =
-          deformable_object_configuration_->tracked_.points_->at(point_idx + 1).getVector3fMap();
+            def_obj_config->tracked_.points_->at(point_idx + 1).getVector3fMap();
         Eigen::Vector3f const p_next =
-          deformable_object_configuration_->tracked_.points_->at(point_idx).getVector3fMap();
+            def_obj_config->tracked_.points_->at(point_idx).getVector3fMap();
         output_length += (p_next - p).norm();
     }
     ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
@@ -618,14 +753,15 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
     if (out.status == OutputStatus::NoPointInFilteredCloud or
         out.status == OutputStatus::ObjectiveTooHigh)
     {
+        // TODO: Implement reseting based on looping through all IDs of tracked objects.
         // Recreate CDCPD from initial tracking.
-        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph,
-            deformable_object_configuration_->initial_.points_,
-            deformable_object_configuration_->initial_.edges_,
-            cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
-            cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-            cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
-        cdcpd = std::move(cdcpd_new);
+        // std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph,
+        //     deformable_object_configuration_->initial_.points_,
+        //     deformable_object_configuration_->initial_.edges_,
+        //     cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+        //     cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+        //     cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
+        // cdcpd = std::move(cdcpd_new);
     }
 }
 
