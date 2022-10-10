@@ -125,7 +125,7 @@ class CDCPD {
                     ObstacleConstraints points_normals, double max_segment_length,
                     const smmap::AllGrippersSinglePoseDelta &q_dot = {},
                     const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
-                    int pred_choice = 0);
+                    int pred_choice = 0, PointCloud::Ptr masked_cloud=pcl::shared_ptr<PointCloud>());
 
   // The common implementation that the above overloads call
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,

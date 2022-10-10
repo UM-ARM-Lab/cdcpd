@@ -2,12 +2,16 @@
 <launch>
 
   <!-- Launch the Azure Kinect driver. -->
-  <include file="$(find azure_kinect_ros_driver)/launch/driver.launch" >
+  <include file="$(find azure_kinect_ros_driver)/launch/kinect_rgbd.launch" >
+  <!-- <include file="$(find azure_kinect_ros_driver)/launch/driver.launch" > -->
     <arg name="overwrite_robot_description" value="False" />
     <arg name="sensor_sn" value="000269420412"/>
     <arg name="fps" value="30" />
     <arg name="color_resolution" value="720P" />
     <arg name="depth_mode" value="NFOV_UNBINNED" />
+    <arg name="point_cloud" value="true"/>
+    <arg name="rgb_point_cloud" value="true"/>
+    <arg name="point_cloud_in_depth_frame" value="false"/>
   </include>
 
   <!-- Launch RVIZ with the corresponding Azure Kinect configuration. -->
@@ -20,10 +24,10 @@
         <!-- This file uses the point cloud, but you can also use the RGB and Depth input by
         commenting the "points" param and uncommenting the "rgb_topic" and "depth_topic" params. -->
         <param name="points" value="/points2"/>
-        <param name="rgb_topic" value="/rgb_to_depth/image_raw"/>
-        <param name="depth_topic" value="/depth/image_raw"/>
-        <param name="info_topic" value="/depth/camera_info"/>
-        <param name="camera_frame" value="camera_body"/>
+        <param name="rgb_topic" value="/rgb/image_raw"/>
+        <param name="depth_topic" value="/depth_to_rgb/image_raw"/>
+        <param name="info_topic" value="/rgb/camera_info"/>
+        <param name="camera_frame" value="rgb_camera_link"/>
 
         <!-- CDCPD deformable object parameters -->
         <param name="deformable_object_type" value="cloth"/>

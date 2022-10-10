@@ -502,7 +502,9 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
       fixed_points_weight(fixed_points_weight),
       use_recovery(use_recovery),
       last_grasp_status({false, false}),
-      objective_value_threshold_(objective_value_threshold) {
+      objective_value_threshold_(objective_value_threshold)
+{
+  ROS_INFO("Past CDCPD initializer list");
   last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
   last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 
@@ -592,7 +594,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
                                 ObstacleConstraints obstacle_constraints, const double max_segment_length,
                                 const smmap::AllGrippersSinglePoseDelta &q_dot,
                                 const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
-                                const int pred_choice) {
+                                const int pred_choice, PointCloud::Ptr masked_cloud) {
   // FIXME: this has a lot of duplicate code
   this->gripper_idx = gripper_idx;
 
@@ -600,26 +602,36 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   // template_edges: (2, K) matrix corresponding to E in the paper
   total_frames_ += 1;
 
-  // Perform HSV segmentation
-  auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box,
-      last_upper_bounding_box);
-  segmenter->segment(points);
+  // If the mask is empty, assume it's because the mask is uninitialized and that we still need to
+  // run segmentation.
+  if (masked_cloud->size() == 0)
+  {
+      ROS_INFO("Performing segmentation in CDCPD::operator()");
+      // Perform HSV segmentation
+      auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box,
+          last_upper_bounding_box);
+      segmenter->segment(points);
 
-  // Drop color info from the point cloud.
-  // NOTE: We use a boost pointer here because that's what our version of pcl is expecting in
-  // the `setInputCloud` function call.
-  auto cloud = boost::make_shared<PointCloud>();
-  pcl::copyPointCloud(segmenter->get_segmented_cloud(), *cloud);
+      // Drop color info from the point cloud.
+      // NOTE: We use a boost pointer here because that's what our version of pcl is expecting in
+      // the `setInputCloud` function call.
+      auto masked_cloud = boost::make_shared<PointCloud>();
+      pcl::copyPointCloud(segmenter->get_segmented_cloud(), *masked_cloud);
+  }
+  else
+  {
+    ROS_INFO("Using provided mask");
+  }
 
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-      "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
+      "filtered cloud: (" << masked_cloud->height << " x " << masked_cloud->width << ")");
 
   /// Perform VoxelGrid filter downsampling.
   PointCloud::Ptr cloud_downsampled(new PointCloud);
   pcl::VoxelGrid<pcl::PointXYZ> sor;
   ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: "
-      << cloud->width);
-  sor.setInputCloud(cloud);
+      << masked_cloud->width);
+  sor.setInputCloud(masked_cloud);
   sor.setLeafSize(0.02f, 0.02f, 0.02f);
   sor.filter(*cloud_downsampled);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
@@ -636,7 +648,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
 
-    return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out,
+    return CDCPD::Output{points, masked_cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out,
         OutputStatus::NoPointInFilteredCloud};
   }
 
@@ -685,7 +697,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
     status = OutputStatus::ObjectiveTooHigh;
   }
 
-  return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
+  return CDCPD::Output{points, masked_cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,

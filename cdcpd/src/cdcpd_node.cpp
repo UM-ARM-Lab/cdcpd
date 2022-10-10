@@ -65,7 +65,7 @@ CDCPD_Publishers::CDCPD_Publishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
     output_publisher = nh.advertise<PointCloud>("cdcpd/output", 10);
     order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
-    bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
+    bbox_array_pub = ph.advertise<jsk_recognition_msgs::BoundingBoxArray>("bbox", 10);
 }
 
 
@@ -154,21 +154,21 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
 
     // Move this code into a loop within the points callback function and initialize new templates
     // based on unassociated clusters.
-    {
-        auto new_configuration = initialize_deformable_object_configuration(start_position,
-            end_position);
+    // {
+    //     auto new_configuration = initialize_deformable_object_configuration(start_position,
+    //         end_position);
 
-        auto cdcpd_instance = std::make_shared<CDCPD>(nh, ph, new_configuration->initial_.points_,
-            new_configuration->initial_.edges_,
-            cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
-            cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-            cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+    //     auto cdcpd_instance = std::make_shared<CDCPD>(nh, ph, new_configuration->initial_.points_,
+    //         new_configuration->initial_.edges_,
+    //         cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+    //         cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+    //         cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
 
-        // Add the CDCPD instance and deformable object configuration to our maps with a unique ID
-        int const new_id = get_new_deformable_object_configuration_id();
-        deformable_object_configurations_.emplace(new_id, new_configuration);
-        cdcpd_instances_.emplace(new_id, cdcpd_instance);
-    }
+    //     // Add the CDCPD instance and deformable object configuration to our maps with a unique ID
+    //     int const new_id = get_new_deformable_object_configuration_id();
+    //     deformable_object_configurations_.emplace(new_id, new_configuration);
+    //     cdcpd_instances_.emplace(new_id, cdcpd_instance);
+    // }
 
     // Define the callback wrappers we need to pass to ROS nodes.
     // auto const callback_read_rgb_and_depth_images_wrapper = [&](cv::Mat const& rgb,
@@ -182,32 +182,6 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         points_callback(points_msg);
     };
 
-    // auto const points_rgb_and_depth_callback_wrapper =
-    //     [&](const sensor_msgs::PointCloud2ConstPtr& points_msg, cv::Mat const& rgb,
-    //         cv::Mat const& depth, cv::Matx33d const& intrinsics)
-    // {
-    //     // Just store the rgb and depth images in this object.
-    //     callback_read_rgb_and_depth_images(rgb, depth, intrinsics);
-    //     // Do the point cloud routine somewhat like normal, with corner candidate detection using
-    //     // RGB
-    //     points_callback(points_msg);
-    // };
-
-    // if (node_params.points_name.empty()) {
-    //     ROS_INFO_NAMED(LOGNAME, "subscribing to RGB + Depth");
-    //     auto camera_sub_setup = CameraSubSetup(node_params.rgb_topic, node_params.depth_topic,
-    //       node_params.info_topic);
-    //     // wait a second so the TF buffer can fill
-    //     ros::Duration(0.5).sleep();
-
-    //     KinectSub sub(callback_wrapper, camera_sub_setup);
-    //     ros::waitForShutdown();
-    // } else {
-    //     ROS_INFO_NAMED(LOGNAME, "subscribing to points");
-    //     auto sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 10,
-    //         points_callback_wrapper);
-    //     ros::spin();
-    // }
 
     // New plan, do the dumb thing and make 3 callbacks, doing everything KinectSub did plus point
     // clouds
@@ -262,6 +236,12 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         depth_img_ = cv_depth_ptr->image;
     };
 
+    // auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
+    //     cv::Matx33d const& intrinsics)
+    // {
+    //     callback(rgb, depth, intrinsics);
+    // };
+
     // Now we subscribe to each of the point cloud, RGB, and depth topics in a single thread. This
     // will be slow but since we're using a static camera for now it should be fine.
 
@@ -270,12 +250,14 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     // As such, we can just initialize the KinectSub object, subscribe to the point cloud topic then
     // wait for shutdown. No need to spin as that's just a single threaded spinner and we've already
     // got a spinner spinning.
-    ROS_INFO_NAMED(LOGNAME, "subscribing to points, RGB, and Depth!!");
+
+    // ROS_INFO_NAMED(LOGNAME, "subscribing to points, RGB, and Depth!!");
     // auto camera_sub_setup = CameraSubSetup(node_params.points_name, node_params.rgb_topic, node_params.depth_topic,
     //     node_params.info_topic);
-    // wait a second so the TF buffer can fill
+    // // wait a second so the TF buffer can fill
     // ros::Duration(0.5).sleep();
-    // KinectSub kinect_sub(points_rgb_and_depth_callback_wrapper, camera_sub_setup);
+    // KinectSub kinect_sub(callback_wrapper, camera_sub_setup);
+
     auto rgb_sub = nh.subscribe<sensor_msgs::Image>(node_params.rgb_topic, 1, rgb_callback_wrapper);
     auto depth_sub = nh.subscribe<sensor_msgs::Image>(node_params.depth_topic, 1,
         depth_callback_wrapper);
@@ -564,63 +546,255 @@ ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
 //     auto const t0 = ros::Time::now();
 //     auto [q_config, q_dot] = get_q_config();
 
-//     publish_bbox();
+//     publish_bboxes();
 
-//     auto obstacle_constraints = get_obstacle_constraints();
+//     // Get the point cloud clusters and their local point cloud neighborhood from the corner
+//     // candidate detection routine
+//     // NOTE: Zixuan's routine works on the RGB/D images. May do translation here or may do in the
+//     // corner_candidate_detection routine.
+//     auto corner_candidate_detector = CornerCandidateDetector();
+//     auto const corner_candidate_detections = corner_candidate_detector->do_corner_candidate_detection();
 
-//     auto const hsv_mask = getHsvMask(ph, rgb);
-//     auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
-//                               deformable_object_configuration_->tracked_.points_,
-//                               obstacle_constraints,
-//                               deformable_object_configuration_->max_segment_length_, q_dot,
-//                               q_config, gripper_indices);
-//     deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
-//     publish_outputs(t0, out);
-//     reset_if_bad(out);
+//     // Associate the point cloud clusters to tracked templates
+//     auto const associated_pairs =
+//         associate_corner_candidates_with_tracked_objects(corner_candidate_detections);
+
+//     ROS_INFO("Associated pairs:");
+//     for (auto const& assoc_pair : associated_pairs)
+//     {
+//         ROS_INFO("\t(%d, %d)", std::get<0>(assoc_pair), std::get<1>(assoc_pair));
+//     }
+
+
+
+//     // auto obstacle_constraints = get_obstacle_constraints();
+
+//     // auto const hsv_mask = getHsvMask(ph, rgb);
+//     // auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
+//     //                           deformable_object_configuration_->tracked_.points_,
+//     //                           obstacle_constraints,
+//     //                           deformable_object_configuration_->max_segment_length_, q_dot,
+//     //                           q_config, gripper_indices);
+//     // deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
+//     // publish_outputs(t0, out);
+//     // reset_if_bad(out);
+
+//     // associated_pairs is a vector of tuples with {cluster_idx, configuration_id} so we don't have
+//     // to default-construct the candidate_detection and configurations when there's no association
+//     // between the two.
+//     // for (auto const& assoc_pair : associated_pairs)
+
+//     // Testing with just one configuration for now.
+//     int def_obj_id = 0;
+//     auto const& assoc_pair = associated_pairs[def_obj_id];
+//     {
+//         int const& candidate_idx = std::get<0>(assoc_pair);
+//         int const& def_obj_id = std::get<1>(assoc_pair);
+//         bool const is_candidate_idx_invalid = candidate_idx == -1;
+//         bool const is_def_obj_id_invalid = def_obj_id == -1;
+
+//         ROS_INFO("Processing associated pair (%d, %d)", candidate_idx, def_obj_id);
+
+//         if (is_candidate_idx_invalid && !is_def_obj_id_invalid)
+//         {
+//             // To check occlusion, we need the full point cloud. This will likely be non-trivial
+//             // if (!def_obj_id.is_occluded())
+//             // {
+//             //     // Come up with some routine for reducing existence probability.
+//             //     def_obj_id.reduce_existence_probability();
+//             // }
+//             // else
+//             // {
+//             //     // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
+//             //     // it
+//             // }
+//         }
+//         else if (is_def_obj_id_invalid && !is_candidate_idx_invalid)
+//         {
+//             auto const& candidate = corner_candidate_detections[candidate_idx];
+//             candidate.print();
+//             // Get the affine transform for the candidate_idx that will define where we place the template
+//             // in the camera frame.
+
+//             // Initialize new deformable object configuration based on the unassociated
+//             // candidate_idx received from segmentation routine.
+//             // TODO: this should initialize based on the affine transform we just got and return
+//             // the new deformable object configuration
+//             // auto def_obj_new = initialize_deformable_object_configuration(start_position, end_position);
+//             auto def_obj_new = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
+//                 node_params.length_initial_cloth, node_params.width_initial_cloth,
+//                 node_params.grid_size_initial_guess_cloth));
+
+//             ROS_INFO("here1");
+
+//             // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
+//             // Z direction as we apply a bounding-box filter (where the box is centered at the camera
+//             // frame. That excludes the actual segmentation of the cloth in the current implementation.
+
+//             def_obj_new->template_affine_transform_ = corner_candidate_detections[candidate_idx].template_affine_transform_;
+
+//             ROS_INFO("here2");
+
+//             // Have to call initializeTracking() before casting to base class since it relies on virtual
+//             // functions.
+//             def_obj_new->initializeTracking();
+
+//             ROS_INFO("here3");
+
+
+
+
+//             // deformable_object_configurations_.emplace({def_obj_new_id, def_obj_new});
+//             // auto def_obj_new_base_pointer = std::static_pointer_cast<DeformableObjectConfiguration>(def_obj_new);
+//             // deformable_object_configurations_[def_obj_new_id] = std::move();
+
+//             ROS_INFO("here5");
+
+//             // Initialize CDCPD for our new template.
+//             auto cdcpd_instance = std::make_unique<CDCPD>(nh, ph,
+//                 def_obj_new->initial_.points_, def_obj_new->initial_.edges_,
+//                 cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+//                 cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+//                 cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+
+//             ROS_INFO("here6");
+
+//             // Get a new unique ID for the template we're tracking.
+//             int const def_obj_new_id = get_new_deformable_object_configuration_id();
+
+//             // Add the deformable object configuration to our map of configurations with
+//             // {new_id, new_configuration}
+//             deformable_object_configurations_[def_obj_new_id] = std::move(def_obj_new);
+
+//             // Add the CDCPD instance to our map of instances
+//             cdcpd_instances_[def_obj_new_id] = std::move(cdcpd_instance);
+
+//             ROS_INFO("Done initializing new configuration and CDCPD instance.");
+//         }
+//         else if (!is_def_obj_id_invalid && !is_def_obj_id_invalid)
+//         {
+//             // Grab the mask and local neighborhood point cloud from the corner candidate detection.
+//             auto& candidate = corner_candidate_detections[candidate_idx];
+//             auto const def_obj_mask = candidate.get_masked_points(points_full_cloud);
+//             auto local_point_cloud = candidate.get_local_point_cloud_neighborhood(points_full_cloud);
+//             ROS_INFO("After getting local cloud and mask!");
+//             auto & cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+//             auto & configuration = def_obj_configuraations_.at(def_obj_id);
+
+
+//             auto obstacle_constraints = get_obstacle_constraints(def_obj_id);
+
+//             // We received data for this tracked configuration, run the associated CDCPD instance
+//             // with the local point cloud.
+//             ROS_INFO("Before running CDCPD instance!");
+//             // Now using the RGBD CDCPD operator here.
+//             // auto const out = cdcpd_instance(local_point_cloud,
+//             //     deformable_object_configurations_.at(def_obj_id)->tracked_.points_,
+//             //     obstacle_constraints, deformable_object_configurations_.at(def_obj_id)->max_segment_length_, q_dot,
+//             //     q_config, gripper_indices, 0, def_obj_mask);
+//             ROS_INFO("Make CDCPD instance use local image neighborhoods instead of full image");
+//             auto const out = cdcpd_instance(rgb_img_, depth_img_, def_obj_mask, intrinsics, );
+
+//             // Get the associated ID with our object_configuration.
+//             // int configuration_id; // = get_configuration_id();
+
+//             ROS_INFO("Before storing outputs.");
+
+//             // Store in our output structure.
+//             cdcpd_outputs_[def_obj_id] = out;
+
+//             // Update the tracked configuration for this configuration
+//             deformable_object_configurations_.at(def_obj_id)->tracked_.points_ = out.gurobi_output;
+
+//             ROS_INFO("Done with this association.");
+//         }
+//         else
+//         {
+//             // This shouldn't happen. Something is wrong with association.
+//         }
+//     }
+
+//     // Testing with just one configuration for now.
+//     // int def_obj_id = 0;
+//     // auto& object_configuration = deformable_object_configurations_.at(def_obj_id);
+//     // auto& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+//     // auto const out = (*cdcpd_instance)(points_full_cloud, object_configuration->tracked_.points_,
+//     //     obstacle_constraints, object_configuration->max_segment_length_, q_dot,
+//     //     q_config, gripper_indices);
+//     // object_configuration->tracked_.points_ = out.gurobi_output;
+//     // cdcpd_outputs_.emplace(def_obj_id, out);
+//     // publish_outputs(t0, out);
+//     publish_outputs(t0);
+
+//     // Ignoring this for now as I don't have this implemented.
+//     // reset_if_bad(out);
 // };
 
 void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
 {
     auto const t0 = ros::Time::now();
 
-    // Testing with just one configuration for now.
-    int def_obj_id = 0;
-
     // Clear the CDCPD outputs from the previous iteration.
     cdcpd_outputs_.clear();
 
-    publish_bbox();
+    publish_bboxes();
     // publish_template();
 
     auto [q_config, q_dot] = get_q_config();
-    auto obstacle_constraints = get_obstacle_constraints(def_obj_id);
+
+    ROS_INFO("Point cloud from azure is actually XYZRGB, so we don't have to subscribe to both points and RGB/D!!");
 
     pcl::PCLPointCloud2 points_v2;
     pcl_conversions::toPCL(*points_msg, points_v2);
     auto points_full_cloud = boost::make_shared<PointCloudRGB>();
     pcl::fromPCLPointCloud2(points_v2, *points_full_cloud);
+    ROS_INFO_STREAM("points_full_cloud header: " << points_full_cloud->header);
+    ROS_INFO_STREAM("points full cloud size: " << points_full_cloud->size());
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points_full_cloud->size());
+
+    pcl::PointXYZRGB minPt, maxPt;
+    pcl::getMinMax3D (*points_full_cloud, minPt, maxPt);
+    ROS_INFO_STREAM("points_full_cloud min point: " << minPt);
+    ROS_INFO_STREAM("points_full_cloud max point: " << maxPt);
+
 
     // Get the point cloud clusters and their local point cloud neighborhood from the corner
     // candidate detection routine
     // NOTE: Zixuan's routine works on the RGB/D images. May do translation here or may do in the
     // corner_candidate_detection routine.
-    auto const corner_candidate_detections = do_corner_candidate_detection(points_full_cloud);
+    auto corner_detector = CornerCandidateDetector();
+    auto const corner_candidate_detections =
+        corner_detector.do_corner_candidate_detection(points_full_cloud);
 
     // Associate the point cloud clusters to tracked templates
     auto const associated_pairs =
-        associate_corner_candidates_with_tracked_objects(corner_candidate_detections);
+        corner_detector.associate_corner_candidates_with_tracked_objects(
+            corner_candidate_detections, deformable_object_configurations_);
 
-    // associated_pairs is a vector of tuples with {corner_candidate_detection, DeformableObjectConfiguration}
-    // Or maybe just a vector of tuples with {cluster_idx, configuration_id} so we don't have to
-    // default-construct the candidate_detection and configurations when there's nothing there.
-    // OR it could just be null ptrs to invalid objects.
+    ROS_INFO("Associated pairs:");
     for (auto const& assoc_pair : associated_pairs)
+    {
+        ROS_INFO("\t(%d, %d)", std::get<0>(assoc_pair), std::get<1>(assoc_pair));
+    }
+
+
+    // associated_pairs is a vector of tuples with {cluster_idx, configuration_id} so we don't have
+    // to default-construct the candidate_detection and configurations when there's no association
+    // between the two.
+    // for (auto const& assoc_pair : associated_pairs)
+
+    // Testing with just one configuration for now.
+    int def_obj_id = 0;
+    auto const& assoc_pair = associated_pairs[def_obj_id];
     {
         int const& candidate_idx = std::get<0>(assoc_pair);
         int const& def_obj_id = std::get<1>(assoc_pair);
+        bool const is_candidate_idx_invalid = candidate_idx == -1;
+        bool const is_def_obj_id_invalid = def_obj_id == -1;
 
-        if (candidate_idx == -1 && def_obj_id != -1)
+        ROS_INFO("Processing associated pair (%d, %d)", candidate_idx, def_obj_id);
+
+        if (is_candidate_idx_invalid && !is_def_obj_id_invalid)
         {
             // To check occlusion, we need the full point cloud. This will likely be non-trivial
             // if (!def_obj_id.is_occluded())
@@ -633,9 +807,12 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
             //     // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
             //     // it
             // }
+            ROS_INFO("Implement occlusion checking");
         }
-        else if (def_obj_id == -1 && candidate_idx != -1)
+        else if (is_def_obj_id_invalid && !is_candidate_idx_invalid)
         {
+            auto const& candidate = corner_candidate_detections[candidate_idx];
+            candidate.print();
             // Get the affine transform for the candidate_idx that will define where we place the template
             // in the camera frame.
 
@@ -648,23 +825,30 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
                 node_params.length_initial_cloth, node_params.width_initial_cloth,
                 node_params.grid_size_initial_guess_cloth));
 
+            ROS_INFO("here1");
+
             // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
             // Z direction as we apply a bounding-box filter (where the box is centered at the camera
             // frame. That excludes the actual segmentation of the cloth in the current implementation.
 
             def_obj_new->template_affine_transform_ = corner_candidate_detections[candidate_idx].template_affine_transform_;
 
+            ROS_INFO("here2");
+
             // Have to call initializeTracking() before casting to base class since it relies on virtual
             // functions.
             def_obj_new->initializeTracking();
 
-            // Get a new unique ID for the template we're tracking.
-            int const def_obj_new_id = get_new_deformable_object_configuration_id();
+            ROS_INFO("here3");
 
-            // Add the deformable object configuration to our map of configurations with
-            // {new_id, new_configuration}
+
+
+
             // deformable_object_configurations_.emplace({def_obj_new_id, def_obj_new});
-            deformable_object_configurations_[def_obj_new_id] = std::move(def_obj_new);
+            // auto def_obj_new_base_pointer = std::static_pointer_cast<DeformableObjectConfiguration>(def_obj_new);
+            // deformable_object_configurations_[def_obj_new_id] = std::move();
+
+            ROS_INFO("here5");
 
             // Initialize CDCPD for our new template.
             auto cdcpd_instance = std::make_unique<CDCPD>(nh, ph,
@@ -673,32 +857,56 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
                 cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
                 cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
 
+            ROS_INFO("here6");
+
+            // Get a new unique ID for the template we're tracking.
+            int const def_obj_new_id = get_new_deformable_object_configuration_id();
+
+            // Add the deformable object configuration to our map of configurations with
+            // {new_id, new_configuration}
+            deformable_object_configurations_[def_obj_new_id] = std::move(def_obj_new);
+
             // Add the CDCPD instance to our map of instances
             cdcpd_instances_[def_obj_new_id] = std::move(cdcpd_instance);
+
+            ROS_INFO("Done initializing new configuration and CDCPD instance.");
         }
-        else if (def_obj_id != -1 && candidate_idx != -1)
+        else if (!is_def_obj_id_invalid && !is_def_obj_id_invalid)
         {
             // Grab the mask and local neighborhood point cloud from the corner candidate detection.
-            corner_candidate_detections[candidate_idx];
+            auto& candidate = corner_candidate_detections[candidate_idx];
+            auto const def_obj_mask = candidate.get_masked_points(points_full_cloud);
+            auto local_point_cloud = candidate.get_local_point_cloud_neighborhood(points_full_cloud);
+            ROS_INFO("After getting local cloud and mask!");
+
+
+            auto obstacle_constraints = get_obstacle_constraints(def_obj_id);
+
             // We received data for this tracked configuration, run the associated CDCPD instance
             // with the local point cloud.
-            auto const out = (*cdcpd_instances_.at(def_obj_id))(points_full_cloud,
+            ROS_INFO("Before running CDCPD instance!");
+            auto const out = (*cdcpd_instances_.at(def_obj_id))(local_point_cloud,
                 deformable_object_configurations_.at(def_obj_id)->tracked_.points_,
                 obstacle_constraints, deformable_object_configurations_.at(def_obj_id)->max_segment_length_, q_dot,
-                q_config, gripper_indices);
+                q_config, gripper_indices, 0, def_obj_mask);
 
             // Get the associated ID with our object_configuration.
-            int configuration_id; // = get_configuration_id();
+            // int configuration_id; // = get_configuration_id();
+
+            ROS_INFO("Before storing outputs.");
 
             // Store in our output structure.
-            cdcpd_outputs_[configuration_id] = out;
+            cdcpd_outputs_[def_obj_id] = out;
 
             // Update the tracked configuration for this configuration
             deformable_object_configurations_.at(def_obj_id)->tracked_.points_ = out.gurobi_output;
+
+            ROS_INFO("Done with this association.");
         }
         else
         {
             // This shouldn't happen. Something is wrong with association.
+            ROS_WARN("You shouldn't be able to reach this conditional block!");
         }
     }
 
@@ -718,33 +926,41 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     // reset_if_bad(out);
 }
 
-void CDCPD_Moveit_Node::publish_bbox() const
+void CDCPD_Moveit_Node::publish_bboxes() const
 {
     // TODO: Loop through and add a bounding box for each tracked configuration.
-    // jsk_recognition_msgs::BoundingBoxArray bbox_array_msg;
+    jsk_recognition_msgs::BoundingBoxArray bbox_array_msg;
+
+    for (auto const& configuration : deformable_object_configurations_)
+    {
+        jsk_recognition_msgs::BoundingBox bbox_msg;
+
+        // Get the CDCPD instance associated with this ID
+        int const def_obj_id = configuration.first;
+        auto const& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+
+        bbox_msg.header.stamp = ros::Time::now();
+        bbox_msg.header.frame_id = node_params.camera_frame;
+
+        auto const bbox_size = extent_to_env_size(cdcpd_instance->last_lower_bounding_box,
+            cdcpd_instance->last_upper_bounding_box);
+        auto const bbox_center = extent_to_center(cdcpd_instance->last_lower_bounding_box,
+            cdcpd_instance->last_upper_bounding_box);
+        bbox_msg.pose.position.x = bbox_center.x();
+        bbox_msg.pose.position.y = bbox_center.y();
+        bbox_msg.pose.position.z = bbox_center.z();
+        bbox_msg.pose.orientation.w = 1;
+        bbox_msg.dimensions.x = bbox_size.x();
+        bbox_msg.dimensions.y = bbox_size.y();
+        bbox_msg.dimensions.z = bbox_size.z();
+
+        bbox_array_msg.boxes.push_back(bbox_msg);
+    }
 
 
-    jsk_recognition_msgs::BoundingBox bbox_msg;
 
-    // Get the CDCPD instance associated with this ID
-    int def_obj_id = 0;
-    auto const& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
-
-    bbox_msg.header.stamp = ros::Time::now();
-    bbox_msg.header.frame_id = node_params.camera_frame;
-
-    auto const bbox_size = extent_to_env_size(cdcpd_instance->last_lower_bounding_box,
-        cdcpd_instance->last_upper_bounding_box);
-    auto const bbox_center = extent_to_center(cdcpd_instance->last_lower_bounding_box,
-        cdcpd_instance->last_upper_bounding_box);
-    bbox_msg.pose.position.x = bbox_center.x();
-    bbox_msg.pose.position.y = bbox_center.y();
-    bbox_msg.pose.position.z = bbox_center.z();
-    bbox_msg.pose.orientation.w = 1;
-    bbox_msg.dimensions.x = bbox_size.x();
-    bbox_msg.dimensions.y = bbox_size.y();
-    bbox_msg.dimensions.z = bbox_size.z();
-    publishers.bbox_pub.publish(bbox_msg);
+    // publishers.bbox_pub.publish(bbox_msg);
+    publishers.bbox_array_pub.publish(bbox_array_msg);
 }
 
 void CDCPD_Moveit_Node::publish_template() const
@@ -773,83 +989,140 @@ ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints(int const deform
 
 void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0)
 {
-    int const def_obj_id = 0;
-    auto& def_obj_config = deformable_object_configurations_.at(def_obj_id);
-    auto& out = cdcpd_outputs_.at(def_obj_id);
-    // Update the frame ids
+    ROS_INFO("Publishing outputs");
+    auto const publish_time = ros::Time::now();
+    PointCloudRGB original_cloud_aggregate;
+    PointCloud masked_cloud_aggregate;
+    PointCloud downsampled_cloud_aggregate;
+    PointCloud output_cloud_aggregate;
+
+    // Add frame IDs to aggregate point clouds
+    original_cloud_aggregate.header.frame_id = node_params.camera_frame;
+    masked_cloud_aggregate.header.frame_id = node_params.camera_frame;
+    downsampled_cloud_aggregate.header.frame_id = node_params.camera_frame;
+    output_cloud_aggregate.header.frame_id = node_params.camera_frame;
+
+    // // Add timestamp information to aggregate point clouds
+    pcl_conversions::toPCL(publish_time, original_cloud_aggregate.header.stamp);
+    pcl_conversions::toPCL(publish_time, masked_cloud_aggregate.header.stamp);
+    pcl_conversions::toPCL(publish_time, downsampled_cloud_aggregate.header.stamp);
+    // pcl_conversions::toPCL(publish_time, cpd_output->header.stamp);
+    pcl_conversions::toPCL(publish_time, output_cloud_aggregate.header.stamp);
+
+    // Adapting this to publish outputs of all tracked templates.
+    bool aggregate_clouds_initialized = false;
+    for (auto& output_pair : cdcpd_outputs_)
     {
-        out.original_cloud->header.frame_id = node_params.camera_frame;
-        out.masked_point_cloud->header.frame_id = node_params.camera_frame;
-        out.downsampled_cloud->header.frame_id = node_params.camera_frame;
-        out.cpd_output->header.frame_id = node_params.camera_frame;
-        out.gurobi_output->header.frame_id = node_params.camera_frame;
+        int const def_obj_id = output_pair.first;
+        CDCPD::Output& out = output_pair.second;
+        auto& def_obj_config = deformable_object_configurations_.at(def_obj_id);
+
+        ROS_INFO_STREAM("Publishing output for tracked object with ID: " << def_obj_id);
+
+        // Update the frame ids
+        {
+            out.original_cloud->header.frame_id = node_params.camera_frame;
+            out.masked_point_cloud->header.frame_id = node_params.camera_frame;
+            out.downsampled_cloud->header.frame_id = node_params.camera_frame;
+            out.cpd_output->header.frame_id = node_params.camera_frame;
+            out.gurobi_output->header.frame_id = node_params.camera_frame;
+        }
+
+        // Add timestamp information
+        {
+            pcl_conversions::toPCL(publish_time, out.original_cloud->header.stamp);
+            pcl_conversions::toPCL(publish_time, out.masked_point_cloud->header.stamp);
+            pcl_conversions::toPCL(publish_time, out.downsampled_cloud->header.stamp);
+            pcl_conversions::toPCL(publish_time, out.cpd_output->header.stamp);
+            pcl_conversions::toPCL(publish_time, out.gurobi_output->header.stamp);
+        }
+
+        // Publish the point clouds
+        // {
+            // publishers.original_publisher.publish(out.original_cloud);
+        //     publishers.masked_publisher.publish(out.masked_point_cloud);
+        //     publishers.downsampled_publisher.publish(out.downsampled_cloud);
+        //     publishers.template_publisher.publish(out.cpd_output);
+        //     publishers.output_publisher.publish(out.gurobi_output);
+        // }
+
+        // Add the point clouds of this tracked object's output to our aggregate point clouds
+        if (!aggregate_clouds_initialized)
+        {
+            ROS_INFO("Initializing aggregate clouds");
+            aggregate_clouds_initialized = true;
+
+            pcl::copyPointCloud(*out.original_cloud, original_cloud_aggregate);
+            pcl::copyPointCloud(*out.masked_point_cloud, masked_cloud_aggregate);
+            pcl::copyPointCloud(*out.downsampled_cloud, downsampled_cloud_aggregate);
+            pcl::copyPointCloud(*out.gurobi_output, output_cloud_aggregate);
+        }
+        else
+        {
+            ROS_INFO_STREAM("Before point cloud addition for ID #" << output_pair.first);
+            original_cloud_aggregate += *out.original_cloud;
+            masked_cloud_aggregate += *out.masked_point_cloud;
+            downsampled_cloud_aggregate += *out.downsampled_cloud;
+            output_cloud_aggregate += *out.gurobi_output;
+            ROS_INFO("\tFinished point cloud addition");
+        }
+
+        // Publish markers indication the order of the points
+        ROS_INFO("WARNING: FIX ORDER PUBLISHER!!");
+        // Why are we doing it this way and not looping through all of the edges in the CDCPD edge
+        // list, adding a line between each one?
+        // {
+        //     auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
+        //         vm::Marker order;
+        //         order.header.frame_id = node_params.camera_frame;
+        //         order.header.stamp = ros::Time();
+        //         order.ns = ns;
+        //         order.type = visualization_msgs::Marker::LINE_STRIP;
+        //         order.action = visualization_msgs::Marker::ADD;
+        //         order.pose.orientation.w = 1.0;
+        //         order.id = 1;
+        //         order.scale.x = 0.01;
+        //         order.color.r = 0.1;
+        //         order.color.g = 0.6;
+        //         order.color.b = 0.9;
+        //         order.color.a = 1.0;
+
+        //         for (auto pc_iter : *cloud)
+        //         {
+        //             geometry_msgs::Point p;
+        //             p.x = pc_iter.x;
+        //             p.y = pc_iter.y;
+        //             p.z = pc_iter.z;
+        //             order.points.push_back(p);
+        //         }
+        //         return order;
+        //     };
+
+        //     auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
+        //     publishers.order_pub.publish(rope_marker);
+        // }
+
+        // compute length and print that for debugging purposes
+        auto output_length{0.0};
+        for (auto point_idx{0};
+            point_idx < def_obj_config->tracked_.points_->size() - 1;
+            ++point_idx)
+        {
+            Eigen::Vector3f const p =
+                def_obj_config->tracked_.points_->at(point_idx + 1).getVector3fMap();
+            Eigen::Vector3f const p_next =
+                def_obj_config->tracked_.points_->at(point_idx).getVector3fMap();
+            output_length += (p_next - p).norm();
+        }
+        ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
+            << node_params.max_rope_length);
     }
 
-    // Add timestamp information
-    {
-        auto time = ros::Time::now();
-        pcl_conversions::toPCL(time, out.original_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.masked_point_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.downsampled_cloud->header.stamp);
-        pcl_conversions::toPCL(time, out.cpd_output->header.stamp);
-        pcl_conversions::toPCL(time, out.gurobi_output->header.stamp);
-    }
-
-    // Publish the point clouds
-    {
-        publishers.original_publisher.publish(out.original_cloud);
-        publishers.masked_publisher.publish(out.masked_point_cloud);
-        publishers.downsampled_publisher.publish(out.downsampled_cloud);
-        publishers.template_publisher.publish(out.cpd_output);
-        publishers.output_publisher.publish(out.gurobi_output);
-    }
-
-    // Publish markers indication the order of the points
-    {
-        auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
-            vm::Marker order;
-            order.header.frame_id = node_params.camera_frame;
-            order.header.stamp = ros::Time();
-            order.ns = ns;
-            order.type = visualization_msgs::Marker::LINE_STRIP;
-            order.action = visualization_msgs::Marker::ADD;
-            order.pose.orientation.w = 1.0;
-            order.id = 1;
-            order.scale.x = 0.01;
-            order.color.r = 0.1;
-            order.color.g = 0.6;
-            order.color.b = 0.9;
-            order.color.a = 1.0;
-
-            for (auto pc_iter : *cloud)
-            {
-                geometry_msgs::Point p;
-                p.x = pc_iter.x;
-                p.y = pc_iter.y;
-                p.z = pc_iter.z;
-                order.points.push_back(p);
-            }
-            return order;
-        };
-
-        auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
-        publishers.order_pub.publish(rope_marker);
-    }
-
-    // compute length and print that for debugging purposes
-    auto output_length{0.0};
-    for (auto point_idx{0};
-         point_idx < def_obj_config->tracked_.points_->size() - 1;
-         ++point_idx)
-    {
-        Eigen::Vector3f const p =
-            def_obj_config->tracked_.points_->at(point_idx + 1).getVector3fMap();
-        Eigen::Vector3f const p_next =
-            def_obj_config->tracked_.points_->at(point_idx).getVector3fMap();
-        output_length += (p_next - p).norm();
-    }
-    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
-        << node_params.max_rope_length);
+    // Now we publish the aggregate point clouds:
+    publishers.original_publisher.publish(original_cloud_aggregate);
+    publishers.masked_publisher.publish(masked_cloud_aggregate);
+    publishers.downsampled_publisher.publish(downsampled_cloud_aggregate);
+    publishers.output_publisher.publish(output_cloud_aggregate);
 
     auto const t1 = ros::Time::now();
     auto const dt = t1 - t0;
@@ -861,6 +1134,7 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
     if (out.status == OutputStatus::NoPointInFilteredCloud or
         out.status == OutputStatus::ObjectiveTooHigh)
     {
+        ROS_INFO("Bad value encountered! Reseting CDCPD instace!");
         // TODO: Implement reseting based on looping through all IDs of tracked objects.
         // Recreate CDCPD from initial tracking.
         // std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph,
@@ -873,161 +1147,7 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
     }
 }
 
-std::vector<std::tuple<int const, int const>>
-    CDCPD_Moveit_Node::associate_corner_candidates_with_tracked_objects(
-        std::vector<CornerCandidateDetection> const& corner_candidate_detections)
-{
-    std::vector<std::tuple<int const, int const>> associated_pairs;
 
-    // Could just do something really dumb at first and find minimum distance between each tracked
-    // object and the clusters
-    int candidate_idx = 0;
-    for (auto const& candidate : corner_candidate_detections)
-    {
-        double min_dist = 1e15;
-        int min_dist_def_obj_id = -1;  // Initialize to invalid value.
-        bool association_made = false;
-        for (auto const& def_obj_pair : deformable_object_configurations_)
-        {
-            // Should probably take centroid or something.
-            auto const& def_obj_pnt = def_obj_pair.second->tracked_.vertices_.col(0);
-
-            float const dist = (candidate.corner_point_camera_frame_ - def_obj_pnt).norm();
-
-            // Calculate distance between candidate centroid and tracked_object_centroid
-            min_dist_def_obj_id = dist < min_dist ? def_obj_pair.first : min_dist_def_obj_id;
-            min_dist = dist < min_dist ? dist : min_dist;
-        }
-
-        if (min_dist > 100.0F)  // [mm]
-        {
-            min_dist_def_obj_id = -1;
-        }
-
-        // Make the tuple and store in the associated_pairs vector
-        associated_pairs.push_back({candidate_idx, min_dist_def_obj_id});
-
-        ++candidate_idx;
-    }
-    return associated_pairs;
-}
-
-std::vector<CornerCandidateDetection> CDCPD_Moveit_Node::do_corner_candidate_detection(
-        const PointCloudRGB::Ptr &points_full_cloud)
-{
-    std::vector<CornerCandidateDetection> candidate_detections;
-
-    std::string root_dir = "/home/dcolli23/cdcpd_corner_detector_runtime_data/";
-    std::string full_cloud_output_path = root_dir + "points_full_cloud.pcd";
-    std::string rgb_output_path = root_dir + "rgb_img.png";
-    std::string depth_output_path = root_dir + "depth_img.png";
-
-    auto t_start = ros::Time::now();
-    // Write the point cloud, RGB, and Depth images for the segmentation routine to use.
-    // Might not even have to write the point cloud file.
-    pcl::io::savePLYFileBinary(full_cloud_output_path, *points_full_cloud);
-    cv::imwrite(rgb_output_path, rgb_img_);
-    cv::imwrite(depth_output_path, depth_img_);
-
-    // Call the corner candidate detection script, passing in the path to the recently written
-    // full point cloud.
-    std::string cmd = "python3 /home/dcolli23/code/lab/iros_cloth_classic/launcher_interface.py";
-    system(cmd.c_str());
-    ROS_INFO("Finished running python script!");
-
-    // Read the YAML file output by the corner detection script (saved in a pre-determined location)
-    // This contains the information in an array for all corner candidate detections.
-    YAML::Node root_node = YAML::LoadFile(root_dir + "corner_candidate_detections.yaml")[
-        "corner_candidate_detections"];
-    assert(root_node.IsSequence());
-    // Loop through the corner candidate information array
-    // for(YAML::const_iterator it = root_node.begin(); it != root_node.end(); ++it)
-    for (size_t det_num = 0; det_num < root_node.size(); ++det_num)
-    {
-        YAML::Node det_node = root_node[det_num];
-        // {
-        //     std::stringstream outmsg;
-        //     outmsg << "det_node type: " << det_node.Type();
-        //     ROS_INFO(outmsg.str().c_str());
-        // }
-
-        // Read the corner point in the camera frame.
-        YAML::Node const& cam_point_node = det_node["corner_point_camera_frame"];
-
-        Eigen::Vector3f corner_point_camera_frame;
-        for (size_t i = 0; i < cam_point_node.size(); ++i)
-        {
-            corner_point_camera_frame(i) = cam_point_node[i].as<float>();
-        }
-        // {
-        //     std::stringstream outmsg;
-        //     outmsg << "Point: " << corner_point_camera_frame;
-        //     ROS_INFO(outmsg.str().c_str());
-        // }
-
-        // Read the local point cloud neighborhood.
-        std::vector<Eigen::Vector3f> local_point_cloud_bounds;
-        YAML::Node const& local_node = det_node["local_bbox_coordinates_camera_frame"];
-        for (size_t i = 0; i < local_node.size(); ++i)
-        {
-            Eigen::Vector3f local_bound;
-            local_bound(0) = local_node[i][0].as<float>();
-            local_bound(1) = local_node[i][1].as<float>();
-            local_bound(2) = local_node[i][2].as<float>();
-            local_point_cloud_bounds.push_back(local_bound);
-        }
-
-
-        // Read the corner candidate mask
-        std::vector<Eigen::Vector3f> mask_bounds;
-        YAML::Node const& mask_node = det_node["mask_bbox_coordinates_camera_frame"];
-        for (size_t i = 0; i < mask_node.size(); ++i)
-        {
-            Eigen::Vector3f mask_bound;
-            mask_bound(0) = mask_node[i][0].as<float>();
-            mask_bound(1) = mask_node[i][1].as<float>();
-            mask_bound(2) = mask_node[i][2].as<float>();
-            mask_bounds.push_back(mask_bound);
-        }
-
-        // Convert the template_to_corner_candidate_affine_transform into cv::Mat variable
-        Eigen::Matrix<float, 4, 4> affine_transform_eigen;
-        YAML::Node const& transform_node = det_node["P_corner_to_camera"];
-        for (size_t i = 0; i < 4; ++i)
-        {
-            for (size_t j = 0; j < 4; ++j)
-            {
-                affine_transform_eigen(i, j) = transform_node[i][j].as<float>();
-            }
-        }
-        cv::Mat affine_transform;
-        cv::eigen2cv(affine_transform_eigen, affine_transform);
-
-
-        // CornerCandidateDetection candidate(corner_point_camera_frame, affine_transform,
-        //     local_point_cloud_bounds, mask_bounds);
-
-        // Initialize a new CornerCandidateDetection with the read variables and store the
-        // candidate detection in our vector.
-        candidate_detections.push_back({corner_point_camera_frame, affine_transform,
-            local_point_cloud_bounds, mask_bounds});
-    }
-
-
-    auto t_end = ros::Time::now();
-
-    // Outputting time of execution
-    {
-
-        auto t_delta = t_end - t_start;
-        double num_secs = static_cast<double>(t_delta.nsec) / 1e9;
-        std::stringstream msg;
-        msg << "Took " << num_secs << " seconds to execute corner candidate detection routines";
-        ROS_INFO(msg.str().c_str());
-    }
-
-    return candidate_detections;
-}
 
 std::tuple<smmap::AllGrippersSinglePose,
            const smmap::AllGrippersSinglePoseDelta> CDCPD_Moveit_Node::get_q_config()

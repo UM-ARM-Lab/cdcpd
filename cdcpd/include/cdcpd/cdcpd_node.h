@@ -18,6 +18,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <pcl/point_types.h>
+#include <pcl/common/common.h>
 #include <pcl_ros/point_cloud.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -30,6 +31,7 @@
 #include <arc_utilities/ros_helpers.hpp>
 
 #include "cdcpd/cdcpd.h"
+#include "cdcpd/corner_candidate_detector.h"
 #include "cdcpd_ros/camera_sub.h"
 #include "cdcpd/deformable_object_configuration.h"
 #include "cdcpd/segmenter.h"
@@ -54,7 +56,7 @@ struct CDCPD_Publishers
     ros::Publisher output_publisher;
     ros::Publisher order_pub;
     ros::Publisher contact_marker_pub;
-    ros::Publisher bbox_pub;
+    ros::Publisher bbox_array_pub;
 };
 
 struct CDCPD_Node_Parameters
@@ -106,7 +108,7 @@ public:
                const smmap::AllGrippersSinglePoseDelta> get_q_config();
 
     // Publishes the bounding box.
-    void publish_bbox() const;
+    void publish_bboxes() const;
 
     // Publishes the tracked points of the deformable object.
     // NOTE: Meant to be called before CDCPD runs as CDCPD modifies the tracked points.
@@ -126,17 +128,6 @@ public:
 
     // Resets CDCPD tracking to initial tracking configuration if OutputStatus indicates a problem.
     void reset_if_bad(CDCPD::Output const& out);
-
-    // Returns a vector of tuples of 2 ints, <cluster index, deformable object index>
-    // -1 for either of the indexes indicates no association was found for the cluster/tracked
-    // object.
-    std::vector<std::tuple<int const, int const>> associate_corner_candidates_with_tracked_objects(
-        std::vector<CornerCandidateDetection> const& corner_candidate_detections);
-
-    // Executes the corner candidate detection routine Zixuan prototyped
-    // Do I want to make this a vector of pointers?
-    std::vector<CornerCandidateDetection> do_corner_candidate_detection(
-        const PointCloudRGB::Ptr &points_full_cloud);
 
     std::string collision_body_prefix{"cdcpd_tracked_point_"};
     std::string robot_namespace_;

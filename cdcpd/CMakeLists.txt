@@ -21,6 +21,7 @@ set(CATKIN_PACKAGES
         smmap_models
         smmap_utilities
         std_msgs
+        # CDCPDSegmentationLib
         )
 
 # https://blog.kitware.com/cmake-and-the-default-build-type/
@@ -45,6 +46,7 @@ find_package(GUROBI REQUIRED)
 find_package(FAISS REQUIRED)
 find_package(CGAL REQUIRED COMPONENTS Core Qt5)
 find_package(Qt5 QUIET COMPONENTS Qt5 Core Xml Script OpenGL Svg)
+# find_package(CDCPDSegmentationLib REQUIRED)
 find_package(PCL 1.8 REQUIRED COMPONENTS common io filters visualization features kdtree)
 
 # horrid hack to remove the space at the beginning of the list
@@ -58,6 +60,10 @@ catkin_package(
         CATKIN_DEPENDS ${CATKIN_PACKAGES}
         DEPENDS OpenCV Eigen3 GUROBI FIASS Qt5 PCL # NOTE: adding CGAL errors, but it's working so whatever
 )
+
+### Build the segmentation library first since this is a dependency of CDCPD
+
+
 
 ### The library itself
 add_library(cdcpd SHARED
@@ -125,6 +131,7 @@ install(EXPORT cdcpd-targets NAMESPACE cdcpd:: DESTINATION lib/${PROJECT_NAME})
 add_executable(cdcpd_node
         src/cdcpd_ros/camera_sub.cpp
         src/cdcpd_node.cpp
+        src/corner_candidate_detector.cpp
         )
 add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
