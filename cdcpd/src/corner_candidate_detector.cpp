@@ -1,124 +1,125 @@
 #include "cdcpd/corner_candidate_detector.h"
 
-CornerCandidateDetection::CornerCandidateDetection(int const detection_id,
-    Eigen::Vector3f const corner_point_camera_frame,
-    cv::Mat const template_affine_transform,
-    std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds,
-    std::vector<Eigen::Vector3f> const detection_mask_bounds)
-        : id_(detection_id),
-          corner_point_camera_frame_(corner_point_camera_frame),
-          template_affine_transform_(template_affine_transform),
-          local_cloud_neighborhood_bounds_(local_cloud_neighborhood_bounds),
-          detection_mask_bounds_(detection_mask_bounds)
-{}
+// CornerCandidateDetection::CornerCandidateDetection(int const detection_id,
+//     Eigen::Vector3f const corner_point_camera_frame,
+//     cv::Mat const template_affine_transform,
+//     std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds,
+//     std::vector<Eigen::Vector3f> const detection_mask_bounds)
+//         : id_(detection_id),
+//           corner_point_camera_frame_(corner_point_camera_frame),
+//           template_affine_transform_(template_affine_transform),
+//           local_cloud_neighborhood_bounds_(local_cloud_neighborhood_bounds),
+//           detection_mask_bounds_(detection_mask_bounds)
+// {}
 
-// Do a bounding box filter to get the local neighborhood.
-boost::shared_ptr<PointCloudRGB> CornerCandidateDetection::get_local_point_cloud_neighborhood(boost::shared_ptr<PointCloudRGB> point_cloud_full) const
-{
-    auto points_cropped = boost::make_shared<PointCloudRGB>();
+// // Do a bounding box filter to get the local neighborhood.
+// boost::shared_ptr<PointCloudRGB> CornerCandidateDetection::get_local_point_cloud_neighborhood(boost::shared_ptr<PointCloudRGB> point_cloud_full) const
+// {
+//     auto points_cropped = boost::make_shared<PointCloudRGB>();
 
-    // Find points closest and furthest from the origin (camera frame).
-    Eigen::Vector3f pt_min;
-    float pt_min_norm = 1e15;
-    Eigen::Vector3f pt_max;
-    float pt_max_norm = -1e15;
-    for (auto const pt : local_cloud_neighborhood_bounds_)
-    {
-        float pt_norm = pt.norm();
+//     // Find points closest and furthest from the origin (camera frame).
+//     Eigen::Vector3f pt_min;
+//     float pt_min_norm = 1e15;
+//     Eigen::Vector3f pt_max;
+//     float pt_max_norm = -1e15;
+//     for (auto const pt : local_cloud_neighborhood_bounds_)
+//     {
+//         float pt_norm = pt.norm();
 
-        if (pt_norm < pt_min_norm)
-        {
-            pt_min = pt;
-            pt_min_norm = pt_norm;
-        }
+//         if (pt_norm < pt_min_norm)
+//         {
+//             pt_min = pt;
+//             pt_min_norm = pt_norm;
+//         }
 
-        if (pt_norm > pt_max_norm)
-        {
-            pt_max = pt;
-            pt_max_norm = pt_norm;
-        }
-    }
-    Eigen::Vector3f bounding_box_z_extend(0, 0, .050);
-    Eigen::Vector4f box_min = (pt_min - bounding_box_z_extend).homogeneous();
-    Eigen::Vector4f box_max = (pt_max + bounding_box_z_extend).homogeneous();
+//         if (pt_norm > pt_max_norm)
+//         {
+//             pt_max = pt;
+//             pt_max_norm = pt_norm;
+//         }
+//     }
+//     Eigen::Vector3f bounding_box_z_extend(0, 0, .050);
+//     Eigen::Vector4f box_min = (pt_min - bounding_box_z_extend).homogeneous();
+//     Eigen::Vector4f box_max = (pt_max + bounding_box_z_extend).homogeneous();
 
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood bounding box min:" << box_min);
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood bounding box max:" << box_max);
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood bounding box min:" << box_min);
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood bounding box max:" << box_max);
 
-    pcl::CropBox<PointRGB> box_filter;
-    box_filter.setMin(box_min);
-    box_filter.setMax(box_max);
-    box_filter.setInputCloud(point_cloud_full);
-    box_filter.filter(*points_cropped);
+//     pcl::CropBox<PointRGB> box_filter;
+//     box_filter.setMin(box_min);
+//     box_filter.setMax(box_max);
+//     box_filter.setInputCloud(point_cloud_full);
+//     box_filter.filter(*points_cropped);
 
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood num points: " << points_cropped->size());
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood header: " << points_cropped->header);
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood num points: " << points_cropped->size());
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " local neighborhood header: " << points_cropped->header);
 
-    return points_cropped;
-}
+//     return points_cropped;
+// }
 
-// Do a bounding box filter to get the masked points.
-boost::shared_ptr<PointCloud> CornerCandidateDetection::get_masked_points(boost::shared_ptr<PointCloudRGB> point_cloud_full) const
-{
-    auto points_cropped_rgb = boost::make_shared<PointCloudRGB>();
-    auto points_cropped = boost::make_shared<PointCloud>();
+// // Do a bounding box filter to get the masked points.
+// boost::shared_ptr<PointCloud> CornerCandidateDetection::get_masked_points(boost::shared_ptr<PointCloudRGB> point_cloud_full) const
+// {
+//     auto points_cropped_rgb = boost::make_shared<PointCloudRGB>();
+//     auto points_cropped = boost::make_shared<PointCloud>();
 
-    // Find points closest and furthest from the origin (camera frame).
-    Eigen::Vector3f pt_min;
-    float pt_min_norm = 1e15;
-    Eigen::Vector3f pt_max;
-    float pt_max_norm = -1e15;
-    for (auto const pt : detection_mask_bounds_)
-    {
-        float pt_norm = pt.norm();
+//     // Find points closest and furthest from the origin (camera frame).
+//     Eigen::Vector3f pt_min;
+//     float pt_min_norm = 1e15;
+//     Eigen::Vector3f pt_max;
+//     float pt_max_norm = -1e15;
+//     for (auto const pt : detection_mask_bounds_)
+//     {
+//         float pt_norm = pt.norm();
 
-        if (pt_norm < pt_min_norm)
-        {
-            pt_min = pt;
-            pt_min_norm = pt_norm;
-        }
+//         if (pt_norm < pt_min_norm)
+//         {
+//             pt_min = pt;
+//             pt_min_norm = pt_norm;
+//         }
 
-        if (pt_norm > pt_max_norm)
-        {
-            pt_max = pt;
-            pt_max_norm = pt_norm;
-        }
-    }
-    Eigen::Vector3f bounding_box_z_extend(0, 0, .050);
-    Eigen::Vector4f box_min = (pt_min - bounding_box_z_extend).homogeneous();
-    Eigen::Vector4f box_max = (pt_max + bounding_box_z_extend).homogeneous();
+//         if (pt_norm > pt_max_norm)
+//         {
+//             pt_max = pt;
+//             pt_max_norm = pt_norm;
+//         }
+//     }
+//     Eigen::Vector3f bounding_box_z_extend(0, 0, .050);
+//     Eigen::Vector4f box_min = (pt_min - bounding_box_z_extend).homogeneous();
+//     Eigen::Vector4f box_max = (pt_max + bounding_box_z_extend).homogeneous();
 
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " mask bounding box min:" << box_min);
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " mask bounding box max:" << box_max);
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " mask bounding box min:" << box_min);
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " mask bounding box max:" << box_max);
 
-    pcl::CropBox<PointRGB> box_filter;
-    box_filter.setMin(box_min);
-    box_filter.setMax(box_max);
-    box_filter.setInputCloud(point_cloud_full);
-    box_filter.filter(*points_cropped_rgb);
+//     pcl::CropBox<PointRGB> box_filter;
+//     box_filter.setMin(box_min);
+//     box_filter.setMax(box_max);
+//     box_filter.setInputCloud(point_cloud_full);
+//     box_filter.filter(*points_cropped_rgb);
 
-    pcl::copyPointCloud(*points_cropped_rgb, *points_cropped);
+//     pcl::copyPointCloud(*points_cropped_rgb, *points_cropped);
 
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " mask num points: " << points_cropped->size());
-    ROS_INFO_STREAM("Candidate ID#" << id_ << " mask header: " << points_cropped->header);
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " mask num points: " << points_cropped->size());
+//     ROS_INFO_STREAM("Candidate ID#" << id_ << " mask header: " << points_cropped->header);
 
-    return points_cropped;
-}
+//     return points_cropped;
+// }
 
-void CornerCandidateDetection::print() const
-{
-    ROS_INFO_STREAM("Printing corner candidate ID #" << id_);
-    ROS_INFO_STREAM("\tCorner point camera frame: " << corner_point_camera_frame_);
-    ROS_INFO_STREAM("\tAffine transform: " << template_affine_transform_);
+// void CornerCandidateDetection::print() const
+// {
+//     ROS_INFO_STREAM("Printing corner candidate ID #" << id_);
+//     ROS_INFO_STREAM("\tCorner point camera frame: " << corner_point_camera_frame_);
+//     ROS_INFO_STREAM("\tAffine transform: " << template_affine_transform_);
 
-    ROS_INFO("\tLocal cloud neighborhood bounds:");
-    print_vector(local_cloud_neighborhood_bounds_);
+//     ROS_INFO("\tLocal cloud neighborhood bounds:");
+//     print_vector(local_cloud_neighborhood_bounds_);
 
-    ROS_INFO_STREAM("\tDetection mask bounds:");
-    print_vector(detection_mask_bounds_);
-}
+//     ROS_INFO_STREAM("\tDetection mask bounds:");
+//     print_vector(detection_mask_bounds_);
+// }
 
-void CornerCandidateDetection::print_vector(std::vector<Eigen::Vector3f> vec_of_vecs) const
+template<typename T>
+void CornerCandidateDetection::print_vector(std::vector<T> vec_of_vecs) const
 {
     std::stringstream output;
     for (auto const& vec : vec_of_vecs)
@@ -127,6 +128,47 @@ void CornerCandidateDetection::print_vector(std::vector<Eigen::Vector3f> vec_of_
     }
     ROS_INFO(output.str().c_str());
 }
+
+
+/************************************************************
+ * CornerCandidateDetection routines for RGBD
+ ************************************************************/
+CornerCandidateDetection::CornerCandidateDetection(int const detection_id,
+    Eigen::Vector3f const corner_point_camera_frame, cv::Mat const template_affine_transform,
+    std::vector<std::vector<cv::Point>> mask_contour)
+        : id_(detection_id),
+          corner_point_camera_frame_(corner_point_camera_frame),
+          template_affine_transform_(template_affine_transform),
+          mask_contour_(mask_contour)
+{}
+
+cv::Mat CornerCandidateDetection::get_mask(cv::Mat const& depth_img) const
+{
+    // Make an empty image like the provided depth_img
+    cv::Mat mask = cv::Mat::zeros(cv::Size(depth_img.cols, depth_img.rows), CV_8U);
+
+
+    // Draw the mask contour onto the empty image
+    int const cnt_to_draw = 0;
+    int const drawn_value = 1;
+    int const line_thickness = -1;  // Indicates cv2 should fill the contour with `drawn_value`.
+    cv::drawContours(mask, mask_contour_, cnt_to_draw, drawn_value, line_thickness);
+
+    // return the mask drawn onto the image.
+    return mask;
+}
+
+void CornerCandidateDetection::print() const
+{
+    ROS_INFO_STREAM("Printing corner candidate ID #" << id_);
+    ROS_INFO_STREAM("\tAffine transform: " << template_affine_transform_);
+
+    ROS_INFO_STREAM("Mask contour number of contours (should be 1!):" << mask_contour_.size());
+
+    ROS_INFO("\tMask contour:");
+    print_vector(mask_contour_[0]);
+}
+
 
 CornerCandidateDetector::CornerCandidateDetector(){}
 
@@ -286,27 +328,39 @@ std::vector<CornerCandidateDetection> CornerCandidateDetector::read_detector_out
 
         // Read the local point cloud neighborhood.
         std::vector<Eigen::Vector3f> local_point_cloud_bounds;
-        YAML::Node const& local_node = det_node["local_bbox_coordinates_camera_frame"];
-        for (size_t i = 0; i < local_node.size(); ++i)
+        if (YAML::Node const& local_node = det_node["local_bbox_coordinates_camera_frame"])
         {
-            Eigen::Vector3f local_bound;
-            local_bound(0) = local_node[i][0].as<float>();
-            local_bound(1) = local_node[i][1].as<float>();
-            local_bound(2) = local_node[i][2].as<float>();
-            local_point_cloud_bounds.push_back(local_bound);
+            for (size_t i = 0; i < local_node.size(); ++i)
+            {
+                Eigen::Vector3f local_bound;
+                local_bound(0) = local_node[i][0].as<float>();
+                local_bound(1) = local_node[i][1].as<float>();
+                local_bound(2) = local_node[i][2].as<float>();
+                local_point_cloud_bounds.push_back(local_bound);
+            }
+        }
+        else
+        {
+            ROS_INFO("Didn't find \"local_bbox_coordinates_camera_frame\" in YAML file. Skipping");
         }
 
 
         // Read the corner candidate mask
         std::vector<Eigen::Vector3f> mask_bounds;
-        YAML::Node const& mask_node = det_node["mask_bbox_coordinates_camera_frame"];
-        for (size_t i = 0; i < mask_node.size(); ++i)
+        if (YAML::Node const& mask_node = det_node["mask_bbox_coordinates_camera_frame"])
         {
-            Eigen::Vector3f mask_bound;
-            mask_bound(0) = mask_node[i][0].as<float>();
-            mask_bound(1) = mask_node[i][1].as<float>();
-            mask_bound(2) = mask_node[i][2].as<float>();
-            mask_bounds.push_back(mask_bound);
+            for (size_t i = 0; i < mask_node.size(); ++i)
+            {
+                Eigen::Vector3f mask_bound;
+                mask_bound(0) = mask_node[i][0].as<float>();
+                mask_bound(1) = mask_node[i][1].as<float>();
+                mask_bound(2) = mask_node[i][2].as<float>();
+                mask_bounds.push_back(mask_bound);
+            }
+        }
+        else
+        {
+            ROS_INFO("Didn't find \"mask_bbox_coordinates_camera_frame\" in YAML file. Skipping");
         }
 
         // Convert the template_to_corner_candidate_affine_transform into cv::Mat variable
@@ -322,14 +376,40 @@ std::vector<CornerCandidateDetection> CornerCandidateDetector::read_detector_out
         cv::Mat affine_transform;
         cv::eigen2cv(affine_transform_eigen, affine_transform);
 
+        // Read the mask image contour (contour defined in the depth frame)
+        // NOTE: cv2 expects a vector of a vector of points but we only ever find one contour for
+        // the mask, so I define the "proper" type we're expecting and then only add to the zeroth
+        // vector in the nested vector.
+        std::vector<std::vector<cv::Point>> mask_contour_proper_type;
+        // Construct an empty vector of points which will be the vector we add our contour points
+        // to.
+        mask_contour_proper_type.push_back({});
+        auto& mask_contour = mask_contour_proper_type[0];
+        if (YAML::Node const& mask_contour_node = det_node["mask_contour"])
+        {
+            for (size_t i = 0; i < mask_contour_node.size(); ++i)
+            {
+                auto const& cnt_pt = mask_contour_node[i];
+                mask_contour.push_back({cnt_pt[0].as<double>(), cnt_pt[1].as<double>()});
+            }
+        }
+        else
+        {
+            ROS_INFO("Didn't find \"mask_contour\" in YAML file. Skipping");
+        }
+
 
         // CornerCandidateDetection candidate(corner_point_camera_frame, affine_transform,
         //     local_point_cloud_bounds, mask_bounds);
 
         // Initialize a new CornerCandidateDetection with the read variables and store the
         // candidate detection in our vector.
+        // Using point cloud CandidateDetection class
+        // candidate_detections.push_back({det_num, corner_point_camera_frame, affine_transform,
+        //     local_point_cloud_bounds, mask_bounds});
+        // Using RGBD CandidateDetection class
         candidate_detections.push_back({det_num, corner_point_camera_frame, affine_transform,
-            local_point_cloud_bounds, mask_bounds});
+            mask_contour_proper_type});
     }
 
     return candidate_detections;

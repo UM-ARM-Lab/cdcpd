@@ -17,21 +17,60 @@ typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointCloud<PointRGB> PointCloudRGB;
 
-// Temporarily storing in this file until I refactor.
+// CornerCandidateDetection for point clouds.
+// class CornerCandidateDetection
+// {
+// public:
+//     CornerCandidateDetection(int const detection_id,
+//         Eigen::Vector3f const corner_point_camera_frame,
+//         cv::Mat const template_affine_transform,
+//         std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds,
+//         std::vector<Eigen::Vector3f> const detection_mask_bounds);
+
+//     // Do a bounding box filter to get the local neighborhood.
+//     boost::shared_ptr<PointCloudRGB> get_local_point_cloud_neighborhood(boost::shared_ptr<PointCloudRGB> point_cloud_full) const;
+
+//     // Do a bounding box filter to get the masked points.
+//     boost::shared_ptr<PointCloud> get_masked_points(boost::shared_ptr<PointCloudRGB> point_cloud_full) const;
+
+//     // Prints the corner candidate to ROS_INFO
+//     void print() const;
+
+//     // The ID associated with this corner cadidate.
+//     int const id_;
+
+//     Eigen::Vector3f const corner_point_camera_frame_;
+
+//     // The affine transform to go from template initial position (TBD) (0, 0, 0)? to the position in
+//     // the camera frame that would align the template with the corner candidate.
+//     // The purpose of this is to provide a solid initialization for the tracked template instead of
+//     // hoping the tracking converges from some naiive initialized position.
+//     cv::Mat const template_affine_transform_;
+
+//     // The bounds of the local neighborhood of the detected corner candidate. Used to pass in
+//     // partial point clouds to the CDCPD::operator()
+//     // We'll use an expanded bounding box filter on to grab the appropriate points in the point
+//     // cloud.
+//     std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds_;
+
+//     // The bounds of the detection mask that we'll use an expanded bounding box filter on to grab
+//     // the appropriate points in the point cloud.
+//     std::vector<Eigen::Vector3f> const detection_mask_bounds_;
+
+// protected:
+//     void print_vector(std::vector<Eigen::Vector3f> vec_of_vecs) const;
+// };
+
+// CornerCandidateDetection for RGBD
 class CornerCandidateDetection
 {
 public:
     CornerCandidateDetection(int const detection_id,
-        Eigen::Vector3f const corner_point_camera_frame,
-        cv::Mat const template_affine_transform,
-        std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds,
-        std::vector<Eigen::Vector3f> const detection_mask_bounds);
+        Eigen::Vector3f const corner_point_camera_frame, cv::Mat const template_affine_transform,
+        std::vector<std::vector<cv::Point>> mask_contour);
 
-    // Do a bounding box filter to get the local neighborhood.
-    boost::shared_ptr<PointCloudRGB> get_local_point_cloud_neighborhood(boost::shared_ptr<PointCloudRGB> point_cloud_full) const;
-
-    // Do a bounding box filter to get the masked points.
-    boost::shared_ptr<PointCloud> get_masked_points(boost::shared_ptr<PointCloudRGB> point_cloud_full) const;
+    // Draws the mask onto an image like the one provided.
+    cv::Mat get_mask(cv::Mat const& depth_img) const;
 
     // Prints the corner candidate to ROS_INFO
     void print() const;
@@ -39,26 +78,19 @@ public:
     // The ID associated with this corner cadidate.
     int const id_;
 
-    Eigen::Vector3f const corner_point_camera_frame_;
-
     // The affine transform to go from template initial position (TBD) (0, 0, 0)? to the position in
     // the camera frame that would align the template with the corner candidate.
     // The purpose of this is to provide a solid initialization for the tracked template instead of
     // hoping the tracking converges from some naiive initialized position.
     cv::Mat const template_affine_transform_;
 
-    // The bounds of the local neighborhood of the detected corner candidate. Used to pass in
-    // partial point clouds to the CDCPD::operator()
-    // We'll use an expanded bounding box filter on to grab the appropriate points in the point
-    // cloud.
-    std::vector<Eigen::Vector3f> const local_cloud_neighborhood_bounds_;
+    std::vector<std::vector<cv::Point>> mask_contour_;
 
-    // The bounds of the detection mask that we'll use an expanded bounding box filter on to grab
-    // the appropriate points in the point cloud.
-    std::vector<Eigen::Vector3f> const detection_mask_bounds_;
+    Eigen::Vector3f const corner_point_camera_frame_;
 
 protected:
-    void print_vector(std::vector<Eigen::Vector3f> vec_of_vecs) const;
+    template<typename T>
+    void print_vector(std::vector<T> vec) const;
 };
 
 

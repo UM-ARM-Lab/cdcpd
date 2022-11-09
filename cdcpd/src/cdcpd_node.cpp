@@ -152,24 +152,6 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         end_position << node_params.max_rope_length / 2, 0, 1.0;
     }
 
-    // Move this code into a loop within the points callback function and initialize new templates
-    // based on unassociated clusters.
-    // {
-    //     auto new_configuration = initialize_deformable_object_configuration(start_position,
-    //         end_position);
-
-    //     auto cdcpd_instance = std::make_shared<CDCPD>(nh, ph, new_configuration->initial_.points_,
-    //         new_configuration->initial_.edges_,
-    //         cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
-    //         cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-    //         cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
-
-    //     // Add the CDCPD instance and deformable object configuration to our maps with a unique ID
-    //     int const new_id = get_new_deformable_object_configuration_id();
-    //     deformable_object_configurations_.emplace(new_id, new_configuration);
-    //     cdcpd_instances_.emplace(new_id, cdcpd_instance);
-    // }
-
     // Define the callback wrappers we need to pass to ROS nodes.
     // auto const callback_read_rgb_and_depth_images_wrapper = [&](cv::Mat const& rgb,
     //     cv::Mat const& depth, cv::Matx33d const& intrinsics)
@@ -177,70 +159,70 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     //     callback_read_rgb_and_depth_images(rgb, depth, intrinsics);
     // };
 
-    auto const points_callback_wrapper = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg)
-    {
-        points_callback(points_msg);
-    };
+    // auto const points_callback_wrapper = [&](const sensor_msgs::PointCloud2ConstPtr& points_msg)
+    // {
+    //     points_callback(points_msg);
+    // };
 
 
     // New plan, do the dumb thing and make 3 callbacks, doing everything KinectSub did plus point
     // clouds
 
 
-    auto const rgb_callback_wrapper = [&](const sensor_msgs::ImageConstPtr& rgb_msg)
-    {
-        cv_bridge::CvImagePtr cv_rgb_ptr;
-        try {
-            cv_rgb_ptr = cv_bridge::toCvCopy(rgb_msg, sensor_msgs::image_encodings::RGB8);
-        } catch (cv_bridge::Exception& e) {
-            ROS_ERROR("RGB cv_bridge exception: %s", e.what());
-            return;
-        }
-
-        cv::cvtColor(cv_rgb_ptr->image, rgb_img_, cv::COLOR_BGR2RGB);
-    };
-
-    auto const depth_callback_wrapper = [&](const sensor_msgs::ImageConstPtr& depth_msg)
-    {
-        cv_bridge::CvImagePtr cv_depth_ptr;
-        try {
-            cv_depth_ptr = cv_bridge::toCvCopy(depth_msg, depth_msg->encoding);
-        } catch (cv_bridge::Exception& e) {
-            ROS_ERROR("Depth cv_bridge exception: %s", e.what());
-            return;
-        }
-
-        if (depth_msg->encoding != sensor_msgs::image_encodings::TYPE_16UC1) {
-            ROS_INFO("Depth message is not in %s format. Converting.", sensor_msgs::image_encodings::TYPE_16UC1.c_str());
-            if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-            cv::Mat convertedDepthImg(cv_depth_ptr->image.size(), CV_16UC1);
-
-            const int V = cv_depth_ptr->image.size().height;
-            const int U = cv_depth_ptr->image.size().width;
-
-            for (int v = 0; v < V; ++v) {
-                for (int u = 0; u < U; ++u) {
-                convertedDepthImg.at<uint16_t>(v, u) =
-                    depth_image_proc::DepthTraits<uint16_t>::fromMeters(cv_depth_ptr->image.at<float>(v, u));
-                }
-            }
-
-            cv_depth_ptr->encoding = sensor_msgs::image_encodings::TYPE_16UC1;
-            cv_depth_ptr->image = convertedDepthImg;
-            } else {
-            ROS_ERROR_THROTTLE(10, "Unhandled depth message format %s", depth_msg->encoding.c_str());
-            return;
-            }
-        }
-
-        depth_img_ = cv_depth_ptr->image;
-    };
-
-    // auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
-    //     cv::Matx33d const& intrinsics)
+    // auto const rgb_callback_wrapper = [&](const sensor_msgs::ImageConstPtr& rgb_msg)
     // {
-    //     callback(rgb, depth, intrinsics);
+    //     cv_bridge::CvImagePtr cv_rgb_ptr;
+    //     try {
+    //         cv_rgb_ptr = cv_bridge::toCvCopy(rgb_msg, sensor_msgs::image_encodings::RGB8);
+    //     } catch (cv_bridge::Exception& e) {
+    //         ROS_ERROR("RGB cv_bridge exception: %s", e.what());
+    //         return;
+    //     }
+
+    //     cv::cvtColor(cv_rgb_ptr->image, rgb_img_, cv::COLOR_BGR2RGB);
     // };
+
+    // auto const depth_callback_wrapper = [&](const sensor_msgs::ImageConstPtr& depth_msg)
+    // {
+    //     cv_bridge::CvImagePtr cv_depth_ptr;
+    //     try {
+    //         cv_depth_ptr = cv_bridge::toCvCopy(depth_msg, depth_msg->encoding);
+    //     } catch (cv_bridge::Exception& e) {
+    //         ROS_ERROR("Depth cv_bridge exception: %s", e.what());
+    //         return;
+    //     }
+
+    //     if (depth_msg->encoding != sensor_msgs::image_encodings::TYPE_16UC1) {
+    //         ROS_INFO("Depth message is not in %s format. Converting.", sensor_msgs::image_encodings::TYPE_16UC1.c_str());
+    //         if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+    //         cv::Mat convertedDepthImg(cv_depth_ptr->image.size(), CV_16UC1);
+
+    //         const int V = cv_depth_ptr->image.size().height;
+    //         const int U = cv_depth_ptr->image.size().width;
+
+    //         for (int v = 0; v < V; ++v) {
+    //             for (int u = 0; u < U; ++u) {
+    //             convertedDepthImg.at<uint16_t>(v, u) =
+    //                 depth_image_proc::DepthTraits<uint16_t>::fromMeters(cv_depth_ptr->image.at<float>(v, u));
+    //             }
+    //         }
+
+    //         cv_depth_ptr->encoding = sensor_msgs::image_encodings::TYPE_16UC1;
+    //         cv_depth_ptr->image = convertedDepthImg;
+    //         } else {
+    //         ROS_ERROR_THROTTLE(10, "Unhandled depth message format %s", depth_msg->encoding.c_str());
+    //         return;
+    //         }
+    //     }
+
+    //     depth_img_ = cv_depth_ptr->image;
+    // };
+
+    auto const callback_wrapper = [&](cv::Mat const& rgb, cv::Mat const& depth,
+        cv::Matx33d const& intrinsics)
+    {
+        callback(rgb, depth, intrinsics);
+    };
 
     // Now we subscribe to each of the point cloud, RGB, and depth topics in a single thread. This
     // will be slow but since we're using a static camera for now it should be fine.
@@ -252,19 +234,20 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     // got a spinner spinning.
 
     // ROS_INFO_NAMED(LOGNAME, "subscribing to points, RGB, and Depth!!");
-    // auto camera_sub_setup = CameraSubSetup(node_params.points_name, node_params.rgb_topic, node_params.depth_topic,
-    //     node_params.info_topic);
-    // // wait a second so the TF buffer can fill
-    // ros::Duration(0.5).sleep();
-    // KinectSub kinect_sub(callback_wrapper, camera_sub_setup);
+    auto camera_sub_setup = CameraSubSetup(node_params.rgb_topic, node_params.depth_topic,
+        node_params.info_topic);
+    // wait a second so the TF buffer can fill
+    ros::Duration(0.5).sleep();
+    KinectSub kinect_sub(callback_wrapper, camera_sub_setup);
+    ros::waitForShutdown();
 
-    auto rgb_sub = nh.subscribe<sensor_msgs::Image>(node_params.rgb_topic, 1, rgb_callback_wrapper);
-    auto depth_sub = nh.subscribe<sensor_msgs::Image>(node_params.depth_topic, 1,
-        depth_callback_wrapper);
-    auto points_sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 1,
-        points_callback_wrapper);
+    // auto rgb_sub = nh.subscribe<sensor_msgs::Image>(node_params.rgb_topic, 1, rgb_callback_wrapper);
+    // auto depth_sub = nh.subscribe<sensor_msgs::Image>(node_params.depth_topic, 1,
+    //     depth_callback_wrapper);
+    // auto points_sub = nh.subscribe<sensor_msgs::PointCloud2>(node_params.points_name, 1,
+    //     points_callback_wrapper);
 
-    ros::spin();
+    // ros::spin();
 
 }
 
@@ -540,235 +523,25 @@ ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
     return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
   }
 
-// void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
-//     cv::Matx33d const& intrinsics)
-// {
-//     auto const t0 = ros::Time::now();
-//     auto [q_config, q_dot] = get_q_config();
-
-//     publish_bboxes();
-
-//     // Get the point cloud clusters and their local point cloud neighborhood from the corner
-//     // candidate detection routine
-//     // NOTE: Zixuan's routine works on the RGB/D images. May do translation here or may do in the
-//     // corner_candidate_detection routine.
-//     auto corner_candidate_detector = CornerCandidateDetector();
-//     auto const corner_candidate_detections = corner_candidate_detector->do_corner_candidate_detection();
-
-//     // Associate the point cloud clusters to tracked templates
-//     auto const associated_pairs =
-//         associate_corner_candidates_with_tracked_objects(corner_candidate_detections);
-
-//     ROS_INFO("Associated pairs:");
-//     for (auto const& assoc_pair : associated_pairs)
-//     {
-//         ROS_INFO("\t(%d, %d)", std::get<0>(assoc_pair), std::get<1>(assoc_pair));
-//     }
-
-
-
-//     // auto obstacle_constraints = get_obstacle_constraints();
-
-//     // auto const hsv_mask = getHsvMask(ph, rgb);
-//     // auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
-//     //                           deformable_object_configuration_->tracked_.points_,
-//     //                           obstacle_constraints,
-//     //                           deformable_object_configuration_->max_segment_length_, q_dot,
-//     //                           q_config, gripper_indices);
-//     // deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
-//     // publish_outputs(t0, out);
-//     // reset_if_bad(out);
-
-//     // associated_pairs is a vector of tuples with {cluster_idx, configuration_id} so we don't have
-//     // to default-construct the candidate_detection and configurations when there's no association
-//     // between the two.
-//     // for (auto const& assoc_pair : associated_pairs)
-
-//     // Testing with just one configuration for now.
-//     int def_obj_id = 0;
-//     auto const& assoc_pair = associated_pairs[def_obj_id];
-//     {
-//         int const& candidate_idx = std::get<0>(assoc_pair);
-//         int const& def_obj_id = std::get<1>(assoc_pair);
-//         bool const is_candidate_idx_invalid = candidate_idx == -1;
-//         bool const is_def_obj_id_invalid = def_obj_id == -1;
-
-//         ROS_INFO("Processing associated pair (%d, %d)", candidate_idx, def_obj_id);
-
-//         if (is_candidate_idx_invalid && !is_def_obj_id_invalid)
-//         {
-//             // To check occlusion, we need the full point cloud. This will likely be non-trivial
-//             // if (!def_obj_id.is_occluded())
-//             // {
-//             //     // Come up with some routine for reducing existence probability.
-//             //     def_obj_id.reduce_existence_probability();
-//             // }
-//             // else
-//             // {
-//             //     // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
-//             //     // it
-//             // }
-//         }
-//         else if (is_def_obj_id_invalid && !is_candidate_idx_invalid)
-//         {
-//             auto const& candidate = corner_candidate_detections[candidate_idx];
-//             candidate.print();
-//             // Get the affine transform for the candidate_idx that will define where we place the template
-//             // in the camera frame.
-
-//             // Initialize new deformable object configuration based on the unassociated
-//             // candidate_idx received from segmentation routine.
-//             // TODO: this should initialize based on the affine transform we just got and return
-//             // the new deformable object configuration
-//             // auto def_obj_new = initialize_deformable_object_configuration(start_position, end_position);
-//             auto def_obj_new = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
-//                 node_params.length_initial_cloth, node_params.width_initial_cloth,
-//                 node_params.grid_size_initial_guess_cloth));
-
-//             ROS_INFO("here1");
-
-//             // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
-//             // Z direction as we apply a bounding-box filter (where the box is centered at the camera
-//             // frame. That excludes the actual segmentation of the cloth in the current implementation.
-
-//             def_obj_new->template_affine_transform_ = corner_candidate_detections[candidate_idx].template_affine_transform_;
-
-//             ROS_INFO("here2");
-
-//             // Have to call initializeTracking() before casting to base class since it relies on virtual
-//             // functions.
-//             def_obj_new->initializeTracking();
-
-//             ROS_INFO("here3");
-
-
-
-
-//             // deformable_object_configurations_.emplace({def_obj_new_id, def_obj_new});
-//             // auto def_obj_new_base_pointer = std::static_pointer_cast<DeformableObjectConfiguration>(def_obj_new);
-//             // deformable_object_configurations_[def_obj_new_id] = std::move();
-
-//             ROS_INFO("here5");
-
-//             // Initialize CDCPD for our new template.
-//             auto cdcpd_instance = std::make_unique<CDCPD>(nh, ph,
-//                 def_obj_new->initial_.points_, def_obj_new->initial_.edges_,
-//                 cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
-//                 cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-//                 cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
-
-//             ROS_INFO("here6");
-
-//             // Get a new unique ID for the template we're tracking.
-//             int const def_obj_new_id = get_new_deformable_object_configuration_id();
-
-//             // Add the deformable object configuration to our map of configurations with
-//             // {new_id, new_configuration}
-//             deformable_object_configurations_[def_obj_new_id] = std::move(def_obj_new);
-
-//             // Add the CDCPD instance to our map of instances
-//             cdcpd_instances_[def_obj_new_id] = std::move(cdcpd_instance);
-
-//             ROS_INFO("Done initializing new configuration and CDCPD instance.");
-//         }
-//         else if (!is_def_obj_id_invalid && !is_def_obj_id_invalid)
-//         {
-//             // Grab the mask and local neighborhood point cloud from the corner candidate detection.
-//             auto& candidate = corner_candidate_detections[candidate_idx];
-//             auto const def_obj_mask = candidate.get_masked_points(points_full_cloud);
-//             auto local_point_cloud = candidate.get_local_point_cloud_neighborhood(points_full_cloud);
-//             ROS_INFO("After getting local cloud and mask!");
-//             auto & cdcpd_instance = cdcpd_instances_.at(def_obj_id);
-//             auto & configuration = def_obj_configuraations_.at(def_obj_id);
-
-
-//             auto obstacle_constraints = get_obstacle_constraints(def_obj_id);
-
-//             // We received data for this tracked configuration, run the associated CDCPD instance
-//             // with the local point cloud.
-//             ROS_INFO("Before running CDCPD instance!");
-//             // Now using the RGBD CDCPD operator here.
-//             // auto const out = cdcpd_instance(local_point_cloud,
-//             //     deformable_object_configurations_.at(def_obj_id)->tracked_.points_,
-//             //     obstacle_constraints, deformable_object_configurations_.at(def_obj_id)->max_segment_length_, q_dot,
-//             //     q_config, gripper_indices, 0, def_obj_mask);
-//             ROS_INFO("Make CDCPD instance use local image neighborhoods instead of full image");
-//             auto const out = cdcpd_instance(rgb_img_, depth_img_, def_obj_mask, intrinsics, );
-
-//             // Get the associated ID with our object_configuration.
-//             // int configuration_id; // = get_configuration_id();
-
-//             ROS_INFO("Before storing outputs.");
-
-//             // Store in our output structure.
-//             cdcpd_outputs_[def_obj_id] = out;
-
-//             // Update the tracked configuration for this configuration
-//             deformable_object_configurations_.at(def_obj_id)->tracked_.points_ = out.gurobi_output;
-
-//             ROS_INFO("Done with this association.");
-//         }
-//         else
-//         {
-//             // This shouldn't happen. Something is wrong with association.
-//         }
-//     }
-
-//     // Testing with just one configuration for now.
-//     // int def_obj_id = 0;
-//     // auto& object_configuration = deformable_object_configurations_.at(def_obj_id);
-//     // auto& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
-//     // auto const out = (*cdcpd_instance)(points_full_cloud, object_configuration->tracked_.points_,
-//     //     obstacle_constraints, object_configuration->max_segment_length_, q_dot,
-//     //     q_config, gripper_indices);
-//     // object_configuration->tracked_.points_ = out.gurobi_output;
-//     // cdcpd_outputs_.emplace(def_obj_id, out);
-//     // publish_outputs(t0, out);
-//     publish_outputs(t0);
-
-//     // Ignoring this for now as I don't have this implemented.
-//     // reset_if_bad(out);
-// };
-
-void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
+void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
+    cv::Matx33d const& intrinsics)
 {
+    ROS_INFO("Using the RGB/D callback!");
     auto const t0 = ros::Time::now();
-
-    // Clear the CDCPD outputs from the previous iteration.
-    cdcpd_outputs_.clear();
-
-    publish_bboxes();
-    // publish_template();
-
     auto [q_config, q_dot] = get_q_config();
 
-    ROS_INFO("Point cloud from azure is actually XYZRGB, so we don't have to subscribe to both points and RGB/D!!");
-
-    pcl::PCLPointCloud2 points_v2;
-    pcl_conversions::toPCL(*points_msg, points_v2);
-    auto points_full_cloud = boost::make_shared<PointCloudRGB>();
-    pcl::fromPCLPointCloud2(points_v2, *points_full_cloud);
-    ROS_INFO_STREAM("points_full_cloud header: " << points_full_cloud->header);
-    ROS_INFO_STREAM("points full cloud size: " << points_full_cloud->size());
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points_full_cloud->size());
-
-    pcl::PointXYZRGB minPt, maxPt;
-    pcl::getMinMax3D (*points_full_cloud, minPt, maxPt);
-    ROS_INFO_STREAM("points_full_cloud min point: " << minPt);
-    ROS_INFO_STREAM("points_full_cloud max point: " << maxPt);
-
+    publish_bboxes();
 
     // Get the point cloud clusters and their local point cloud neighborhood from the corner
     // candidate detection routine
     // NOTE: Zixuan's routine works on the RGB/D images. May do translation here or may do in the
     // corner_candidate_detection routine.
-    auto corner_detector = CornerCandidateDetector();
-    auto const corner_candidate_detections =
-        corner_detector.do_corner_candidate_detection(points_full_cloud);
+    auto corner_candidate_detector = CornerCandidateDetector();
+    auto const corner_candidate_detections = corner_candidate_detector.do_corner_candidate_detection(rgb, depth);
 
     // Associate the point cloud clusters to tracked templates
     auto const associated_pairs =
-        corner_detector.associate_corner_candidates_with_tracked_objects(
+        corner_candidate_detector.associate_corner_candidates_with_tracked_objects(
             corner_candidate_detections, deformable_object_configurations_);
 
     ROS_INFO("Associated pairs:");
@@ -777,6 +550,12 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
         ROS_INFO("\t(%d, %d)", std::get<0>(assoc_pair), std::get<1>(assoc_pair));
     }
 
+    // Copy the rgb and depth images so that if the rgb_img_ and depth_img_ members are updated via
+    // the subscriber(s), we're operating on the same RGB and Depth image for all detections.
+    // TODO: This "freezing" of the image should probably be done at the callback level, setting a
+    // flag for when we're ready to update the image (when we've finished with CDCPD execution).
+    cv::Mat const rgb_img = rgb_img_;
+    cv::Mat const depth_img = depth_img_;
 
     // associated_pairs is a vector of tuples with {cluster_idx, configuration_id} so we don't have
     // to default-construct the candidate_detection and configurations when there's no association
@@ -807,7 +586,6 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
             //     // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
             //     // it
             // }
-            ROS_INFO("Implement occlusion checking");
         }
         else if (is_def_obj_id_invalid && !is_candidate_idx_invalid)
         {
@@ -875,20 +653,23 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
         {
             // Grab the mask and local neighborhood point cloud from the corner candidate detection.
             auto& candidate = corner_candidate_detections[candidate_idx];
-            auto const def_obj_mask = candidate.get_masked_points(points_full_cloud);
-            auto local_point_cloud = candidate.get_local_point_cloud_neighborhood(points_full_cloud);
+            // auto const def_obj_mask = candidate.get_masked_points(points_full_cloud);
+            auto def_obj_mask = candidate.get_mask(depth_img_);
             ROS_INFO("After getting local cloud and mask!");
+            auto & cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+            auto & configuration = deformable_object_configurations_.at(def_obj_id);
 
 
             auto obstacle_constraints = get_obstacle_constraints(def_obj_id);
 
             // We received data for this tracked configuration, run the associated CDCPD instance
             // with the local point cloud.
-            ROS_INFO("Before running CDCPD instance!");
-            auto const out = (*cdcpd_instances_.at(def_obj_id))(local_point_cloud,
-                deformable_object_configurations_.at(def_obj_id)->tracked_.points_,
-                obstacle_constraints, deformable_object_configurations_.at(def_obj_id)->max_segment_length_, q_dot,
-                q_config, gripper_indices, 0, def_obj_mask);
+            ROS_INFO("Running CDCPD instance!");
+            // Now using the RGBD CDCPD operator here.
+            ROS_INFO("Make CDCPD instance use local image neighborhoods instead of full image");
+            auto const out = (*cdcpd_instance)(rgb_img, depth_img, def_obj_mask, intrinsics,
+                configuration->tracked_.points_, obstacle_constraints,
+                configuration->max_segment_length_, q_dot, q_config, 0);
 
             // Get the associated ID with our object_configuration.
             // int configuration_id; // = get_configuration_id();
@@ -896,19 +677,215 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
             ROS_INFO("Before storing outputs.");
 
             // Store in our output structure.
-            cdcpd_outputs_[def_obj_id] = out;
+            // cdcpd_outputs_[def_obj_id] = out;
 
             // Update the tracked configuration for this configuration
-            deformable_object_configurations_.at(def_obj_id)->tracked_.points_ = out.gurobi_output;
+            // deformable_object_configurations_.at(def_obj_id)->tracked_.points_ = out.gurobi_output;
 
             ROS_INFO("Done with this association.");
         }
         else
         {
             // This shouldn't happen. Something is wrong with association.
-            ROS_WARN("You shouldn't be able to reach this conditional block!");
         }
     }
+
+    // Testing with just one configuration for now.
+    // int def_obj_id = 0;
+    // auto& object_configuration = deformable_object_configurations_.at(def_obj_id);
+    // auto& cdcpd_instance = cdcpd_instances_.at(def_obj_id);
+    // auto const out = (*cdcpd_instance)(points_full_cloud, object_configuration->tracked_.points_,
+    //     obstacle_constraints, object_configuration->max_segment_length_, q_dot,
+    //     q_config, gripper_indices);
+    // object_configuration->tracked_.points_ = out.gurobi_output;
+    // cdcpd_outputs_.emplace(def_obj_id, out);
+    // publish_outputs(t0, out);
+    publish_outputs(t0);
+
+    // Ignoring this for now as I don't have this implemented.
+    // reset_if_bad(out);
+};
+
+void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
+{
+    auto const t0 = ros::Time::now();
+
+    // Clear the CDCPD outputs from the previous iteration.
+    cdcpd_outputs_.clear();
+
+    publish_bboxes();
+    // publish_template();
+
+    auto [q_config, q_dot] = get_q_config();
+
+    ROS_INFO("Point cloud from azure is actually XYZRGB, so we don't have to subscribe to both points and RGB/D!!");
+
+    pcl::PCLPointCloud2 points_v2;
+    pcl_conversions::toPCL(*points_msg, points_v2);
+    auto points_full_cloud = boost::make_shared<PointCloudRGB>();
+    pcl::fromPCLPointCloud2(points_v2, *points_full_cloud);
+    ROS_INFO_STREAM("points_full_cloud header: " << points_full_cloud->header);
+    ROS_INFO_STREAM("points full cloud size: " << points_full_cloud->size());
+    ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points_full_cloud->size());
+
+    pcl::PointXYZRGB minPt, maxPt;
+    pcl::getMinMax3D (*points_full_cloud, minPt, maxPt);
+    ROS_INFO_STREAM("points_full_cloud min point: " << minPt);
+    ROS_INFO_STREAM("points_full_cloud max point: " << maxPt);
+
+
+    // Get the point cloud clusters and their local point cloud neighborhood from the corner
+    // candidate detection routine
+    // NOTE: Zixuan's routine works on the RGB/D images. May do translation here or may do in the
+    // corner_candidate_detection routine.
+    auto corner_detector = CornerCandidateDetector();
+    auto const corner_candidate_detections =
+        corner_detector.do_corner_candidate_detection(points_full_cloud);
+
+    // Associate the point cloud clusters to tracked templates
+    auto const associated_pairs =
+        corner_detector.associate_corner_candidates_with_tracked_objects(
+            corner_candidate_detections, deformable_object_configurations_);
+
+    ROS_INFO("Associated pairs:");
+    for (auto const& assoc_pair : associated_pairs)
+    {
+        ROS_INFO("\t(%d, %d)", std::get<0>(assoc_pair), std::get<1>(assoc_pair));
+    }
+
+
+    // associated_pairs is a vector of tuples with {cluster_idx, configuration_id} so we don't have
+    // to default-construct the candidate_detection and configurations when there's no association
+    // between the two.
+    // for (auto const& assoc_pair : associated_pairs)
+
+    ROS_ERROR("Commented the point cloud functionality out!!!");
+    // Testing with just one configuration for now.
+    // int def_obj_id = 0;
+    // auto const& assoc_pair = associated_pairs[def_obj_id];
+    // {
+    //     int const& candidate_idx = std::get<0>(assoc_pair);
+    //     int const& def_obj_id = std::get<1>(assoc_pair);
+    //     bool const is_candidate_idx_invalid = candidate_idx == -1;
+    //     bool const is_def_obj_id_invalid = def_obj_id == -1;
+
+    //     ROS_INFO("Processing associated pair (%d, %d)", candidate_idx, def_obj_id);
+
+    //     if (is_candidate_idx_invalid && !is_def_obj_id_invalid)
+    //     {
+    //         // To check occlusion, we need the full point cloud. This will likely be non-trivial
+    //         // if (!def_obj_id.is_occluded())
+    //         // {
+    //         //     // Come up with some routine for reducing existence probability.
+    //         //     def_obj_id.reduce_existence_probability();
+    //         // }
+    //         // else
+    //         // {
+    //         //     // Run CDCPD with no point cloud? This seems dumb and we just probably shouldn't run
+    //         //     // it
+    //         // }
+    //         ROS_INFO("Implement occlusion checking");
+    //     }
+    //     else if (is_def_obj_id_invalid && !is_candidate_idx_invalid)
+    //     {
+    //         auto const& candidate = corner_candidate_detections[candidate_idx];
+    //         candidate.print();
+    //         // Get the affine transform for the candidate_idx that will define where we place the template
+    //         // in the camera frame.
+
+    //         // Initialize new deformable object configuration based on the unassociated
+    //         // candidate_idx received from segmentation routine.
+    //         // TODO: this should initialize based on the affine transform we just got and return
+    //         // the new deformable object configuration
+    //         // auto def_obj_new = initialize_deformable_object_configuration(start_position, end_position);
+    //         auto def_obj_new = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
+    //             node_params.length_initial_cloth, node_params.width_initial_cloth,
+    //             node_params.grid_size_initial_guess_cloth));
+
+    //         ROS_INFO("here1");
+
+    //         // TODO: Address hard-coding of cloth Z-value. Right now we're translating by 1 meter in the
+    //         // Z direction as we apply a bounding-box filter (where the box is centered at the camera
+    //         // frame. That excludes the actual segmentation of the cloth in the current implementation.
+
+    //         def_obj_new->template_affine_transform_ = corner_candidate_detections[candidate_idx].template_affine_transform_;
+
+    //         ROS_INFO("here2");
+
+    //         // Have to call initializeTracking() before casting to base class since it relies on virtual
+    //         // functions.
+    //         def_obj_new->initializeTracking();
+
+    //         ROS_INFO("here3");
+
+
+
+
+    //         // deformable_object_configurations_.emplace({def_obj_new_id, def_obj_new});
+    //         // auto def_obj_new_base_pointer = std::static_pointer_cast<DeformableObjectConfiguration>(def_obj_new);
+    //         // deformable_object_configurations_[def_obj_new_id] = std::move();
+
+    //         ROS_INFO("here5");
+
+    //         // Initialize CDCPD for our new template.
+    //         auto cdcpd_instance = std::make_unique<CDCPD>(nh, ph,
+    //             def_obj_new->initial_.points_, def_obj_new->initial_.edges_,
+    //             cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
+    //             cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
+    //             cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
+
+    //         ROS_INFO("here6");
+
+    //         // Get a new unique ID for the template we're tracking.
+    //         int const def_obj_new_id = get_new_deformable_object_configuration_id();
+
+    //         // Add the deformable object configuration to our map of configurations with
+    //         // {new_id, new_configuration}
+    //         deformable_object_configurations_[def_obj_new_id] = std::move(def_obj_new);
+
+    //         // Add the CDCPD instance to our map of instances
+    //         cdcpd_instances_[def_obj_new_id] = std::move(cdcpd_instance);
+
+    //         ROS_INFO("Done initializing new configuration and CDCPD instance.");
+    //     }
+    //     else if (!is_def_obj_id_invalid && !is_def_obj_id_invalid)
+    //     {
+    //         // Grab the mask and local neighborhood point cloud from the corner candidate detection.
+    //         auto& candidate = corner_candidate_detections[candidate_idx];
+    //         auto const def_obj_mask = candidate.get_masked_points(points_full_cloud);
+    //         auto local_point_cloud = candidate.get_local_point_cloud_neighborhood(points_full_cloud);
+    //         ROS_INFO("After getting local cloud and mask!");
+
+
+    //         auto obstacle_constraints = get_obstacle_constraints(def_obj_id);
+
+    //         // We received data for this tracked configuration, run the associated CDCPD instance
+    //         // with the local point cloud.
+    //         ROS_INFO("Before running CDCPD instance!");
+    //         auto const out = (*cdcpd_instances_.at(def_obj_id))(local_point_cloud,
+    //             deformable_object_configurations_.at(def_obj_id)->tracked_.points_,
+    //             obstacle_constraints, deformable_object_configurations_.at(def_obj_id)->max_segment_length_, q_dot,
+    //             q_config, gripper_indices, 0, def_obj_mask);
+
+    //         // Get the associated ID with our object_configuration.
+    //         // int configuration_id; // = get_configuration_id();
+
+    //         ROS_INFO("Before storing outputs.");
+
+    //         // Store in our output structure.
+    //         cdcpd_outputs_[def_obj_id] = out;
+
+    //         // Update the tracked configuration for this configuration
+    //         deformable_object_configurations_.at(def_obj_id)->tracked_.points_ = out.gurobi_output;
+
+    //         ROS_INFO("Done with this association.");
+    //     }
+    //     else
+    //     {
+    //         // This shouldn't happen. Something is wrong with association.
+    //         ROS_WARN("You shouldn't be able to reach this conditional block!");
+    //     }
+    // }
 
     // Testing with just one configuration for now.
     // int def_obj_id = 0;

@@ -121,7 +121,7 @@ public:
     void publish_outputs(ros::Time const& t0); //, CDCPD::Output const& out);
 
     // Main callback for RGB and Depth Mat inputs.
-    // void callback(cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics);
+    void callback(cv::Mat const& rgb, cv::Mat const& depth, cv::Matx33d const& intrinsics);
 
     // Main callback for point cloud inputs.
     void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg);

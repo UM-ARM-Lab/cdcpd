@@ -23,7 +23,7 @@
     <node pkg="cdcpd" type="cdcpd_node" name="cdcpd_node" respawn="false" output="screen">
         <!-- This file uses the point cloud, but you can also use the RGB and Depth input by
         commenting the "points" param and uncommenting the "rgb_topic" and "depth_topic" params. -->
-        <param name="points" value="/points2"/>
+        <!-- <param name="points" value="/points2"/> -->
         <param name="rgb_topic" value="/rgb/image_raw"/>
         <param name="depth_topic" value="/depth_to_rgb/image_raw"/>
         <param name="info_topic" value="/rgb/camera_info"/>

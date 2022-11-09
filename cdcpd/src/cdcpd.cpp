@@ -353,7 +353,8 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
 }
 
 Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-                     const Eigen::VectorXf &Y_emit_prior) {
+                     const Eigen::VectorXf &Y_emit_prior)
+{
   // downsampled_cloud: PointXYZ pointer to downsampled point clouds
   // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
   // depth: CV_16U depth image
@@ -514,80 +515,80 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
   L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
 }
 
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
-                                const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
-                                const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
-                                const smmap::AllGrippersSinglePose &q_config, const std::vector<bool> &is_grasped,
-                                const int pred_choice) {
-  std::vector<int> idx_map;
-  for (auto const &[j, is_grasped_j] : enumerate(is_grasped)) {
-    if (j < q_config.size() and j < q_dot.size()) {
-      idx_map.push_back(j);
-    } else {
-      ROS_ERROR_STREAM_NAMED(LOGNAME, "is_grasped index " << j << " given but only " << q_config.size()
-                                                          << " gripper configs and " << q_dot.size()
-                                                          << " gripper velocities given.");
-    }
-  }
+// CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
+//                                 const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
+//                                 const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
+//                                 const smmap::AllGrippersSinglePose &q_config, const std::vector<bool> &is_grasped,
+//                                 const int pred_choice) {
+//   std::vector<int> idx_map;
+//   for (auto const &[j, is_grasped_j] : enumerate(is_grasped)) {
+//     if (j < q_config.size() and j < q_dot.size()) {
+//       idx_map.push_back(j);
+//     } else {
+//       ROS_ERROR_STREAM_NAMED(LOGNAME, "is_grasped index " << j << " given but only " << q_config.size()
+//                                                           << " gripper configs and " << q_dot.size()
+//                                                           << " gripper velocities given.");
+//     }
+//   }
 
-  // associate each gripper with the closest point in the current estimate
-  if (is_grasped != last_grasp_status) {
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp status changed, recomputing correspondences");
+//   // associate each gripper with the closest point in the current estimate
+//   if (is_grasped != last_grasp_status) {
+//     ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp status changed, recomputing correspondences");
 
-    // get the previous tracking result
-    const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+//     // get the previous tracking result
+//     const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
 
-    auto const num_gripper = idx_map.size();
-    MatrixXi grippers(1, num_gripper);
-    for (auto g_idx = 0u; g_idx < num_gripper; g_idx++) {
-      Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
-      MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
-      // FIXME: this is missing a "min" of some kind
-      MatrixXf::Index minCol;
-      grippers(0, g_idx) = static_cast<int>(minCol);
-      ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
-    }
+//     auto const num_gripper = idx_map.size();
+//     MatrixXi grippers(1, num_gripper);
+//     for (auto g_idx = 0u; g_idx < num_gripper; g_idx++) {
+//       Vector3f gripper_pos = q_config[idx_map[g_idx]].matrix().cast<float>().block<3, 1>(0, 3);
+//       MatrixXf dist = (Y.colwise() - gripper_pos).colwise().norm();
+//       // FIXME: this is missing a "min" of some kind
+//       MatrixXf::Index minCol;
+//       grippers(0, g_idx) = static_cast<int>(minCol);
+//       ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
+//     }
 
-    gripper_idx = grippers;
+//     gripper_idx = grippers;
 
-    {
-      std::vector<smmap::GripperData> grippers_data;
+//     {
+//       std::vector<smmap::GripperData> grippers_data;
 
-      // format grippers_data
-      ROS_DEBUG_STREAM_NAMED(LOGNAME, "gripper data when constructing CDCPD:" << grippers);
-      for (int g_idx = 0; g_idx < grippers.cols(); g_idx++) {
-        std::vector<long> grip_node_idx;
-        for (int node_idx = 0; node_idx < grippers.rows(); node_idx++) {
-          grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
-          ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp point: " << grippers(node_idx, g_idx));
-        }
-        std::string gripper_name;
-        gripper_name = "gripper" + std::to_string(g_idx);
-        smmap::GripperData gripper(gripper_name, grip_node_idx);
-        grippers_data.push_back(gripper);
-      }
-    }
-  }
+//       // format grippers_data
+//       ROS_DEBUG_STREAM_NAMED(LOGNAME, "gripper data when constructing CDCPD:" << grippers);
+//       for (int g_idx = 0; g_idx < grippers.cols(); g_idx++) {
+//         std::vector<long> grip_node_idx;
+//         for (int node_idx = 0; node_idx < grippers.rows(); node_idx++) {
+//           grip_node_idx.push_back(long(grippers(node_idx, g_idx)));
+//           ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp point: " << grippers(node_idx, g_idx));
+//         }
+//         std::string gripper_name;
+//         gripper_name = "gripper" + std::to_string(g_idx);
+//         smmap::GripperData gripper(gripper_name, grip_node_idx);
+//         grippers_data.push_back(gripper);
+//       }
+//     }
+//   }
 
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
-                                    max_segment_length, q_dot, q_config, pred_choice);
+//   auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
+//                                     max_segment_length, q_dot, q_config, pred_choice);
 
-  last_grasp_status = is_grasped;
+//   last_grasp_status = is_grasped;
 
-  return cdcpd_out;
-}
+//   return cdcpd_out;
+// }
 
-// NOTE: this is the one I'm current using for rgb + depth
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
-                                const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
-                                const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
-                                const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
-                                const int pred_choice) {
-  this->gripper_idx = gripper_idx;
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
-                                    max_segment_length, q_dot, q_config, pred_choice);
-  return cdcpd_out;
-}
+// // NOTE: this is the one I'm current using for rgb + depth
+// CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
+//                                 const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
+//                                 const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
+//                                 const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
+//                                 const int pred_choice) {
+//   this->gripper_idx = gripper_idx;
+//   auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
+//                                     max_segment_length, q_dot, q_config, pred_choice);
+//   return cdcpd_out;
+// }
 
 // NOTE: for point cloud inputs
 CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
@@ -709,26 +710,30 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   // mask: CV_8U mask for segmentation
   // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
   // template_edges: (2, K) matrix corresponding to E in the paper
-
+  ROS_INFO("Before asserts");
   assert(rgb.type() == CV_8UC3);
   assert(depth.type() == CV_16U);
   assert(mask.type() == CV_8U);
   assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
+  ROS_INFO("After asserts");
 
   total_frames_ += 1;
 
   Eigen::Matrix3d intrinsics_eigen_tmp;
   cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
   Eigen::Matrix3f intrinsics_eigen = intrinsics_eigen_tmp.cast<float>();
+  ROS_INFO_STREAM("Intrinsic mat: " << intrinsics_eigen);
 
   // entire_cloud: pointer to the entire point cloud
   // cloud: pointer to the point clouds selected
+  ROS_INFO_STREAM("Last lower bounding box extended: " << last_lower_bounding_box - bounding_box_extend);
+  ROS_INFO_STREAM("Last upper bounding box extended: " << last_upper_bounding_box + bounding_box_extend);
   auto [entire_cloud, cloud] =
       point_clouds_from_images(depth, rgb, mask, intrinsics_eigen, last_lower_bounding_box - bounding_box_extend,
                                last_upper_bounding_box + bounding_box_extend);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
-
+  // After point cloud conversion.
   // STOP HERE
 
   /// VoxelGrid filter downsampling

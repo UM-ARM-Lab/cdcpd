@@ -108,18 +108,18 @@ class CDCPD {
         float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
   // If you have want gripper constraints to be added & removed automatically based on is_grasped & distance
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
-                    const smmap::AllGrippersSinglePose &q_config = {}, const std::vector<bool> &is_grasped = {},
-                    int pred_choice = 0);
+  // Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
+  //                   const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
+  //                   const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+  //                   const smmap::AllGrippersSinglePose &q_config = {}, const std::vector<bool> &is_grasped = {},
+  //                   int pred_choice = 0);
 
   // If you want to used a known correspondence between grippers and node indices (gripper_idx)
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
-                    const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
-                    int pred_choice = 0);
+  // Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
+  //                   const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
+  //                   const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+  //                   const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
+  //                   int pred_choice = 0);
 
   Output operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
                     ObstacleConstraints points_normals, double max_segment_length,
