@@ -113,7 +113,7 @@ class CDCPD {
   // and distance
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
       const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
-      ObstacleConstraints points_normals, Eigen::RowVectorXd max_segment_length,
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const std::vector<bool> &is_grasped = {},
       int pred_choice = 0);
@@ -121,13 +121,13 @@ class CDCPD {
   // If you want to used a known correspondence between grippers and node indices (gripper_idx)
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
       const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
-      ObstacleConstraints points_normals, double max_segment_length,
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
       int pred_choice = 0);
 
   Output operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
-      ObstacleConstraints points_normals, double max_segment_length,
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
       int pred_choice = 0);
@@ -135,7 +135,7 @@ class CDCPD {
   // The common implementation that the above overloads call
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
       const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
-      ObstacleConstraints points_normals, double max_segment_length,
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
 

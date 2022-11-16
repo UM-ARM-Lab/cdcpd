@@ -530,7 +530,7 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
     const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
-    ObstacleConstraints obstacle_constraints, const double max_segment_length,
+    ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const std::vector<bool> &is_grasped, const int pred_choice)
 {
@@ -595,7 +595,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 // NOTE: this is the one I'm current using for rgb + depth
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
     const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
-    ObstacleConstraints obstacle_constraints, const double max_segment_length,
+    ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const Eigen::MatrixXi &gripper_idx, const int pred_choice)
 {
@@ -608,7 +608,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 // NOTE: for point cloud inputs
 CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
-    const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
+    Eigen::RowVectorXd const max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
     const int pred_choice)
 {
@@ -709,7 +709,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
     const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
-    ObstacleConstraints obstacle_constraints, const double max_segment_length,
+    ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const int pred_choice)
 {
@@ -789,7 +789,8 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
   Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
-  auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
+  auto const opt_out =
+      opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
   Matrix3Xf Y_opt = opt_out.first;
   double objective_value = opt_out.second;
 

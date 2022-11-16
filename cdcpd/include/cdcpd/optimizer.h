@@ -58,7 +58,7 @@ class Optimizer {
 
   [[nodiscard]] std::pair<Eigen::Matrix3Xf, double> operator()(const Eigen::Matrix3Xf &Y,
       const Eigen::Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
-      ObstacleConstraints const &points_normals, double max_segment_length);
+      ObstacleConstraints const &points_normals, Eigen::RowVectorXd const max_segment_length);
 
   std::tuple<Points, Normals> test_box(const Eigen::Matrix3Xf &last_template,
       shape_msgs::SolidPrimitive const &box, geometry_msgs::Pose const &pose);

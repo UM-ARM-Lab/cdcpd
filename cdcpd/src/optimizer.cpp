@@ -437,7 +437,7 @@ Optimizer::Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matri
 
 std::pair<Matrix3Xf, double> Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E,
     const std::vector<FixedPoint> &fixed_points, ObstacleConstraints const &obstacle_constraints,
-    const double max_segment_length)
+    Eigen::RowVectorXd const max_segment_length)
 {
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
@@ -468,10 +468,13 @@ std::pair<Matrix3Xf, double> Optimizer::operator()(const Matrix3Xf &Y, const Mat
   // Add the edge constraints
   ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME, "stretch lambda " << stretch_lambda_);
   {
-    for (ssize_t i = 0; i < E.cols(); ++i) {
-      model.addQConstr(buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3), GRB_LESS_EQUAL,
-                       stretch_lambda_ * stretch_lambda_ * max_segment_length * max_segment_length,
-                       "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
+    for (ssize_t i = 0; i < E.cols(); ++i)
+    {
+      double const max_segment_length_i = max_segment_length(0, i);
+      model.addQConstr(buildDifferencingQuadraticTerm(&vars[E(0, i) * 3], &vars[E(1, i) * 3], 3),
+          GRB_LESS_EQUAL,
+          stretch_lambda_ * stretch_lambda_ * (max_segment_length_i * max_segment_length_i),
+          "upper_edge_" + std::to_string(E(0, i)) + "_to_" + std::to_string(E(1, i)));
     }
     model.update();
   }
