@@ -96,7 +96,7 @@ public:
     Eigen::Matrix2Xi form_edges_matrix(bool const use_initial_state=false) const;
 
     // Returns the matrix describing the maximum length each edge can have.
-    // Eigen::Matrix2Xf form_max_segment_length_matrix() const;
+    Eigen::RowVectorXd form_max_segment_length_matrix() const;
 
 protected:
     // The map that holds the deformable objects we're tracking.

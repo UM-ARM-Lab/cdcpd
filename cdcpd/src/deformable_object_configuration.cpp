@@ -151,7 +151,6 @@ PointCloud::Ptr DeformableObjectConfigurationMap::form_vertices_cloud(
     PointCloud::Ptr vertices_cloud;
     // I don't think we actually care about the stamp at this point.
     // bool stamp_copied = false;
-    // for (auto const& def_obj_idx_and_config : tracking_map_)
     for (auto const& def_obj_id : ordered_def_obj_ids_)
     {
         // Grab the deformable object configuration.
@@ -177,7 +176,6 @@ Eigen::Matrix2Xi DeformableObjectConfigurationMap::form_edges_matrix(
 
     // Populate that edge matrix based on all of our edges.
     int edge_idx_aggregate = 0;
-    // for (auto const& def_obj_idx_and_config : tracking_map_)
     for (auto const& def_obj_id : ordered_def_obj_ids_)
     {
         // Grab the deformable object configuration.
@@ -195,6 +193,33 @@ Eigen::Matrix2Xi DeformableObjectConfigurationMap::form_edges_matrix(
         }
     }
     return edges_total;
+}
+
+Eigen::RowVectorXd DeformableObjectConfigurationMap::form_max_segment_length_matrix() const
+{
+    // Construct the structure that will hold the edge lengths.
+    int const num_edges_total = get_total_num_edges();
+    Eigen::RowVectorXd max_segment_lengths(num_edges_total);
+
+    // Populate the edge length structure.
+    // Right now this isn't very interesting but one could envisage dynamically refining tracking
+    // by placing more Gaussians in areas of uncertainty, changing the maximum segment length based
+    // on the new edges created.
+    size_t edge_idx_aggregate = 0;
+    for (auto const& def_obj_id : ordered_def_obj_ids_)
+    {
+        std::shared_ptr<DeformableObjectConfiguration> const def_obj_config =
+            tracking_map_.at(def_obj_id);
+
+        double const def_obj_max_segment_length = def_obj_config->max_segment_length_;
+        for (int i = 0; i < def_obj_config->tracked_.edges_.cols(); ++i)
+        {
+            max_segment_lengths[1, edge_idx_aggregate] = def_obj_max_segment_length;
+            ++edge_idx_aggregate;
+        }
+    }
+
+    return max_segment_lengths;
 }
 
 std::shared_ptr<DeformableObjectTracking> DeformableObjectConfigurationMap::get_appropriate_tracking(
@@ -267,6 +292,7 @@ ClothConfiguration::ClothConfiguration(float const length_initial, float const w
     float grid_size_initial_actual_length =
         length_initial_ / static_cast<float>(num_segments_length);
     float grid_size_initial_actual_width = width_initial_ / static_cast<float>(num_segments_width);
+    // TODO(Dylan): This needs to be updated to include the stretch limit parameter!
     max_segment_length_ = std::min({grid_size_initial_actual_length,
         grid_size_initial_actual_width});
 }
