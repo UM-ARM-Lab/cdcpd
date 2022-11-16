@@ -53,40 +53,39 @@ using ObstacleConstraints = std::vector<ObstacleConstraint>;
 
 class Optimizer {
  public:
-  Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template, float stretch_lambda,
-            float obstacle_cost_weight, float fixed_points_weight);
+  Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template,
+      float stretch_lambda, float obstacle_cost_weight, float fixed_points_weight);
 
-  [[nodiscard]] std::pair<Eigen::Matrix3Xf, double> operator()(const Eigen::Matrix3Xf &Y, const Eigen::Matrix2Xi &E,
-                                                               const std::vector<FixedPoint> &fixed_points,
-                                                               ObstacleConstraints const &points_normals,
-                                                               double max_segment_length);
+  [[nodiscard]] std::pair<Eigen::Matrix3Xf, double> operator()(const Eigen::Matrix3Xf &Y,
+      const Eigen::Matrix2Xi &E, const std::vector<FixedPoint> &fixed_points,
+      ObstacleConstraints const &points_normals, double max_segment_length);
 
-  std::tuple<Points, Normals> test_box(const Eigen::Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &box,
-                                       geometry_msgs::Pose const &pose);
+  std::tuple<Points, Normals> test_box(const Eigen::Matrix3Xf &last_template,
+      shape_msgs::SolidPrimitive const &box, geometry_msgs::Pose const &pose);
 
  private:
   [[nodiscard]] bool gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const;
 
-  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_box(const Eigen::Matrix3Xf &last_template,
-                                                                          shape_msgs::SolidPrimitive const &box,
-                                                                          geometry_msgs::Pose const &pose);
+  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_box(
+      const Eigen::Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &box,
+      geometry_msgs::Pose const &pose);
 
-  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_sphere(const Eigen::Matrix3Xf &last_template,
-                                                                             shape_msgs::SolidPrimitive const &sphere,
-                                                                             geometry_msgs::Pose const &pose);
+  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_sphere(
+      const Eigen::Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &sphere,
+      geometry_msgs::Pose const &pose);
 
-  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_plane(const Eigen::Matrix3Xf &last_template,
-                                                                            shape_msgs::Plane const &plane);
+  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_plane(
+      const Eigen::Matrix3Xf &last_template, shape_msgs::Plane const &plane);
 
   [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_cylinder(
       const Eigen::Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &cylinder,
       geometry_msgs::Pose const &pose);
 
-  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_mesh(const Eigen::Matrix3Xf &last_template,
-                                                                           shape_msgs::Mesh const &shapes_mesh);
+  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal_mesh(
+      const Eigen::Matrix3Xf &last_template, shape_msgs::Mesh const &shapes_mesh);
 
-  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal(const Eigen::Matrix3Xf &last_template,
-                                                                      Objects const &objects);
+  [[nodiscard]] std::tuple<Points, Normals> nearest_points_and_normal(
+      const Eigen::Matrix3Xf &last_template, Objects const &objects);
 
   Eigen::Matrix3Xf initial_template_;
   Eigen::Matrix3Xf last_template_;

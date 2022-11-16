@@ -40,7 +40,9 @@ static Eigen::Vector3f const bounding_box_extend;
 // This is equivalent to [point_a' point_b'] * Q * [point_a' point_b']'
 // where Q is [ I, -I
 //             -I,  I]
-static GRBQuadExpr buildDifferencingQuadraticTerm(GRBVar *point_a, GRBVar *point_b, const size_t num_vars_per_point) {
+static GRBQuadExpr buildDifferencingQuadraticTerm(GRBVar *point_a, GRBVar *point_b,
+    const size_t num_vars_per_point)
+{
   GRBQuadExpr expr;
 
   // Build the main diagonal
@@ -55,7 +57,8 @@ static GRBQuadExpr buildDifferencingQuadraticTerm(GRBVar *point_a, GRBVar *point
   return expr;
 }
 
-static GRBEnv &getGRBEnv() {
+static GRBEnv &getGRBEnv()
+{
   try {
     static GRBEnv env;
     return env;
@@ -65,12 +68,19 @@ static GRBEnv &getGRBEnv() {
   }
 }
 
-static Vector3f cgalVec2EigenVec(Vector cgal_v) { return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]); }
+static Vector3f cgalVec2EigenVec(Vector cgal_v)
+{
+    return Vector3f(cgal_v[0], cgal_v[1], cgal_v[2]);
+}
 
-static Vector3f Pt3toVec(const Point_3 pt) { return Vector3f(float(pt.x()), float(pt.y()), float(pt.z())); }
+static Vector3f Pt3toVec(const Point_3 pt)
+{
+    return Vector3f(float(pt.x()), float(pt.y()), float(pt.z()));
+}
 
 std::tuple<Points, Normals> Optimizer::nearest_points_and_normal(const Matrix3Xf &last_template,
-                                                                 Objects const &objects) {
+    Objects const &objects)
+{
   for (auto const &object : objects) {
     // Meshes
     if (object.meshes.size() != object.mesh_poses.size()) {
@@ -154,8 +164,8 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal(const Matrix3Xf
 }
 
 std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_box(const Matrix3Xf &last_template,
-                                                                     shape_msgs::SolidPrimitive const &box,
-                                                                     geometry_msgs::Pose const &pose) {
+    shape_msgs::SolidPrimitive const &box, geometry_msgs::Pose const &pose)
+{
   auto const position = ConvertTo<Vector3f>(pose.position);
   auto const orientation = ConvertTo<Eigen::Quaternionf>(pose.orientation).toRotationMatrix();
   auto const box_x = box.dimensions[shape_msgs::SolidPrimitive::BOX_X];
@@ -225,24 +235,26 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_box(const Matri
   return {nearestPts, normalVecs};
 }
 
-std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_sphere(const Matrix3Xf &last_template,
-                                                                        shape_msgs::SolidPrimitive const &,
-                                                                        geometry_msgs::Pose const &) {
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_sphere(
+    const Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &, geometry_msgs::Pose const &)
+{
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
   return {nearestPts, normalVecs};
 }
 
-std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_plane(const Matrix3Xf &last_template,
-                                                                       shape_msgs::Plane const &) {
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_plane(
+    const Matrix3Xf &last_template, shape_msgs::Plane const &)
+{
   Matrix3Xf nearestPts(3, last_template.cols());
   Matrix3Xf normalVecs(3, last_template.cols());
   return {nearestPts, normalVecs};
 }
 
-std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_cylinder(const Matrix3Xf &last_template,
-                                                                          shape_msgs::SolidPrimitive const &cylinder,
-                                                                          geometry_msgs::Pose const &pose) {
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_cylinder(
+    const Matrix3Xf &last_template, shape_msgs::SolidPrimitive const &cylinder,
+    geometry_msgs::Pose const &pose)
+{
   auto const position = ConvertTo<Vector3f>(pose.position);
   // NOTE: Yixuan, should orientation be roll, pitch, yaw here?
   // Answer: As what I can recall, the orientation is the unit vector along center axis
@@ -299,8 +311,9 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_cylinder(const 
   return {nearestPts, normalVecs};
 }
 
-std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_mesh(const Matrix3Xf &last_template,
-                                                                      shape_msgs::Mesh const &shapes_mesh) {
+std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_mesh(
+    const Matrix3Xf &last_template, shape_msgs::Mesh const &shapes_mesh)
+{
   auto mesh = shapes_mesh_to_cgal_mesh(shapes_mesh);
   auto const fnormals = mesh.add_property_map<face_descriptor, Vector>("f:normals", CGAL::NULL_VECTOR).first;
   auto const vnormals = mesh.add_property_map<vertex_descriptor, Vector>("v:normals", CGAL::NULL_VECTOR).first;
@@ -345,7 +358,9 @@ std::tuple<Points, Normals> Optimizer::nearest_points_and_normal_mesh(const Matr
   return {nearestPts, normalVecs};
 }
 
-std::tuple<MatrixXf, MatrixXf> nearest_points_line_segments(const Matrix3Xf &last_template, const Matrix2Xi &E) {
+std::tuple<MatrixXf, MatrixXf> nearest_points_line_segments(const Matrix3Xf &last_template,
+    const Matrix2Xi &E)
+{
   // find the nearest points on the line segments
   // refer to the website https://math.stackexchange.com/questions/846054/closest-points-on-two-line-segments
   MatrixXf startPts(
@@ -406,23 +421,24 @@ std::tuple<MatrixXf, MatrixXf> nearest_points_line_segments(const Matrix3Xf &las
 }
 
 std::tuple<Points, Normals> Optimizer::test_box(const Eigen::Matrix3Xf &last_template,
-                                                shape_msgs::SolidPrimitive const &box,
-                                                geometry_msgs::Pose const &pose) {
+    shape_msgs::SolidPrimitive const &box, geometry_msgs::Pose const &pose)
+{
   return nearest_points_and_normal_box(last_template, box, pose);
 }
 
 Optimizer::Optimizer(const Eigen::Matrix3Xf initial_template, const Eigen::Matrix3Xf last_template,
-                     const float stretch_lambda, const float obstacle_cost_weight, const float fixed_points_weight)
+    const float stretch_lambda, const float obstacle_cost_weight, const float fixed_points_weight)
     : initial_template_(initial_template),
       last_template_(last_template),
       stretch_lambda_(stretch_lambda),
       obstacle_cost_weight_(obstacle_cost_weight),
-      fixed_points_weight_(fixed_points_weight) {}
+      fixed_points_weight_(fixed_points_weight)
+{}
 
 std::pair<Matrix3Xf, double> Optimizer::operator()(const Matrix3Xf &Y, const Matrix2Xi &E,
-                                                   const std::vector<FixedPoint> &fixed_points,
-                                                   ObstacleConstraints const &obstacle_constraints,
-                                                   const double max_segment_length) {
+    const std::vector<FixedPoint> &fixed_points, ObstacleConstraints const &obstacle_constraints,
+    const double max_segment_length)
+{
   // Y: Y^t in Eq. (21)
   // E: E in Eq. (21)
   Matrix3Xf Y_opt(Y.rows(), Y.cols());
@@ -569,7 +585,8 @@ std::pair<Matrix3Xf, double> Optimizer::operator()(const Matrix3Xf &Y, const Mat
   return {Y_opt, final_objective_value};
 }
 
-bool Optimizer::gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const {
+bool Optimizer::gripper_constraints_satisfiable(const std::vector<FixedPoint> &fixed_points) const
+{
   for (auto const &p1 : fixed_points) {
     for (auto const &p2 : fixed_points) {
       float const current_distance = (p1.position - p2.position).squaredNorm();
