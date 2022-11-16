@@ -43,7 +43,8 @@ using Eigen::VectorXd;
 using Eigen::VectorXf;
 using Eigen::VectorXi;
 
-class CompHSV : public pcl::ComparisonBase<PointHSV> {
+class CompHSV : public pcl::ComparisonBase<PointHSV>
+{
   using ComparisonBase<PointHSV>::capable_;
   using ComparisonBase<PointHSV>::op_;
 
@@ -56,7 +57,6 @@ class CompHSV : public pcl::ComparisonBase<PointHSV> {
   CompHSV(const std::string &component_name, pcl::ComparisonOps::CompareOp op, double compare_val)
       : component_offset_(),
         compare_val_(compare_val)
-
   {
     // Verify the component name
     if (component_name == "h") {
@@ -107,7 +107,8 @@ class CompHSV : public pcl::ComparisonBase<PointHSV> {
   CompHSV() : component_offset_(), compare_val_() {}  // not allowed
 };
 
-static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat) {
+static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat)
+{
   PointCloud::Ptr cloud(new PointCloud);
   cloud->points.reserve(mat.cols());
   for (ssize_t i = 0; i < mat.cols(); ++i) {
@@ -116,7 +117,8 @@ static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat) {
   return cloud;
 }
 
-static double initial_sigma2(const MatrixXf &X, const MatrixXf &Y) {
+static double initial_sigma2(const MatrixXf &X, const MatrixXf &Y)
+{
   // X: (3, N) matrix, X^t in Algorithm 1
   // Y: (3, M) matrix, Y^(t-1) in Algorithm 1
   // Implement Line 2 of Algorithm 1
@@ -130,7 +132,8 @@ static double initial_sigma2(const MatrixXf &X, const MatrixXf &Y) {
   return total_error / (X.cols() * Y.cols() * X.rows());
 }
 
-static MatrixXf gaussian_kernel(const MatrixXf &Y, double beta) {
+static MatrixXf gaussian_kernel(const MatrixXf &Y, double beta)
+{
   // Y: (3, M) matrix, corresponding to Y^(t-1) in Eq. 13.5 (Y^t in VI.A)
   // beta: beta in Eq. 13.5 (between 13 and 14)
   MatrixXf diff(Y.cols(), Y.cols());
@@ -145,7 +148,9 @@ static MatrixXf gaussian_kernel(const MatrixXf &Y, double beta) {
   return kernel;
 }
 
-MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree, int lle_neighbors, double reg) {
+MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree,
+    int lle_neighbors, double reg)
+{
   // calculate L in Eq. (15) and Eq. (16)
   // ENHANCE: use tapkee lib to accelarate
   // kdtree: kdtree from Y^0
@@ -190,7 +195,9 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
   return graph;
 }
 
-MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_neighbors, double reg) {
+MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_neighbors,
+    double reg)
+{
   // calculate H in Eq. (18)
   // template_cloud: Y^0 in Eq. (15) and (16)
   // lle_neighbors: parameter for lle calculation
@@ -223,7 +230,8 @@ CDCPD_Parameters::CDCPD_Parameters(ros::NodeHandle& ph)
  * Implement Eq. (7) in the paper
  */
 VectorXf CDCPD::visibility_prior(const Matrix3Xf &vertices, const Mat &depth, const Mat &mask,
-                                 const Matrix3f &intrinsics, const float kvis) {
+                                 const Matrix3f &intrinsics, const float kvis)
+{
   // vertices: (3, M) matrix Y^t (Y in IV.A) in the paper
   // depth: CV_16U depth image
   // mask: CV_8U mask for segmentation
@@ -288,8 +296,10 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf &vertices, const Mat &depth, co
 // https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
 // we expect that cx, cy, fx, fy are in the appropriate places in P
 static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
-    const cv::Mat &depth_image, const cv::Mat &rgb_image, const cv::Mat &mask, const Eigen::Matrix3f &intrinsics,
-    const Eigen::Vector3f &lower_bounding_box, const Eigen::Vector3f &upper_bounding_box) {
+    const cv::Mat &depth_image, const cv::Mat &rgb_image, const cv::Mat &mask,
+    const Eigen::Matrix3f &intrinsics, const Eigen::Vector3f &lower_bounding_box,
+    const Eigen::Vector3f &upper_bounding_box)
+{
   // depth_image: CV_16U depth image
   // rgb_image: CV_8U3C rgb image
   // mask: CV_8U mask for segmentation
@@ -353,7 +363,8 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
 }
 
 Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-                     const Eigen::VectorXf &Y_emit_prior) {
+                     const Eigen::VectorXf &Y_emit_prior)
+{
   // downsampled_cloud: PointXYZ pointer to downsampled point clouds
   // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
   // depth: CV_16U depth image
@@ -453,7 +464,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
 }
 
 Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseDelta &q_dot,
-                         const smmap::AllGrippersSinglePose &q_config, const int pred_choice) {
+                         const smmap::AllGrippersSinglePose &q_config, const int pred_choice)
+{
   if (pred_choice == 0) {
     return P;
   } else {
@@ -470,16 +482,19 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseD
 
 // This is for the case where the gripper indices are unknown (in real experiment)
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different data-type for python
-             const Matrix2Xi &template_edges, const float objective_value_threshold, const bool use_recovery,
-             const double alpha, const double beta, const double lambda, const double k, const float zeta,
-             const float obstacle_cost_weight, const float fixed_points_weight)
-    : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges, objective_value_threshold,
-            use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight, fixed_points_weight) {}
+    const Matrix2Xi &template_edges, const float objective_value_threshold, const bool use_recovery,
+    const double alpha, const double beta, const double lambda, const double k, const float zeta,
+    const float obstacle_cost_weight, const float fixed_points_weight)
+    : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges,
+        objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
+        fixed_points_weight)
+{}
 
 CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-             const Matrix2Xi &_template_edges, const float objective_value_threshold, const bool use_recovery,
-             const double alpha, const double beta, const double lambda, const double k, const float zeta,
-             const float obstacle_cost_weight, const float fixed_points_weight)
+    const Matrix2Xi &_template_edges, const float objective_value_threshold,
+    const bool use_recovery, const double alpha, const double beta, const double lambda,
+    const double k, const float zeta, const float obstacle_cost_weight,
+    const float fixed_points_weight)
     : nh(nh),
       ph(ph),
       original_template(template_cloud->getMatrixXfMap().topRows(3)),
@@ -502,7 +517,8 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
       fixed_points_weight(fixed_points_weight),
       use_recovery(use_recovery),
       last_grasp_status({false, false}),
-      objective_value_threshold_(objective_value_threshold) {
+      objective_value_threshold_(objective_value_threshold)
+{
   last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
   last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
 
@@ -512,11 +528,12 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
   L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
 }
 
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
-                                const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
-                                const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
-                                const smmap::AllGrippersSinglePose &q_config, const std::vector<bool> &is_grasped,
-                                const int pred_choice) {
+CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
+    const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+    ObstacleConstraints obstacle_constraints, const double max_segment_length,
+    const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
+    const std::vector<bool> &is_grasped, const int pred_choice)
+{
   std::vector<int> idx_map;
   for (auto const &[j, is_grasped_j] : enumerate(is_grasped)) {
     if (j < q_config.size() and j < q_dot.size()) {
@@ -576,11 +593,12 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 }
 
 // NOTE: this is the one I'm current using for rgb + depth
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
-                                const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
-                                const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
-                                const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
-                                const int pred_choice) {
+CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
+    const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+    ObstacleConstraints obstacle_constraints, const double max_segment_length,
+    const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
+    const Eigen::MatrixXi &gripper_idx, const int pred_choice)
+{
   this->gripper_idx = gripper_idx;
   auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
                                     max_segment_length, q_dot, q_config, pred_choice);
@@ -588,11 +606,12 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 }
 
 // NOTE: for point cloud inputs
-CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
-                                ObstacleConstraints obstacle_constraints, const double max_segment_length,
-                                const smmap::AllGrippersSinglePoseDelta &q_dot,
-                                const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
-                                const int pred_choice) {
+CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
+    const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
+    const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
+    const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
+    const int pred_choice)
+{
   // FIXME: this has a lot of duplicate code
   this->gripper_idx = gripper_idx;
 
@@ -688,10 +707,12 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points, const PointClo
   return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
 }
 
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask, const cv::Matx33d &intrinsics,
-                                const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
-                                const double max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
-                                const smmap::AllGrippersSinglePose &q_config, const int pred_choice) {
+CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
+    const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+    ObstacleConstraints obstacle_constraints, const double max_segment_length,
+    const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
+    const int pred_choice)
+{
   // rgb: CV_8U3C rgb image
   // depth: CV_16U depth image
   // mask: CV_8U mask for segmentation
