@@ -100,10 +100,14 @@ public:
 
 protected:
     // The map that holds the deformable objects we're tracking.
-    std::map<int, std::shared_ptr<DeformableObjectConfiguration> > tracking_map;
+    std::map<int, std::shared_ptr<DeformableObjectConfiguration> > tracking_map_;
 
     // The next ID we'll assign to an incoming deformable object configuration to track.
-    int deformable_object_id_next;
+    int deformable_object_id_next_;
+
+    // Holds the IDs of the tracked objects in a way that preserves order as the map does not.
+    // This is necessary for formation of the vertex, edge, and max segment length matrices.
+    std::vector<int> ordered_def_obj_ids_;
 
     // Return the appropriate DeformableObjectTracking given if we should take the initial or
     // tracked states.
