@@ -71,7 +71,7 @@ public:
 class DeformableObjectConfigurationMap
 {
 public:
-    DeformableObjectConfigurationMap(){}
+    DeformableObjectConfigurationMap();
 
     // Returns the total number of tracked points.
     int get_total_num_points() const;

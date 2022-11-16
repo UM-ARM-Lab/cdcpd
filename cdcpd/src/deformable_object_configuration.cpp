@@ -74,10 +74,13 @@ DeformableObjectConfigurationMap::DeformableObjectConfigurationMap()
 int DeformableObjectConfigurationMap::get_total_num_points() const
 {
     int num_points_total = 0;
-    for (auto const& tracked_pair : tracking_map_)
+    for (auto const& def_obj_id : ordered_def_obj_ids_)
     {
-
+        std::shared_ptr<DeformableObjectConfiguration> def_obj_config =
+            tracking_map_.at(def_obj_id);
+        num_points_total += def_obj_config->num_points_;
     }
+    return num_points_total;
 }
 
 int DeformableObjectConfigurationMap::get_total_num_edges() const
