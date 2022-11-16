@@ -65,6 +65,143 @@ void DeformableObjectConfiguration::initializeTracking()
     initial_ = DeformableObjectTracking(object_tracking);
 }
 
+DeformableObjectConfigurationMap::DeformableObjectConfigurationMap()
+    : tracking_map(),
+      deformable_object_id_next(0)
+{}
+
+int DeformableObjectConfigurationMap::get_total_num_points() const
+{
+    int num_points_total = 0;
+    for (auto const& tracked_pair : tracking_map)
+    {
+
+    }
+}
+
+int DeformableObjectConfigurationMap::get_total_num_edges() const
+{
+    int num_edges_total = 0;
+    for (auto const& tracked_pair : tracking_map)
+    {
+        std::shared_ptr<DeformableObjectConfiguration> const& def_obj_config = tracked_pair.second;
+        int num_edges = def_obj_config->tracked_.edges_.cols();
+        num_edges_total += num_edges;
+    }
+    return num_edges_total;
+}
+
+std::map<int, std::tuple<int, int> > DeformableObjectConfigurationMap::get_vertex_assignments() const
+{
+    // NOTE: This could be kept track of as a member variable and instead updated any time a
+    // deformable object is added/removed.
+    std::map<int, std::tuple<int, int> > vertex_assignments;
+    int idx_begin = 0;
+    for (auto const& configuration : tracking_map)
+    {
+        int idx_end = idx_begin + configuration.second->num_points_;
+        std::tuple<int, int> idx_range{idx_begin, idx_end};
+        idx_begin = idx_end;
+
+        vertex_assignments.emplace(configuration.first, idx_range);
+    }
+    return vertex_assignments;
+}
+
+void DeformableObjectConfigurationMap::add_def_obj_configuration(
+    std::shared_ptr<DeformableObjectConfiguration> const def_obj_config)
+{
+    tracking_map.emplace(deformable_object_id_next, def_obj_config);
+    ++deformable_object_id_next;
+}
+
+void DeformableObjectConfigurationMap::update_def_obj_vertices(
+    pcl::shared_ptr<PointCloud> const vertices_new)
+{
+    auto vertex_assignments = get_vertex_assignments();
+    auto const& cloud_it_begin = vertices_new->begin();
+    for (auto const& assignment_range : vertex_assignments)
+    {
+        // Get the deformable object configuration we're updating.
+        std::shared_ptr<DeformableObjectConfiguration>& def_obj_config =
+            tracking_map[assignment_range.first];
+
+        // Grab the range of indices where this configuration's points will be stored in the point
+        // cloud.
+        std::tuple<int, int> const& idx_range = assignment_range.second;
+        int const& idx_start = std::get<0>(idx_range);
+        int const& idx_end = std::get<1>(idx_range);
+
+        // Use the point cloud iterators and std::copy to efficiently update the tracked points.
+        auto const& it_begin = cloud_it_begin + idx_start;
+        auto const& it_end = cloud_it_begin + idx_end;
+        std::copy(it_begin, it_end, def_obj_config->tracked_.points_->begin());
+    }
+}
+
+PointCloud::Ptr DeformableObjectConfigurationMap::form_vertices_cloud(
+    bool const use_initial_state=false) const
+{
+    PointCloud::Ptr vertices_cloud;
+    // I don't think we actually care about the stamp at this point.
+    // bool stamp_copied = false;
+    for (auto const& def_obj_idx_and_config : tracking_map)
+    {
+        std::shared_ptr<DeformableObjectConfiguration> const def_obj_config =
+            def_obj_idx_and_config.second;
+
+        std::shared_ptr<DeformableObjectTracking> tracking =
+            get_appropriate_tracking(def_obj_config, use_initial_state);
+
+        (*vertices_cloud) += (*tracking->points_);
+    }
+    return vertices_cloud;
+}
+
+Eigen::Matrix2Xi DeformableObjectConfigurationMap::form_edges_matrix(
+    bool const use_initial_state=false) const
+{
+    int const num_edges_total = get_total_num_edges();
+
+    // Initialize an Eigen matrix for keeping track of the edges.
+    Eigen::Matrix2Xi edges_total(2, num_edges_total);
+
+    // Populate that edge matrix based on all of our edges.
+    int edge_idx = 0;
+    for (auto const& def_obj_idx_and_config : tracking_map)
+    {
+        std::shared_ptr<DeformableObjectConfiguration> const& def_obj_config =
+            def_obj_idx_and_config.second;
+
+        std::shared_ptr<DeformableObjectTracking> tracking =
+            get_appropriate_tracking(def_obj_config, use_initial_state);
+
+        Eigen::Matrix2Xi const& edges = tracking->edges_;
+        for (int edge_col = 0; edge_col < edges.cols(); ++edge_col)
+        {
+            edges_total.col(edge_idx) = edges.col(edge_col);
+            ++edge_idx;
+        }
+    }
+    return edges_total;
+}
+
+std::shared_ptr<DeformableObjectTracking> DeformableObjectConfigurationMap::get_appropriate_tracking(
+        std::shared_ptr<DeformableObjectConfiguration> const def_obj_config,
+        bool take_initial_state) const
+{
+    std::shared_ptr<DeformableObjectTracking> tracking;
+    if (take_initial_state)
+    {
+        tracking = std::make_shared<DeformableObjectTracking>(&def_obj_config->initial_);
+    }
+    else
+    {
+        tracking = std::make_shared<DeformableObjectTracking>(&def_obj_config->tracked_);
+    }
+    return tracking;
+}
+
 RopeConfiguration::RopeConfiguration(int const num_points, float const max_rope_length,
     Eigen::Vector3f const rope_start_position, Eigen::Vector3f const rope_end_position)
     : DeformableObjectConfiguration{num_points},

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tuple>
+#include <map>
 
 #include <Eigen/Dense>
 #include <pcl_ros/point_cloud.h>
@@ -65,6 +66,50 @@ public:
     float max_segment_length_;
     DeformableObjectTracking tracked_;
     DeformableObjectTracking initial_;
+};
+
+class DeformableObjectConfigurationMap
+{
+public:
+    DeformableObjectConfigurationMap(){}
+
+    // Returns the total number of tracked points.
+    int get_total_num_points() const;
+
+    // Returns the total number of tracked edges.
+    int get_total_num_edges() const;
+
+    // Returns a map that indicates which vertices belong to which template.
+    // The tuple indicates the start and end vertex indexes that belong to that template.
+    std::map<int, std::tuple<int, int> > get_vertex_assignments() const;
+
+    // Adds the given deformable object configuration to our tracking map.
+    void add_def_obj_configuration(std::shared_ptr<DeformableObjectConfiguration> const def_obj_config);
+
+    // Updates the vertices for all deformable objects given new points predicted from a CDCPD run.
+    void update_def_obj_vertices(pcl::shared_ptr<PointCloud> const vertices_new);
+
+    // Forms the vertices matrix for all tracked templates expected by CDCPD
+    PointCloud::Ptr form_vertices_cloud(bool const use_initial_state=false) const;
+
+    // Forms the edges matrix for all tracked templates expected by CDCPD
+    Eigen::Matrix2Xi form_edges_matrix(bool const use_initial_state=false) const;
+
+    // Returns the matrix describing the maximum length each edge can have.
+    // Eigen::Matrix2Xf form_max_segment_length_matrix() const;
+
+protected:
+    // The map that holds the deformable objects we're tracking.
+    std::map<int, std::shared_ptr<DeformableObjectConfiguration> > tracking_map;
+
+    // The next ID we'll assign to an incoming deformable object configuration to track.
+    int deformable_object_id_next;
+
+    // Return the appropriate DeformableObjectTracking given if we should take the initial or
+    // tracked states.
+    std::shared_ptr<DeformableObjectTracking> get_appropriate_tracking(
+        std::shared_ptr<DeformableObjectConfiguration> const def_obj_config,
+        bool take_initial_state) const;
 };
 
 class RopeConfiguration : public DeformableObjectConfiguration

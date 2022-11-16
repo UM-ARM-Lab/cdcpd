@@ -139,7 +139,8 @@ public:
     unsigned int gripper_count;
     Eigen::MatrixXi gripper_indices;
 
-    std::unique_ptr<DeformableObjectConfiguration> deformable_object_configuration_;
+    // std::unique_ptr<DeformableObjectConfiguration> deformable_object_configuration_;
+    DeformableObjectConfigurationMap deformable_object_tracking_map_;
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
