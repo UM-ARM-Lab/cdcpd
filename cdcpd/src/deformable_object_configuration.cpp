@@ -149,7 +149,7 @@ void DeformableObjectConfigurationMap::update_def_obj_vertices(
 }
 
 PointCloud::Ptr DeformableObjectConfigurationMap::form_vertices_cloud(
-    bool const use_initial_state=false) const
+    bool const use_initial_state) const
 {
     PointCloud::Ptr vertices_cloud;
     // I don't think we actually care about the stamp at this point.
@@ -170,7 +170,7 @@ PointCloud::Ptr DeformableObjectConfigurationMap::form_vertices_cloud(
 }
 
 Eigen::Matrix2Xi DeformableObjectConfigurationMap::form_edges_matrix(
-    bool const use_initial_state=false) const
+    bool const use_initial_state) const
 {
     int const num_edges_total = get_total_num_edges();
 
@@ -217,7 +217,7 @@ Eigen::RowVectorXd DeformableObjectConfigurationMap::form_max_segment_length_mat
         double const def_obj_max_segment_length = def_obj_config->max_segment_length_;
         for (int i = 0; i < def_obj_config->tracked_.edges_.cols(); ++i)
         {
-            max_segment_lengths[1, edge_idx_aggregate] = def_obj_max_segment_length;
+            max_segment_lengths(0, edge_idx_aggregate) = def_obj_max_segment_length;
             ++edge_idx_aggregate;
         }
     }
@@ -232,11 +232,11 @@ std::shared_ptr<DeformableObjectTracking> DeformableObjectConfigurationMap::get_
     std::shared_ptr<DeformableObjectTracking> tracking;
     if (take_initial_state)
     {
-        tracking = std::make_shared<DeformableObjectTracking>(&def_obj_config->initial_);
+        tracking = std::make_shared<DeformableObjectTracking>(def_obj_config->initial_);
     }
     else
     {
-        tracking = std::make_shared<DeformableObjectTracking>(&def_obj_config->tracked_);
+        tracking = std::make_shared<DeformableObjectTracking>(def_obj_config->tracked_);
     }
     return tracking;
 }

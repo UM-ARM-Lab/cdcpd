@@ -450,7 +450,7 @@ ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
 
     ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Finding nearest points and normals");
     return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
-  }
+}
 
 void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     cv::Matx33d const& intrinsics)
@@ -464,10 +464,11 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
 
     auto const hsv_mask = getHsvMask(ph, rgb);
     PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
+    Eigen::RowVectorXd max_segment_lengths =
+        deformable_object_tracking_map_.form_max_segment_length_matrix();
     auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, vertices, obstacle_constraints,
-                              deformable_object_configuration_->max_segment_length_, q_dot,
-                              q_config, gripper_indices);
-    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
+        max_segment_lengths, q_dot, q_config, gripper_indices);
+    deformable_object_tracking_map_.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
 };
@@ -488,9 +489,11 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
     PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
-    auto const out = (*cdcpd)(points, vertices, obstacle_constraints,
-        deformable_object_configuration_->max_segment_length_, q_dot, q_config, gripper_indices);
-    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
+    Eigen::RowVectorXd max_segment_lengths =
+        deformable_object_tracking_map_.form_max_segment_length_matrix();
+    auto const out = (*cdcpd)(points, vertices, obstacle_constraints, max_segment_lengths, q_dot,
+        q_config, gripper_indices);
+    deformable_object_tracking_map_.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
 }
@@ -532,8 +535,8 @@ ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
     ObstacleConstraints obstacle_constraints;
     if (moveit_ready and node_params.moveit_enabled)
     {
-        obstacle_constraints = get_moveit_obstacle_constriants(
-            deformable_object_configuration_->tracked_.points_);
+        PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
+        obstacle_constraints = get_moveit_obstacle_constriants(vertices);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
     }
     return obstacle_constraints;
@@ -604,19 +607,19 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
     // compute length and print that for debugging purposes
     // TODO(dylan): This should compute edge length based on the edges matrix, not just off of
     // points.
-    auto output_length{0.0};
-    for (auto point_idx{0};
-         point_idx < deformable_object_configuration_->tracked_.points_->size() - 1;
-         ++point_idx)
-    {
-        Eigen::Vector3f const p =
-          deformable_object_configuration_->tracked_.points_->at(point_idx + 1).getVector3fMap();
-        Eigen::Vector3f const p_next =
-          deformable_object_configuration_->tracked_.points_->at(point_idx).getVector3fMap();
-        output_length += (p_next - p).norm();
-    }
-    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
-        << node_params.max_rope_length);
+    // auto output_length{0.0};
+    // for (auto point_idx{0};
+    //      point_idx < deformable_object_configuration_->tracked_.points_->size() - 1;
+    //      ++point_idx)
+    // {
+    //     Eigen::Vector3f const p =
+    //       deformable_object_configuration_->tracked_.points_->at(point_idx + 1).getVector3fMap();
+    //     Eigen::Vector3f const p_next =
+    //       deformable_object_configuration_->tracked_.points_->at(point_idx).getVector3fMap();
+    //     output_length += (p_next - p).norm();
+    // }
+    // ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
+    //     << node_params.max_rope_length);
 
     auto const t1 = ros::Time::now();
     auto const dt = t1 - t0;
