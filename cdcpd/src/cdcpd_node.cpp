@@ -195,17 +195,17 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
     std::shared_ptr<DeformableObjectConfiguration> deformable_object_configuration;
     if (node_params.deformable_object_type == DeformableObjectType::rope)
     {
-        auto configuration = std::unique_ptr<RopeConfiguration>(new RopeConfiguration(
+        auto configuration = std::shared_ptr<RopeConfiguration>(new RopeConfiguration(
             node_params.num_points, node_params.max_rope_length, rope_start_position,
             rope_end_position));
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
-        deformable_object_configuration = std::move(configuration);
+        deformable_object_configuration = configuration;
     }
     else if (node_params.deformable_object_type == DeformableObjectType::cloth)
     {
-        auto configuration = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
+        auto configuration = std::shared_ptr<ClothConfiguration>(new ClothConfiguration(
             node_params.length_initial_cloth, node_params.width_initial_cloth,
             node_params.grid_size_initial_guess_cloth));
 
@@ -220,7 +220,7 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
-        deformable_object_configuration = std::move(configuration);
+        deformable_object_configuration = configuration;
     }
 
     // Add the initialized configuration to our tracking map.
