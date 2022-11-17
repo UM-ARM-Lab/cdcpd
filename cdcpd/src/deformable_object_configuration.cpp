@@ -151,7 +151,7 @@ void DeformableObjectConfigurationMap::update_def_obj_vertices(
 PointCloud::Ptr DeformableObjectConfigurationMap::form_vertices_cloud(
     bool const use_initial_state) const
 {
-    PointCloud::Ptr vertices_cloud;
+    PointCloud::Ptr vertices_cloud(new PointCloud);
     // I don't think we actually care about the stamp at this point.
     // bool stamp_copied = false;
     for (auto const& def_obj_id : ordered_def_obj_ids_)
