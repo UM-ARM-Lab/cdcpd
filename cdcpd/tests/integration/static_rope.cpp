@@ -39,20 +39,10 @@ CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_ini
         ROS_WARN(ss.str().c_str());
     }
 
-    // Specify constant scalar and boolean parameters
-    float const objective_value_threshold = 1.0;
-    bool const use_recovery = false;
-    double const alpha = 0.5;
-    double const beta = 1.0;
-    double const lambda = 1.0;
-    double const k = 100.0;
-    float const zeta = 10.0;
-    float const obstacle_cost_weight = 0.001;
-    float const fixed_points_weight = 10.0;
+    // Use the default parameter values.
+    CDCPD_Parameters params;
 
-    CDCPD cdcpd = CDCPD(rope_tracking_initial.points_, rope_tracking_initial.edges_,
-        objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
-        fixed_points_weight);
+    CDCPD cdcpd = CDCPD(rope_tracking_initial.points_, rope_tracking_initial.edges_, params);
 
     return cdcpd;
 }

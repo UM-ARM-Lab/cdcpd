@@ -638,10 +638,7 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
         Eigen::Matrix2Xi edges =
             deformable_object_tracking_map_.form_edges_matrix(use_initial_state);
 
-        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, vertices, edges,
-            cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
-            cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
-            cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));
+        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(ph, vertices, edges, cdcpd_params));
         cdcpd = std::move(cdcpd_new);
     }
 }

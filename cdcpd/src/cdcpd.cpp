@@ -212,6 +212,25 @@ MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_n
   return M;
 }
 
+CDCPD_Parameters::CDCPD_Parameters()
+    : objective_value_threshold(1.0),
+      alpha(0.5),
+      lambda(1.0),
+      k_spring(100.0),
+      beta(1.0),
+      zeta(10.0),
+      min_distance_threshold(0.01),
+      obstacle_cost_weight(0.001),
+      fixed_points_weight(10.0),
+      use_recovery(false),
+      lle_neighbors(8),
+      tolerance(1e-4),
+      w(0.1),
+      initial_sigma_scale(1.0 / 8.0),
+      max_iterations(100),
+      kvis(1e3)
+{}
+
 CDCPD_Parameters::CDCPD_Parameters(ros::NodeHandle& ph)
   : objective_value_threshold(ROSHelpers::GetParam<double>(ph, "objective_value_threshold", 1.0)),
     alpha(ROSHelpers::GetParam<double>(ph, "alpha", 0.5)),
@@ -222,7 +241,53 @@ CDCPD_Parameters::CDCPD_Parameters(ros::NodeHandle& ph)
     min_distance_threshold(ROSHelpers::GetParam<double>(ph, "min_distance_threshold", 0.01)),
     obstacle_cost_weight(ROSHelpers::GetParam<double>(ph, "obstacle_cost_weight", 0.001)),
     fixed_points_weight(ROSHelpers::GetParam<double>(ph, "fixed_points_weight", 10.0)),
-    use_recovery(ROSHelpers::GetParam<bool>(ph, "use_recovery", false))
+    use_recovery(ROSHelpers::GetParam<bool>(ph, "use_recovery", false)),
+    lle_neighbors(8),
+    tolerance(1e-4),
+    w(0.1),
+    initial_sigma_scale(1.0 / 8.0),
+    max_iterations(100),
+    kvis(1e3)
+{}
+
+CDCPD::CDCPD(ros::NodeHandle ph, PointCloud::ConstPtr template_cloud_initial,  // this needs a different data-type for python
+    const Matrix2Xi &template_edges_initial, CDCPD_Parameters const& params_in)
+    : ph(ph),
+      original_template(template_cloud_initial->getMatrixXfMap().topRows(3)),
+      template_edges(template_edges_initial),
+      last_lower_bounding_box(original_template.rowwise().minCoeff()),       // TODO make configurable?
+      last_upper_bounding_box(original_template.rowwise().maxCoeff()),       // TODO make configurable?
+      lle_neighbors(params_in.lle_neighbors),
+      m_lle(locally_linear_embedding(template_cloud_initial, lle_neighbors, 1e-3)),
+      tolerance(params_in.tolerance),
+      alpha(params_in.alpha),
+      beta(params_in.beta),
+      w(params_in.w),
+      initial_sigma_scale(params_in.initial_sigma_scale),
+      start_lambda(params_in.lambda),
+      k(params_in.k_spring),
+      max_iterations(params_in.max_iterations),
+      kvis(params_in.kvis),
+      zeta(params_in.zeta),
+      obstacle_cost_weight(params_in.obstacle_cost_weight),
+      fixed_points_weight(params_in.fixed_points_weight),
+      use_recovery(params_in.use_recovery),
+      objective_value_threshold_(params_in.objective_value_threshold),
+      last_grasp_status({false, false}),
+      total_frames_(0)
+{
+  last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
+  last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
+
+  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+  kdtree.setInputCloud(template_cloud_initial);
+  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+  L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+}
+
+CDCPD::CDCPD(PointCloud::ConstPtr template_cloud_initial,
+    Eigen::Matrix2Xi const& template_edges_initial, CDCPD_Parameters const& params_in)
+    : CDCPD(ros::NodeHandle("~"), template_cloud_initial, template_edges_initial, params_in)
 {}
 
 /*
@@ -478,54 +543,6 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseD
       return diminishing_rigidity_model->getObjectDelta(world, q_dot) + P;
     }
   }
-}
-
-// This is for the case where the gripper indices are unknown (in real experiment)
-CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different data-type for python
-    const Matrix2Xi &template_edges, const float objective_value_threshold, const bool use_recovery,
-    const double alpha, const double beta, const double lambda, const double k, const float zeta,
-    const float obstacle_cost_weight, const float fixed_points_weight)
-    : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges,
-        objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
-        fixed_points_weight)
-{}
-
-CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-    const Matrix2Xi &_template_edges, const float objective_value_threshold,
-    const bool use_recovery, const double alpha, const double beta, const double lambda,
-    const double k, const float zeta, const float obstacle_cost_weight,
-    const float fixed_points_weight)
-    : nh(nh),
-      ph(ph),
-      original_template(template_cloud->getMatrixXfMap().topRows(3)),
-      template_edges(_template_edges),
-      last_lower_bounding_box(original_template.rowwise().minCoeff()),       // TODO make configurable?
-      last_upper_bounding_box(original_template.rowwise().maxCoeff()),       // TODO make configurable?
-      lle_neighbors(8),                                                      // TODO make configurable?
-      m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)),  // TODO make configurable?
-      tolerance(1e-4),                                                       // TODO make configurable?
-      alpha(alpha),                                                          // TODO make configurable?
-      beta(beta),                                                            // TODO make configurable?
-      w(0.1),                                                                // TODO make configurable?
-      initial_sigma_scale(1.0 / 8),                                          // TODO make configurable?
-      start_lambda(lambda),
-      k(k),
-      max_iterations(100),  // TODO make configurable?
-      kvis(1e3),
-      zeta(zeta),
-      obstacle_cost_weight(obstacle_cost_weight),
-      fixed_points_weight(fixed_points_weight),
-      use_recovery(use_recovery),
-      last_grasp_status({false, false}),
-      objective_value_threshold_(objective_value_threshold)
-{
-  last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
-  last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
-
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-  kdtree.setInputCloud(template_cloud);
-  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-  L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,

@@ -70,6 +70,7 @@ enum OutputStatus {
 class CDCPD_Parameters
 {
 public:
+    CDCPD_Parameters();
     CDCPD_Parameters(ros::NodeHandle& ph);
 
     // TODO: describe each parameter in words (and a pointer to an equation/section of paper)
@@ -84,6 +85,12 @@ public:
     double const fixed_points_weight;
     // NOTE: original cdcpd recovery not implemented
     bool const use_recovery;
+    int const lle_neighbors;
+    double const tolerance;
+    double const w;
+    double const initial_sigma_scale;
+    int const max_iterations;
+    double const kvis;
 };
 
 class CDCPD {
@@ -98,16 +105,13 @@ class CDCPD {
     OutputStatus status;
   };
 
-  CDCPD(PointCloud::ConstPtr template_cloud, const Eigen::Matrix2Xi &_template_edges,
-      float objective_value_threshold, bool use_recovery = false, double alpha = 0.5,
-      double beta = 1.0, double lambda = 1.0, double k = 100.0, float zeta = 10.0,
-      float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
+  // TODO: This could be further refactored to break dependency on ROS to allow for running CDCPD
+  // as a standalone library.
+  CDCPD(ros::NodeHandle ph, PointCloud::ConstPtr template_cloud_initial,
+      Eigen::Matrix2Xi const& template_edges_initial, CDCPD_Parameters const& params_in);
 
-  CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-      const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold,
-      bool use_recovery = false, double alpha = 0.5, double beta = 1.0, double lambda = 1.0,
-      double k = 100.0, float zeta = 10.0, float obstacle_cost_weight = 1.0,
-      float fixed_points_weight = 10.0);
+  CDCPD(PointCloud::ConstPtr template_cloud_initial,
+      Eigen::Matrix2Xi const& template_edges_initial, CDCPD_Parameters const& params_in);
 
   // If you have want gripper constraints to be added and removed automatically based on is_grasped
   // and distance
@@ -149,7 +153,7 @@ class CDCPD {
       const smmap::AllGrippersSinglePoseDelta &q_dot,
       const smmap::AllGrippersSinglePose &q_config, int pred_choice);
 
-  ros::NodeHandle nh;
+  // ros::NodeHandle nh;
   ros::NodeHandle ph;
 
   std::unique_ptr<smmap::ConstraintJacobianModel> constraint_jacobian_model;
@@ -162,26 +166,26 @@ class CDCPD {
   // CdcpdParameters params;
   Eigen::Vector3f last_lower_bounding_box;
   Eigen::Vector3f last_upper_bounding_box;
-  int lle_neighbors;
+  int const lle_neighbors;
   Eigen::MatrixXf m_lle;
   Eigen::MatrixXf L_lle;
-  double tolerance;
-  double alpha;
-  double beta;
-  double w;
-  double initial_sigma_scale;
-  float start_lambda;
-  double k;
-  int max_iterations;
-  float kvis;
-  float zeta;
-  float obstacle_cost_weight;
-  float fixed_points_weight;
-  bool use_recovery = false;
+  double const tolerance;
+  double const alpha;
+  double const beta;
+  double const w;
+  double const initial_sigma_scale;
+  float const start_lambda;
+  double const k;
+  int const max_iterations;
+  float const kvis;
+  float const zeta;
+  float const obstacle_cost_weight;
+  float const fixed_points_weight;
+  bool const use_recovery = false;
+  float const objective_value_threshold_;
   Eigen::MatrixXi gripper_idx;
   std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
   std::vector<bool> last_grasp_status;
-  float objective_value_threshold_;
   int total_frames_ = 0;
 };
 
