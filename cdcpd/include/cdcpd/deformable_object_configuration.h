@@ -98,10 +98,10 @@ public:
     // Returns the matrix describing the maximum length each edge can have.
     Eigen::RowVectorXd form_max_segment_length_matrix() const;
 
-protected:
     // The map that holds the deformable objects we're tracking.
-    std::map<int, std::shared_ptr<DeformableObjectConfiguration> > tracking_map_;
+    std::map<int, std::shared_ptr<DeformableObjectConfiguration> > tracking_map;
 
+protected:
     // The next ID we'll assign to an incoming deformable object configuration to track.
     int deformable_object_id_next_;
 
