@@ -1,12 +1,12 @@
 #include "cdcpd/tracking_map.h"
 
-DeformableObjectConfigurationMap::DeformableObjectConfigurationMap()
+TrackingMap::TrackingMap()
     : tracking_map(),
       deformable_object_id_next_(0),
       ordered_def_obj_ids_()
 {}
 
-int DeformableObjectConfigurationMap::get_total_num_points() const
+int TrackingMap::get_total_num_points() const
 {
     int num_points_total = 0;
     for (auto const& def_obj_id : ordered_def_obj_ids_)
@@ -18,7 +18,7 @@ int DeformableObjectConfigurationMap::get_total_num_points() const
     return num_points_total;
 }
 
-int DeformableObjectConfigurationMap::get_total_num_edges() const
+int TrackingMap::get_total_num_edges() const
 {
     int num_edges_total = 0;
     for (auto const& tracked_pair : tracking_map)
@@ -30,7 +30,7 @@ int DeformableObjectConfigurationMap::get_total_num_edges() const
     return num_edges_total;
 }
 
-std::map<int, std::tuple<int, int> > DeformableObjectConfigurationMap::get_vertex_assignments() const
+std::map<int, std::tuple<int, int> > TrackingMap::get_vertex_assignments() const
 {
     // NOTE: This could be kept track of as a member variable and instead updated any time a
     // deformable object is added/removed.
@@ -47,7 +47,7 @@ std::map<int, std::tuple<int, int> > DeformableObjectConfigurationMap::get_verte
     return vertex_assignments;
 }
 
-void DeformableObjectConfigurationMap::add_def_obj_configuration(
+void TrackingMap::add_def_obj_configuration(
     std::shared_ptr<DeformableObjectConfiguration> const def_obj_config)
 {
     tracking_map.emplace(deformable_object_id_next_, def_obj_config);
@@ -59,8 +59,7 @@ void DeformableObjectConfigurationMap::add_def_obj_configuration(
     ++deformable_object_id_next_;
 }
 
-void DeformableObjectConfigurationMap::update_def_obj_vertices(
-    pcl::shared_ptr<PointCloud> const vertices_new)
+void TrackingMap::update_def_obj_vertices(pcl::shared_ptr<PointCloud> const vertices_new)
 {
     auto vertex_assignments = get_vertex_assignments();
     auto const& cloud_it_begin = vertices_new->begin();
@@ -85,8 +84,7 @@ void DeformableObjectConfigurationMap::update_def_obj_vertices(
     }
 }
 
-PointCloud::Ptr DeformableObjectConfigurationMap::form_vertices_cloud(
-    bool const use_initial_state) const
+PointCloud::Ptr TrackingMap::form_vertices_cloud(bool const use_initial_state) const
 {
     PointCloud::Ptr vertices_cloud(new PointCloud);
     // I don't think we actually care about the stamp at this point.
@@ -106,8 +104,7 @@ PointCloud::Ptr DeformableObjectConfigurationMap::form_vertices_cloud(
     return vertices_cloud;
 }
 
-Eigen::Matrix2Xi DeformableObjectConfigurationMap::form_edges_matrix(
-    bool const use_initial_state) const
+Eigen::Matrix2Xi TrackingMap::form_edges_matrix(bool const use_initial_state) const
 {
     int const num_edges_total = get_total_num_edges();
 
@@ -135,7 +132,7 @@ Eigen::Matrix2Xi DeformableObjectConfigurationMap::form_edges_matrix(
     return edges_total;
 }
 
-Eigen::RowVectorXd DeformableObjectConfigurationMap::form_max_segment_length_matrix() const
+Eigen::RowVectorXd TrackingMap::form_max_segment_length_matrix() const
 {
     // Construct the structure that will hold the edge lengths.
     int const num_edges_total = get_total_num_edges();
@@ -162,7 +159,7 @@ Eigen::RowVectorXd DeformableObjectConfigurationMap::form_max_segment_length_mat
     return max_segment_lengths;
 }
 
-std::shared_ptr<DeformableObjectTracking> DeformableObjectConfigurationMap::get_appropriate_tracking(
+std::shared_ptr<DeformableObjectTracking> TrackingMap::get_appropriate_tracking(
         std::shared_ptr<DeformableObjectConfiguration> const def_obj_config,
         bool take_initial_state) const
 {

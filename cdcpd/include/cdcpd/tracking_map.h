@@ -8,10 +8,10 @@
 
 #include "cdcpd/deformable_object_configuration.h"
 
-class DeformableObjectConfigurationMap
+class TrackingMap
 {
 public:
-    DeformableObjectConfigurationMap();
+    TrackingMap();
 
     // Returns the total number of tracked points.
     int get_total_num_points() const;
