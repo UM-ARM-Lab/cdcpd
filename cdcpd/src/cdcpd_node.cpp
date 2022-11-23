@@ -103,7 +103,7 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
       model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
       model_(model_loader_->getModel()),
       visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
-      deformable_object_tracking_map_(),
+      deformable_object_tracking_map(),
       tf_listener_(tf_buffer_)
 {
     auto const scene_topic = ros::names::append(robot_namespace,
@@ -162,8 +162,8 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     initialize_deformable_object_configuration(start_position_1, end_position_1);
     // initialize_deformable_object_configuration(start_position_2, end_position_2);
 
-    PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
-    Eigen::Matrix2Xi edges = deformable_object_tracking_map_.form_edges_matrix();
+    PointCloud::Ptr vertices = deformable_object_tracking_map.form_vertices_cloud();
+    Eigen::Matrix2Xi edges = deformable_object_tracking_map.form_edges_matrix();
     cdcpd = std::make_unique<CDCPD>(nh, ph, vertices, edges,
         cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
         cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
@@ -232,7 +232,7 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
     }
 
     // Add the initialized configuration to our tracking map.
-    deformable_object_tracking_map_.add_def_obj_configuration(deformable_object_configuration);
+    deformable_object_tracking_map.add_def_obj_configuration(deformable_object_configuration);
 }
 
 ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
@@ -471,12 +471,12 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     auto obstacle_constraints = get_obstacle_constraints();
 
     auto const hsv_mask = getHsvMask(ph, rgb);
-    PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
+    PointCloud::Ptr vertices = deformable_object_tracking_map.form_vertices_cloud();
     Eigen::RowVectorXd max_segment_lengths =
-        deformable_object_tracking_map_.form_max_segment_length_matrix();
+        deformable_object_tracking_map.form_max_segment_length_matrix();
     auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, vertices, obstacle_constraints,
         max_segment_lengths, q_dot, q_config, gripper_indices);
-    deformable_object_tracking_map_.update_def_obj_vertices(out.gurobi_output);
+    deformable_object_tracking_map.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
 };
@@ -496,12 +496,12 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     pcl::fromPCLPointCloud2(points_v2, *points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
-    PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
+    PointCloud::Ptr vertices = deformable_object_tracking_map.form_vertices_cloud();
     Eigen::RowVectorXd max_segment_lengths =
-        deformable_object_tracking_map_.form_max_segment_length_matrix();
+        deformable_object_tracking_map.form_max_segment_length_matrix();
     auto const out = (*cdcpd)(points, vertices, obstacle_constraints, max_segment_lengths, q_dot,
         q_config, gripper_indices);
-    deformable_object_tracking_map_.update_def_obj_vertices(out.gurobi_output);
+    deformable_object_tracking_map.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
 }
@@ -531,7 +531,7 @@ void CDCPD_Moveit_Node::publish_template() const
     auto time = ros::Time::now();
     // TODO(Dylan): Make this a message array instead of just a single point cloud??
     // Get the point cloud representing all of our templates.
-    PointCloud::Ptr templates_cloud = deformable_object_tracking_map_.form_vertices_cloud();
+    PointCloud::Ptr templates_cloud = deformable_object_tracking_map.form_vertices_cloud();
     templates_cloud->header.frame_id = node_params.camera_frame;
     pcl_conversions::toPCL(time, templates_cloud->header.stamp);
 
@@ -543,7 +543,7 @@ ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
     ObstacleConstraints obstacle_constraints;
     if (moveit_ready and node_params.moveit_enabled)
     {
-        PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
+        PointCloud::Ptr vertices = deformable_object_tracking_map.form_vertices_cloud();
         obstacle_constraints = get_moveit_obstacle_constriants(vertices);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
     }
@@ -586,7 +586,7 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
         {
             vm::MarkerArray rope_orders;
             int i = 1;
-            for (auto const& def_obj_pair : deformable_object_tracking_map_.tracking_map)
+            for (auto const& def_obj_pair : deformable_object_tracking_map.tracking_map)
             {
                 int const& def_obj_id = def_obj_pair.first;
                 auto const& def_obj_config = def_obj_pair.second;
@@ -658,9 +658,9 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
         // Recreate CDCPD from initial tracking.
         bool const use_initial_state = true;
         PointCloud::Ptr vertices =
-            deformable_object_tracking_map_.form_vertices_cloud(use_initial_state);
+            deformable_object_tracking_map.form_vertices_cloud(use_initial_state);
         Eigen::Matrix2Xi edges =
-            deformable_object_tracking_map_.form_edges_matrix(use_initial_state);
+            deformable_object_tracking_map.form_edges_matrix(use_initial_state);
 
         std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, vertices, edges,
             cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
