@@ -381,12 +381,12 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
   double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
 
   int iterations = 0;
-  double error = tolerance + 1;  // loop runs the first time
+  double error = tolerance_cpd + 1;  // loop runs the first time
 
   std::chrono::time_point<std::chrono::system_clock> start, end;
   start = std::chrono::system_clock::now();
 
-  while (iterations <= max_iterations && error > tolerance) {
+  while (iterations <= max_iterations && error > tolerance_cpd) {
     double qprev = sigma2;
     // Expectation step
     int N = X.cols();
@@ -416,6 +416,8 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
       den.array() += c;
 
       P = P.array().rowwise() / den.array();
+
+      // TODO: Implement Mahalanobis distance metric here.
     }
 
     // Fast Gaussian Transformation to calculate Pt1, P1, PX
@@ -451,14 +453,20 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
     sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
 
     if (sigma2 <= 0) {
-      sigma2 = tolerance / 10;
+      sigma2 = tolerance_cpd / 10;
     }
 
     error = std::abs(sigma2 - qprev);
     iterations++;
   }
+  end = std::chrono::system_clock::now();
+  int const elapsed_time_ns =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+  double const elapsed_time_ms = static_cast<double>(elapsed_time_ns) / 1e6;
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME + ".cpd", "cpd error: " << error << " itr: " << iterations);
+  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".cpd", "cpd elapsed runtime: " << elapsed_time_ms << " milliseconds");
+  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".cpd", "cpd std dev: " << std::pow(sigma2, 0.5));
 
   return TY;
 }
@@ -503,7 +511,7 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
       last_upper_bounding_box(original_template.rowwise().maxCoeff()),       // TODO make configurable?
       lle_neighbors(8),                                                      // TODO make configurable?
       m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)),  // TODO make configurable?
-      tolerance(1e-4),                                                       // TODO make configurable?
+      tolerance_cpd(1e-4),                                                       // TODO make configurable?
       alpha(alpha),                                                          // TODO make configurable?
       beta(beta),                                                            // TODO make configurable?
       w(0.1),                                                                // TODO make configurable?
