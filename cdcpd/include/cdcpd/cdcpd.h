@@ -29,6 +29,7 @@
 #include "cdcpd/obs_util.h"
 #include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"
+#include "cdcpd/stopwatch.h"
 
 typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointXYZHSV PointHSV;

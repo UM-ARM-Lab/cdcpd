@@ -372,6 +372,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
   // Y_emit_prior: vector with a probability per tracked point
 
   /// CPD step
+  std::string const logname_cpd = LOGNAME + ".cpd";
 
   // G: (M, M) Guassian kernel matrix
   MatrixXf G = gaussian_kernel(original_template, beta);  // Y, beta);
@@ -383,90 +384,86 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
   int iterations = 0;
   double error = tolerance_cpd + 1;  // loop runs the first time
 
-  std::chrono::time_point<std::chrono::system_clock> start, end;
-  start = std::chrono::system_clock::now();
+  {
+    Stopwatch stopwatch(logname_cpd);
 
-  while (iterations <= max_iterations && error > tolerance_cpd) {
-    double qprev = sigma2;
-    // Expectation step
-    int N = X.cols();
-    int M = Y.cols();
-    int D = Y.rows();
+    while (iterations <= max_iterations && error > tolerance_cpd) {
+      double qprev = sigma2;
+      // Expectation step
+      int N = X.cols();
+      int M = Y.cols();
+      int D = Y.rows();
 
-    // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
-    // Calculate Eq. (9) (Line 5 in Algorithm 1)
-    // NOTE: Eq. (9) misses M in the denominator
+      // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
+      // Calculate Eq. (9) (Line 5 in Algorithm 1)
+      // NOTE: Eq. (9) misses M in the denominator
 
-    MatrixXf P(M, N);
-    {
-      for (int i = 0; i < M; ++i) {
-        for (int j = 0; j < N; ++j) {
-          P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+      MatrixXf P(M, N);
+      {
+        for (int i = 0; i < M; ++i) {
+          for (int j = 0; j < N; ++j) {
+            P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+          }
         }
+
+        float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+        c *= w / (1 - w);
+        c *= static_cast<double>(M) / N;
+
+        P = (-P / (2 * sigma2)).array().exp().matrix();
+        P.array().colwise() *= Y_emit_prior.array();
+
+        RowVectorXf den = P.colwise().sum();
+        den.array() += c;
+
+        P = P.array().rowwise() / den.array();
+
+        // TODO: Implement Mahalanobis distance metric here.
       }
 
-      float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-      c *= w / (1 - w);
-      c *= static_cast<double>(M) / N;
+      // Fast Gaussian Transformation to calculate Pt1, P1, PX
+      MatrixXf PX = (P * X.transpose()).transpose();
 
-      P = (-P / (2 * sigma2)).array().exp().matrix();
-      P.array().colwise() *= Y_emit_prior.array();
+      // // Maximization step
+      VectorXf Pt1 = P.colwise().sum();
+      VectorXf P1 = P.rowwise().sum();
+      float Np = P1.sum();
 
-      RowVectorXf den = P.colwise().sum();
-      den.array() += c;
+      // NOTE: lambda means gamma here
+      // Corresponding to Eq. (18) in the paper
+      auto const lambda = start_lambda;
+      MatrixXf p1d = P1.asDiagonal();
 
-      P = P.array().rowwise() / den.array();
+      auto const current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
+      MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M)
+        + sigma2 * lambda * (m_lle * G) + current_zeta * G;
 
-      // TODO: Implement Mahalanobis distance metric here.
+      MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose()
+        + zeta * (Y_pred.transpose() - Y.transpose());
+
+      MatrixXf W = (A).householderQr().solve(B);
+
+      TY = Y + (G * W).transpose();
+
+      // Corresponding to Eq. (19) in the paper
+      VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
+      double xPx = Pt1.dot(xPxtemp);
+      VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+      double yPy = P1.dot(yPytemp);
+      double trPXY = (TY.array() * PX.array()).sum();
+      sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
+
+      if (sigma2 <= 0) {
+        sigma2 = tolerance_cpd / 10;
+      }
+
+      error = std::abs(sigma2 - qprev);
+      iterations++;
     }
-
-    // Fast Gaussian Transformation to calculate Pt1, P1, PX
-    MatrixXf PX = (P * X.transpose()).transpose();
-
-    // // Maximization step
-    VectorXf Pt1 = P.colwise().sum();
-    VectorXf P1 = P.rowwise().sum();
-    float Np = P1.sum();
-
-    // NOTE: lambda means gamma here
-    // Corresponding to Eq. (18) in the paper
-    auto const lambda = start_lambda;
-    MatrixXf p1d = P1.asDiagonal();
-
-    auto const current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
-    MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M) + sigma2 * lambda * (m_lle * G) +
-                 current_zeta * G;
-
-    MatrixXf B =
-        PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose() + zeta * (Y_pred.transpose() - Y.transpose());
-
-    MatrixXf W = (A).householderQr().solve(B);
-
-    TY = Y + (G * W).transpose();
-
-    // Corresponding to Eq. (19) in the paper
-    VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
-    double xPx = Pt1.dot(xPxtemp);
-    VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-    double yPy = P1.dot(yPytemp);
-    double trPXY = (TY.array() * PX.array()).sum();
-    sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
-
-    if (sigma2 <= 0) {
-      sigma2 = tolerance_cpd / 10;
-    }
-
-    error = std::abs(sigma2 - qprev);
-    iterations++;
   }
-  end = std::chrono::system_clock::now();
-  int const elapsed_time_ns =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-  double const elapsed_time_ms = static_cast<double>(elapsed_time_ns) / 1e6;
 
-  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".cpd", "cpd error: " << error << " itr: " << iterations);
-  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".cpd", "cpd elapsed runtime: " << elapsed_time_ms << " milliseconds");
-  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".cpd", "cpd std dev: " << std::pow(sigma2, 0.5));
+  ROS_DEBUG_STREAM_NAMED(logname_cpd, "cpd error: " << error << " itr: " << iterations);
+  ROS_DEBUG_STREAM_NAMED(logname_cpd, "cpd std dev: " << std::pow(sigma2, 0.5));
 
   return TY;
 }
