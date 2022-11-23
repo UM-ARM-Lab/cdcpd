@@ -63,7 +63,7 @@ CDCPD_Publishers::CDCPD_Publishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
     template_publisher = nh.advertise<PointCloud>("cdcpd/template", 10);
     pre_template_publisher = nh.advertise<PointCloud>("cdcpd/pre_template", 10);
     output_publisher = nh.advertise<PointCloud>("cdcpd/output", 10);
-    order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
+    order_pub = nh.advertise<vm::MarkerArray>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
     bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
 }
@@ -137,22 +137,30 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
 
     // initialize start and end points for rope
     auto [init_q_config, init_q_dot] = get_q_config();
-    Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
-    Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
-    end_position[2] += node_params.max_rope_length;
+    Eigen::Vector3f start_position_1{Eigen::Vector3f::Zero()};
+    Eigen::Vector3f end_position_1{Eigen::Vector3f::Zero()};
+    // Eigen::Vector3f start_position_2{Eigen::Vector3f::Zero()};
+    // Eigen::Vector3f end_position_2{Eigen::Vector3f::Zero()};
+    end_position_1[2] += node_params.max_rope_length;
     if (gripper_count == 2u) {
-        start_position = init_q_config[0].translation().cast<float>();
-        end_position = init_q_config[1].translation().cast<float>();
+        start_position_1 = init_q_config[0].translation().cast<float>();
+        end_position_1 = init_q_config[1].translation().cast<float>();
     } else if (gripper_count == 1u) {
-        start_position = init_q_config[0].translation().cast<float>();
-        end_position = start_position;
-        end_position[1] += node_params.max_rope_length;
+        start_position_1 = init_q_config[0].translation().cast<float>();
+        end_position_1 = start_position_1;
+        end_position_1[1] += node_params.max_rope_length;
     } else if (gripper_count == 0u) {
-        start_position << -node_params.max_rope_length / 2, 0, 1.0;
-        end_position << node_params.max_rope_length / 2, 0, 1.0;
+        start_position_1 << -node_params.max_rope_length / 2, 0, 1.0;
+        end_position_1 << node_params.max_rope_length / 2, 0, 1.0;
+        // start_position_1 << 0.5, -node_params.max_rope_length / 2, 1.0;
+        // end_position_1 << 0.5, node_params.max_rope_length / 2, 1.0;
+
+        // start_position_2 << -0.5, -node_params.max_rope_length / 2, 1.0;
+        // end_position_2 << -0.5, node_params.max_rope_length / 2, 1.0;
     }
 
-    initialize_deformable_object_configuration(start_position, end_position);
+    initialize_deformable_object_configuration(start_position_1, end_position_1);
+    // initialize_deformable_object_configuration(start_position_2, end_position_2);
 
     PointCloud::Ptr vertices = deformable_object_tracking_map_.form_vertices_cloud();
     Eigen::Matrix2Xi edges = deformable_object_tracking_map_.form_edges_matrix();
@@ -574,34 +582,50 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
 
     // Publish markers indication the order of the points
     {
-        auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
-            vm::Marker order;
-            order.header.frame_id = node_params.camera_frame;
-            order.header.stamp = ros::Time();
-            order.ns = ns;
-            order.type = visualization_msgs::Marker::LINE_STRIP;
-            order.action = visualization_msgs::Marker::ADD;
-            order.pose.orientation.w = 1.0;
-            order.id = 1;
-            order.scale.x = 0.01;
-            order.color.r = 0.1;
-            order.color.g = 0.6;
-            order.color.b = 0.9;
-            order.color.a = 1.0;
-
-            for (auto pc_iter : *cloud)
+        auto rope_marker_fn_multi_templates = [&](std::string const& ns)
+        {
+            vm::MarkerArray rope_orders;
+            int i = 1;
+            for (auto const& def_obj_pair : deformable_object_tracking_map_.tracking_map)
             {
-                geometry_msgs::Point p;
-                p.x = pc_iter.x;
-                p.y = pc_iter.y;
-                p.z = pc_iter.z;
-                order.points.push_back(p);
+                int const& def_obj_id = def_obj_pair.first;
+                auto const& def_obj_config = def_obj_pair.second;
+
+                vm::Marker order;
+                order.header.frame_id = node_params.camera_frame;
+                order.header.stamp = ros::Time();
+                order.ns = ns;
+                order.type = visualization_msgs::Marker::LINE_STRIP;
+                order.action = visualization_msgs::Marker::ADD;
+                order.pose.orientation.w = 1.0;
+                order.id = def_obj_id;
+                order.scale.x = 0.01;
+                order.color.r = 0.1;
+                order.color.g = i * 0.5;
+                order.color.b = 0.9;
+                order.color.a = 1.0;
+
+                // TODO: This should loop through the edges instead of the points as the edges
+                // actually indicate which points form edges...
+                // Though this isn't a huge deal as of right now as the rope points are guaranteed
+                // to be in edge order if the template was initialized in edge order.
+                for (auto pc_iter : *def_obj_config->tracked_.points_)
+                {
+                    geometry_msgs::Point p;
+                    p.x = pc_iter.x;
+                    p.y = pc_iter.y;
+                    p.z = pc_iter.z;
+                    order.points.push_back(p);
+                }
+                rope_orders.markers.push_back(order);
+                ++i;
             }
-            return order;
+
+            return rope_orders;
         };
 
-        auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
-        publishers.order_pub.publish(rope_marker);
+        auto const rope_marker_array = rope_marker_fn_multi_templates("line_order");
+        publishers.order_pub.publish(rope_marker_array);
     }
 
     // compute length and print that for debugging purposes
