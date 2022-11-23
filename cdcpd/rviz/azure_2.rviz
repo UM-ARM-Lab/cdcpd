@@ -11,9 +11,9 @@ Panels:
         - /vision1/kinect1/Occlusion Compensation1
         - /cdcpd1
         - /cdcpd1/BoundingBox1
-        - /cdcpd1/output1/Namespaces1
         - /cdcpd1/masked1
         - /cdcpd1/contacts1/Namespaces1
+        - /cdcpd1/MarkerArray1
         - /PlanningScene1
       Splitter Ratio: 0.40697672963142395
     Tree Height: 837
@@ -35,7 +35,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: masked
   - Class: merrrt_visualization/AnimationController
     Name: AnimationController
     auto_play: true
@@ -141,14 +141,6 @@ Visualization Manager:
           line width: 0.004999999888241291
           only edge: true
           show coords: false
-        - Class: rviz/Marker
-          Enabled: true
-          Marker Topic: /cdcpd/order
-          Name: output
-          Namespaces:
-            {}
-          Queue Size: 100
-          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -259,6 +251,14 @@ Visualization Manager:
             {}
           Queue Size: 100
           Value: false
+        - Class: rviz/MarkerArray
+          Enabled: true
+          Marker Topic: /cdcpd/order
+          Name: MarkerArray
+          Namespaces:
+            line_order: true
+          Queue Size: 100
+          Value: true
       Enabled: true
       Name: cdcpd
     - Class: moveit_rviz_plugin/PlanningScene
@@ -282,11 +282,6 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
-          mock_camera_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
         Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
@@ -335,9 +330,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -1.5697963237762451
+      Pitch: -0.9397965669631958
       Target Frame: anim_camera
-      Yaw: 4.693721294403076
+      Yaw: 4.798727035522461
     Saved: ~
 Window Geometry:
   AnimationController:

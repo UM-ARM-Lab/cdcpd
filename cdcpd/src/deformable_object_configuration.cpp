@@ -6,6 +6,15 @@ int unravel_indices(int row, int col, int num_points_width)
     return row * num_points_width + col;
 }
 
+DeformableObjectType get_deformable_object_type(std::string const& def_obj_type_str)
+{
+    std::map<std::string, DeformableObjectType> obj_type_map{
+        {"rope", DeformableObjectType::rope},
+        {"cloth", DeformableObjectType::cloth}
+    };
+    return obj_type_map[def_obj_type_str];
+}
+
 DeformableObjectTracking::DeformableObjectTracking(DeformableObjectTracking const& other)
 {
     vertices_ = other.vertices_;
@@ -119,6 +128,7 @@ ClothConfiguration::ClothConfiguration(float const length_initial, float const w
     float grid_size_initial_actual_length =
         length_initial_ / static_cast<float>(num_segments_length);
     float grid_size_initial_actual_width = width_initial_ / static_cast<float>(num_segments_width);
+    // TODO(Dylan): This needs to be updated to include the stretch limit parameter!
     max_segment_length_ = std::min({grid_size_initial_actual_length,
         grid_size_initial_actual_width});
 }

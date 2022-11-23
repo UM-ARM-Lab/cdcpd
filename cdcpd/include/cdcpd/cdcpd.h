@@ -98,49 +98,56 @@ class CDCPD {
     OutputStatus status;
   };
 
-  CDCPD(PointCloud::ConstPtr template_cloud, const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold,
-        bool use_recovery = false, double alpha = 0.5, double beta = 1.0, double lambda = 1.0, double k = 100.0,
-        float zeta = 10.0, float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
+  CDCPD(PointCloud::ConstPtr template_cloud, const Eigen::Matrix2Xi &_template_edges,
+      float objective_value_threshold, bool use_recovery = false, double alpha = 0.5,
+      double beta = 1.0, double lambda = 1.0, double k = 100.0, float zeta = 10.0,
+      float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
   CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-        const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold, bool use_recovery = false,
-        double alpha = 0.5, double beta = 1.0, double lambda = 1.0, double k = 100.0, float zeta = 10.0,
-        float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
+      const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold,
+      bool use_recovery = false, double alpha = 0.5, double beta = 1.0, double lambda = 1.0,
+      double k = 100.0, float zeta = 10.0, float obstacle_cost_weight = 1.0,
+      float fixed_points_weight = 10.0);
 
-  // If you have want gripper constraints to be added & removed automatically based on is_grasped & distance
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
-                    const smmap::AllGrippersSinglePose &q_config = {}, const std::vector<bool> &is_grasped = {},
-                    int pred_choice = 0);
+  // If you have want gripper constraints to be added and removed automatically based on is_grasped
+  // and distance
+  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
+      const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
+      const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+      const smmap::AllGrippersSinglePose &q_config = {}, const std::vector<bool> &is_grasped = {},
+      int pred_choice = 0);
 
   // If you want to used a known correspondence between grippers and node indices (gripper_idx)
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
-                    const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
-                    int pred_choice = 0);
+  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
+      const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
+      const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+      const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
+      int pred_choice = 0);
 
   Output operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
-                    ObstacleConstraints points_normals, double max_segment_length,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},
-                    const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
-                    int pred_choice = 0);
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
+      const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+      const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
+      int pred_choice = 0);
 
   // The common implementation that the above overloads call
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask, const cv::Matx33d &intrinsics,
-                    const PointCloud::Ptr template_cloud, ObstacleConstraints points_normals, double max_segment_length,
-                    const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
-                    const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
+  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
+      const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+      ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
+      const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
+      const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
 
-  Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices, const cv::Mat &depth, const cv::Mat &mask,
-                                   const Eigen::Matrix3f &intrinsics, float kvis);
+  Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices, const cv::Mat &depth,
+      const cv::Mat &mask, const Eigen::Matrix3f &intrinsics, float kvis);
 
-  Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X, const Eigen::Matrix3Xf &Y, const Eigen::Matrix3Xf &Y_pred,
-                       const Eigen::VectorXf &Y_emit_prior);
+  Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X, const Eigen::Matrix3Xf &Y,
+      const Eigen::Matrix3Xf &Y_pred, const Eigen::VectorXf &Y_emit_prior);
 
-  Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P, const smmap::AllGrippersSinglePoseDelta &q_dot,
-                           const smmap::AllGrippersSinglePose &q_config, int pred_choice);
+  Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P,
+      const smmap::AllGrippersSinglePoseDelta &q_dot,
+      const smmap::AllGrippersSinglePose &q_config, int pred_choice);
 
   ros::NodeHandle nh;
   ros::NodeHandle ph;
