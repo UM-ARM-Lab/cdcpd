@@ -29,6 +29,7 @@
 #include "cdcpd_ros/camera_sub.h"
 #include "cdcpd/deformable_object_configuration.h"
 #include "cdcpd/segmenter.h"
+#include "cdcpd/tracking_map.h"
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
