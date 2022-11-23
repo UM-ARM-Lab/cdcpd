@@ -11,10 +11,10 @@ static double const NANOSECONDS_TO_MILLISECONDS = 1e-6;
 class Stopwatch
 {
 public:
-    Stopwatch(std::string const& logger_name);
+    Stopwatch(std::string const& routine_name);
     ~Stopwatch();
 
 private:
-    std::string const logger_name_;
+    std::string const routine_name_;
     std::chrono::steady_clock::time_point const start_time_;
 };

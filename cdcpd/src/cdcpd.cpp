@@ -384,82 +384,78 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
   int iterations = 0;
   double error = tolerance_cpd + 1;  // loop runs the first time
 
-  {
-    Stopwatch stopwatch(logname_cpd);
+  while (iterations <= max_iterations && error > tolerance_cpd) {
+    double qprev = sigma2;
+    // Expectation step
+    int N = X.cols();
+    int M = Y.cols();
+    int D = Y.rows();
 
-    while (iterations <= max_iterations && error > tolerance_cpd) {
-      double qprev = sigma2;
-      // Expectation step
-      int N = X.cols();
-      int M = Y.cols();
-      int D = Y.rows();
+    // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
+    // Calculate Eq. (9) (Line 5 in Algorithm 1)
+    // NOTE: Eq. (9) misses M in the denominator
 
-      // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
-      // Calculate Eq. (9) (Line 5 in Algorithm 1)
-      // NOTE: Eq. (9) misses M in the denominator
-
-      MatrixXf P(M, N);
-      {
-        for (int i = 0; i < M; ++i) {
-          for (int j = 0; j < N; ++j) {
-            P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
-          }
+    MatrixXf P(M, N);
+    {
+      for (int i = 0; i < M; ++i) {
+        for (int j = 0; j < N; ++j) {
+          P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
         }
-
-        float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-        c *= w / (1 - w);
-        c *= static_cast<double>(M) / N;
-
-        P = (-P / (2 * sigma2)).array().exp().matrix();
-        P.array().colwise() *= Y_emit_prior.array();
-
-        RowVectorXf den = P.colwise().sum();
-        den.array() += c;
-
-        P = P.array().rowwise() / den.array();
-
-        // TODO: Implement Mahalanobis distance metric here.
       }
 
-      // Fast Gaussian Transformation to calculate Pt1, P1, PX
-      MatrixXf PX = (P * X.transpose()).transpose();
+      float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+      c *= w / (1 - w);
+      c *= static_cast<double>(M) / N;
 
-      // // Maximization step
-      VectorXf Pt1 = P.colwise().sum();
-      VectorXf P1 = P.rowwise().sum();
-      float Np = P1.sum();
+      P = (-P / (2 * sigma2)).array().exp().matrix();
+      P.array().colwise() *= Y_emit_prior.array();
 
-      // NOTE: lambda means gamma here
-      // Corresponding to Eq. (18) in the paper
-      auto const lambda = start_lambda;
-      MatrixXf p1d = P1.asDiagonal();
+      RowVectorXf den = P.colwise().sum();
+      den.array() += c;
 
-      auto const current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
-      MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M)
-        + sigma2 * lambda * (m_lle * G) + current_zeta * G;
+      P = P.array().rowwise() / den.array();
 
-      MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose()
-        + zeta * (Y_pred.transpose() - Y.transpose());
-
-      MatrixXf W = (A).householderQr().solve(B);
-
-      TY = Y + (G * W).transpose();
-
-      // Corresponding to Eq. (19) in the paper
-      VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
-      double xPx = Pt1.dot(xPxtemp);
-      VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-      double yPy = P1.dot(yPytemp);
-      double trPXY = (TY.array() * PX.array()).sum();
-      sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
-
-      if (sigma2 <= 0) {
-        sigma2 = tolerance_cpd / 10;
-      }
-
-      error = std::abs(sigma2 - qprev);
-      iterations++;
+      // TODO: Implement Mahalanobis distance metric here.
     }
+
+    // Fast Gaussian Transformation to calculate Pt1, P1, PX
+    MatrixXf PX = (P * X.transpose()).transpose();
+
+    // // Maximization step
+    VectorXf Pt1 = P.colwise().sum();
+    VectorXf P1 = P.rowwise().sum();
+    float Np = P1.sum();
+
+    // NOTE: lambda means gamma here
+    // Corresponding to Eq. (18) in the paper
+    auto const lambda = start_lambda;
+    MatrixXf p1d = P1.asDiagonal();
+
+    auto const current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
+    MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M)
+      + sigma2 * lambda * (m_lle * G) + current_zeta * G;
+
+    MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose()
+      + zeta * (Y_pred.transpose() - Y.transpose());
+
+    MatrixXf W = (A).householderQr().solve(B);
+
+    TY = Y + (G * W).transpose();
+
+    // Corresponding to Eq. (19) in the paper
+    VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
+    double xPx = Pt1.dot(xPxtemp);
+    VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+    double yPy = P1.dot(yPytemp);
+    double trPXY = (TY.array() * PX.array()).sum();
+    sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
+
+    if (sigma2 <= 0) {
+      sigma2 = tolerance_cpd / 10;
+    }
+
+    error = std::abs(sigma2 - qprev);
+    iterations++;
   }
 
   ROS_DEBUG_STREAM_NAMED(logname_cpd, "cpd error: " << error << " itr: " << iterations);
@@ -617,6 +613,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
     const int pred_choice)
 {
+  Stopwatch stopwatch_cdcpd("CDCPD");
   // FIXME: this has a lot of duplicate code
   this->gripper_idx = gripper_idx;
 
@@ -625,31 +622,36 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
   total_frames_ += 1;
 
   // Perform HSV segmentation
-  auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box,
-      last_upper_bounding_box);
-  segmenter->segment(points);
-
-  // Drop color info from the point cloud.
-  // NOTE: We use a boost pointer here because that's what our version of pcl is expecting in
-  // the `setInputCloud` function call.
-  auto cloud = boost::make_shared<PointCloud>();
-  pcl::copyPointCloud(segmenter->get_segmented_cloud(), *cloud);
-
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-      "filtered cloud: (" << cloud->height << " x " << cloud->width << ")");
-
-  /// Perform VoxelGrid filter downsampling.
+  boost::shared_ptr<PointCloud> cloud_segmented;
   PointCloud::Ptr cloud_downsampled(new PointCloud);
-  pcl::VoxelGrid<pcl::PointXYZ> sor;
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: "
-      << cloud->width);
-  sor.setInputCloud(cloud);
-  sor.setLeafSize(0.02f, 0.02f, 0.02f);
-  sor.filter(*cloud_downsampled);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-                                 "Points in filtered point cloud: " << cloud_downsampled->width);
+  {
+    Stopwatch stopwatch_segmentation("Segmentation");
+    auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box,
+        last_upper_bounding_box);
+    segmenter->segment(points);
+
+    // Drop color info from the point cloud.
+    // NOTE: We use a boost pointer here because that's what our version of pcl is expecting in
+    // the `setInputCloud` function call.
+    cloud_segmented = boost::make_shared<PointCloud>();
+    pcl::copyPointCloud(segmenter->get_segmented_cloud(), *cloud_segmented);
+
+    ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
+        "filtered cloud: (" << cloud_segmented->height << " x " << cloud_segmented->width << ")");
+
+    /// Perform VoxelGrid filter downsampling.
+    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: "
+        << cloud_segmented->width);
+    sor.setInputCloud(cloud_segmented);
+    sor.setLeafSize(0.02f, 0.02f, 0.02f);
+    sor.filter(*cloud_downsampled);
+    ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
+                                  "Points in filtered point cloud: " << cloud_downsampled->width);
+  }
 
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
+
   // TODO: check whether the change is needed here for unit conversion
   auto const Y_emit_prior = Eigen::VectorXf::Ones(template_cloud->size());
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "Y_emit_prior " << Y_emit_prior);
@@ -660,8 +662,8 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
 
-    return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out,
-        OutputStatus::NoPointInFilteredCloud};
+    return CDCPD::Output{points, cloud_segmented, cloud_downsampled, cdcpd_cpd, cdcpd_pred,
+        cdcpd_out, OutputStatus::NoPointInFilteredCloud};
   }
 
   // Add points to X according to the previous template
@@ -680,20 +682,30 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
   }
 
   Matrix3Xf TY, TY_pred;
-  TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
-  TY = cpd(X, Y, TY_pred, Y_emit_prior);
+  {
+    Stopwatch stopwatch_cpd("CPD");
+    TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
+    TY = cpd(X, Y, TY_pred, Y_emit_prior);
+  }
 
   // Next step: optimization.
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
-  // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
-  // ???: most likely not 1.0
-  Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
-  auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints,
-      max_segment_length);
-  Matrix3Xf Y_opt = opt_out.first;
-  double objective_value = opt_out.second;
 
-  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
+  Matrix3Xf Y_opt;
+  double objective_value;
+  {
+    Stopwatch stopwatch_optimization("Optimization");
+
+    // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
+    // ???: most likely not 1.0
+    Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
+    auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints,
+        max_segment_length);
+    Y_opt = opt_out.first;
+    objective_value = opt_out.second;
+
+    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
+  }
 
   // Set stateful member variables for next iteration of CDCPD
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();
@@ -709,7 +721,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     status = OutputStatus::ObjectiveTooHigh;
   }
 
-  return CDCPD::Output{points, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
+  return CDCPD::Output{points, cloud_segmented, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
