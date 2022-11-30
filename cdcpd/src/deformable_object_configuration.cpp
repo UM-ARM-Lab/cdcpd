@@ -113,12 +113,13 @@ void DeformableObjectTracking::setEdges(std::vector<std::tuple<int, int>> const&
         edges_new(1, i) = std::get<1>(edge);
         ++i;
     }
-    edges_ = edges_new;
+    setEdges(edges_new);
 }
 
 void DeformableObjectTracking::setEdges(Eigen::Matrix2Xi const& edges_in)
 {
     edges_ = edges_in;
+    connectivity_graph_ = ConnectivityGraph(edges_);
 }
 
 void DeformableObjectTracking::setPointCloud(PointCloud::const_iterator const& it_in_begin, PointCloud::const_iterator const& it_in_end)
