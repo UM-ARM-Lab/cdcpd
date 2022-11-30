@@ -8,6 +8,8 @@
 #include "opencv2/imgproc.hpp"
 #include <opencv2/core/eigen.hpp>
 
+#include <map>
+
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
 enum DeformableObjectType
@@ -18,9 +20,33 @@ enum DeformableObjectType
 
 DeformableObjectType get_deformable_object_type(std::string const& def_obj_type_str);
 
-struct DeformableObjectTracking
+// TODO(Dylan): Clean this up and actually implement a graph traversal/construction algorithm that
+// isn't just dumping all of the nodes into a big list.
+class ConnectivityNode
 {
-    DeformableObjectTracking(){}
+public:
+    ConnectivityNode(int const node_id);
+
+    void add_neighbor_node(std::shared_ptr<ConnectivityNode> const neighbor);
+
+    int const id;
+    std::map<int, std::shared_ptr<ConnectivityNode> > neighbors;
+};
+
+// Represents the edges of deformable object templates as a graph for easy traversal.
+class ConnectivityGraph
+{
+public:
+    ConnectivityGraph();
+    ConnectivityGraph(Eigen::Matrix2Xi const& edge_list);
+
+    std::map<int, std::shared_ptr<ConnectivityNode> > nodes;
+};
+
+class DeformableObjectTracking
+{
+public:
+    DeformableObjectTracking();
 
     // Turns the passed in Matrix of XYZ points to a point cloud.
     // TODO(dylan.colli): remove argument. Should just use the vertices member.
@@ -32,12 +58,36 @@ struct DeformableObjectTracking
     // Sets the vertices from input point vector.
     void setVertices(std::vector<cv::Point3f> const& vertex_points);
 
+    // Sets the vertices member equal to given vertices and forms the point cloud from these
+    // vertices
+    void setVertices(Eigen::Matrix3Xf const& vertices_in);
+
     // Sets the edges from input edge vector.
     void setEdges(std::vector<std::tuple<int, int>> const& edges);
 
-    Eigen::Matrix3Xf vertices_{};
-    Eigen::Matrix2Xi edges_{};
+    void setEdges(Eigen::Matrix2Xi const& edges_in);
+
+    // Sets this tracking's point cloud using std::copy and another point cloud's iterators defining
+    // the range over which to copy the points.
+    void setPointCloud(PointCloud::const_iterator const& it_in_begin, PointCloud::const_iterator const& it_in_end);
+
+    Eigen::Matrix3Xf const& getVertices() const { return vertices_; }
+
+    Eigen::Matrix3Xf getVerticesCopy() const { return vertices_; }
+
+    Eigen::Matrix2Xi const& getEdges() const { return edges_; }
+
+    Eigen::Matrix2Xi getEdgesCopy() const { return edges_; }
+
+    PointCloud::ConstPtr const getPointCloud() const { return points_; }
+
+    PointCloud::Ptr getPointCloudCopy() const { return PointCloud::Ptr(new PointCloud(*points_)); }
+
+private:
+    Eigen::Matrix3Xf vertices_;
+    Eigen::Matrix2Xi edges_;
     PointCloud::Ptr points_;
+    ConnectivityGraph connectivity_graph_;
 };
 
 class DeformableObjectConfiguration

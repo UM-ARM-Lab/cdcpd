@@ -34,7 +34,7 @@ CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_ini
     if (PRINT_DEBUG_MESSAGES)
     {
         std::stringstream ss;
-        ss << rope_tracking_initial.edges_;
+        ss << rope_tracking_initial.getEdges();
         ROS_WARN("Initial template edges");
         ROS_WARN(ss.str().c_str());
     }
@@ -50,7 +50,7 @@ CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_ini
     float const obstacle_cost_weight = 0.001;
     float const fixed_points_weight = 10.0;
 
-    CDCPD cdcpd = CDCPD(rope_tracking_initial.points_, rope_tracking_initial.edges_,
+    CDCPD cdcpd = CDCPD(rope_tracking_initial.getPointCloud(), rope_tracking_initial.getEdges(),
         objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
         fixed_points_weight);
 
@@ -117,7 +117,7 @@ TEST(StaticRope, testResimPointEquivalency)
 
     auto input_clouds = readCdcpdInputPointClouds(bag);
     PointCloud::Ptr tracked_points = resimulateCdcpd(cdcpd_sim, input_clouds,
-        rope_configuration.initial_.points_, max_rope_length, num_points);
+        rope_configuration.initial_.getPointCloudCopy(), max_rope_length, num_points);
 
     expectPointCloudsEqual(*pt_cloud_last, *tracked_points);
 

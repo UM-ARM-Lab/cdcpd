@@ -15,18 +15,61 @@ DeformableObjectType get_deformable_object_type(std::string const& def_obj_type_
     return obj_type_map[def_obj_type_str];
 }
 
+ConnectivityNode::ConnectivityNode(int const node_id)
+    : id(node_id),
+      neighbors()
+{}
+
+void ConnectivityNode::add_neighbor_node(std::shared_ptr<ConnectivityNode> const neighbor)
+{
+    neighbors.insert({neighbor->id, neighbor});
+}
+
+ConnectivityGraph::ConnectivityGraph()
+    : nodes()
+{}
+
+ConnectivityGraph::ConnectivityGraph(Eigen::Matrix2Xi const& edge_list)
+    : ConnectivityGraph()
+{
+    for (int edge_idx = 0; edge_idx < edge_list.cols(); ++edge_idx)
+    {
+        auto const& edge = edge_list.col(edge_idx);
+        int const& id_1 = edge(0, 0);
+        int const& id_2 = edge(1, 0);
+
+        auto node_1 = std::make_shared<ConnectivityNode>(id_1);
+        auto node_2 = std::make_shared<ConnectivityNode>(id_2);
+
+        // Using map::insert here as insert respects if the key, value pair is already in the map.
+        auto insertion_pair_1 = nodes.insert({id_1, node_1});
+        auto insertion_pair_2 = nodes.insert({id_2, node_2});
+
+        // Add the nodes as neighbors. We're overwriting the nodes we defined earlier as the
+        // map::insert function returns an iterator to the already present node in the map if there
+        // was already a node with that ID.
+        node_1 = insertion_pair_1.first->second;
+        node_2 = insertion_pair_2.first->second;
+
+        node_1->add_neighbor_node(node_2);
+        node_2->add_neighbor_node(node_1);
+    }
+}
+
+DeformableObjectTracking::DeformableObjectTracking()
+    : vertices_(),
+      edges_(),
+      points_(),
+      connectivity_graph_(edges_)
+{}
+
 DeformableObjectTracking::DeformableObjectTracking(DeformableObjectTracking const& other)
 {
     vertices_ = other.vertices_;
     edges_ = other.edges_;
-    // Need to be careful so that the newly tracked points point to different memory than the
-    // "other" tracked points
-    points_ = PointCloud::Ptr(new PointCloud(*other.points_));
+    points_ = other.getPointCloudCopy();
+    connectivity_graph_ = other.connectivity_graph_;
 }
-
-DeformableObjectConfiguration::DeformableObjectConfiguration(int const num_points)
-    : num_points_(num_points)
-{}
 
 void DeformableObjectTracking::makeCloud(Eigen::Matrix3Xf const& points_mat)
 {
@@ -51,7 +94,13 @@ void DeformableObjectTracking::setVertices(std::vector<cv::Point3f> const& verte
 
         ++i;
     }
-    vertices_ = vertices_new;
+    setVertices(vertices_new);
+}
+
+void DeformableObjectTracking::setVertices(Eigen::Matrix3Xf const& vertices_in)
+{
+    vertices_ = vertices_in;
+    makeCloud(vertices_);
 }
 
 void DeformableObjectTracking::setEdges(std::vector<std::tuple<int, int>> const& edges)
@@ -66,6 +115,23 @@ void DeformableObjectTracking::setEdges(std::vector<std::tuple<int, int>> const&
     }
     edges_ = edges_new;
 }
+
+void DeformableObjectTracking::setEdges(Eigen::Matrix2Xi const& edges_in)
+{
+    edges_ = edges_in;
+}
+
+void DeformableObjectTracking::setPointCloud(PointCloud::const_iterator const& it_in_begin, PointCloud::const_iterator const& it_in_end)
+{
+    std::copy(it_in_begin, it_in_end, points_->begin());
+}
+
+DeformableObjectConfiguration::DeformableObjectConfiguration(int const num_points)
+    : num_points_(num_points),
+      max_segment_length_(0),
+      initial_(),
+      tracked_()
+{}
 
 void DeformableObjectConfiguration::initializeTracking()
 {
@@ -101,9 +167,8 @@ DeformableObjectTracking RopeConfiguration::makeTemplate()
         template_edges(1, i - 1) = i;
     }
     DeformableObjectTracking configuration;
-    configuration.vertices_ = template_vertices;
-    configuration.edges_ = template_edges;
-    configuration.makeCloud(template_vertices);
+    configuration.setVertices(template_vertices);
+    configuration.setEdges(template_edges);
 
     return configuration;
 }
@@ -169,8 +234,6 @@ DeformableObjectTracking ClothConfiguration::makeTemplate()
     // Store the warped template in the returned configuration.
     configuration.setVertices(template_warped_points);
     configuration.setEdges(edges_list);
-
-    configuration.makeCloud(configuration.vertices_);
 
     return configuration;
 }

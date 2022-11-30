@@ -139,8 +139,8 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
     auto [init_q_config, init_q_dot] = get_q_config();
     Eigen::Vector3f start_position_1{Eigen::Vector3f::Zero()};
     Eigen::Vector3f end_position_1{Eigen::Vector3f::Zero()};
-    // Eigen::Vector3f start_position_2{Eigen::Vector3f::Zero()};
-    // Eigen::Vector3f end_position_2{Eigen::Vector3f::Zero()};
+    Eigen::Vector3f start_position_2{Eigen::Vector3f::Zero()};
+    Eigen::Vector3f end_position_2{Eigen::Vector3f::Zero()};
     end_position_1[2] += node_params.max_rope_length;
     if (gripper_count == 2u) {
         start_position_1 = init_q_config[0].translation().cast<float>();
@@ -150,17 +150,17 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
         end_position_1 = start_position_1;
         end_position_1[1] += node_params.max_rope_length;
     } else if (gripper_count == 0u) {
-        start_position_1 << -node_params.max_rope_length / 2, 0, 1.0;
-        end_position_1 << node_params.max_rope_length / 2, 0, 1.0;
-        // start_position_1 << 0.5, -node_params.max_rope_length / 2, 1.0;
-        // end_position_1 << 0.5, node_params.max_rope_length / 2, 1.0;
+        // start_position_1 << -node_params.max_rope_length / 2, 0, 1.0;
+        // end_position_1 << node_params.max_rope_length / 2, 0, 1.0;
+        start_position_1 << 0.5, -0.22, 1.0;
+        end_position_1 << 0.5, 0.22, 1.0;
 
-        // start_position_2 << -0.5, -node_params.max_rope_length / 2, 1.0;
-        // end_position_2 << -0.5, node_params.max_rope_length / 2, 1.0;
+        start_position_2 << -0.25, -0.5, 1.0;
+        end_position_2 << -0.25, 0.5, 1.0;
     }
 
     initialize_deformable_object_configuration(start_position_1, end_position_1);
-    // initialize_deformable_object_configuration(start_position_2, end_position_2);
+    initialize_deformable_object_configuration(start_position_2, end_position_2);
 
     PointCloud::Ptr vertices = deformable_objects.form_vertices_cloud();
     Eigen::Matrix2Xi edges = deformable_objects.form_edges_matrix();
@@ -609,12 +609,12 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
                 // actually indicate which points form edges...
                 // Though this isn't a huge deal as of right now as the rope points are guaranteed
                 // to be in edge order if the template was initialized in edge order.
-                for (auto pc_iter : *def_obj_config->tracked_.points_)
+                for (auto const cloud_point : *def_obj_config->tracked_.getPointCloud())
                 {
                     geometry_msgs::Point p;
-                    p.x = pc_iter.x;
-                    p.y = pc_iter.y;
-                    p.z = pc_iter.z;
+                    p.x = cloud_point.x;
+                    p.y = cloud_point.y;
+                    p.z = cloud_point.z;
                     order.points.push_back(p);
                 }
                 rope_orders.markers.push_back(order);
