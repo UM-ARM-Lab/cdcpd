@@ -107,6 +107,18 @@ class CompHSV : public pcl::ComparisonBase<PointHSV>
   CompHSV() : component_offset_(), compare_val_() {}  // not allowed
 };
 
+// Computes the Mahalanobis distance of a point from the given Gaussian.
+float mahalanobis_distance(Eigen::Block<Eigen::Matrix3Xf, 3, 1, true> const& gaussian_centroid,
+    Eigen::Matrix3Xf const& covariance_inverse,
+    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt)
+{
+    Eigen::Matrix3Xf const diff = pt - gaussian_centroid;
+    // Using sum here as a means to convert 1x1 Eigen matrix to a double.
+    float const d_M = (diff.transpose() * covariance_inverse * diff).sum();
+
+    return d_M;
+}
+
 static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat)
 {
   PointCloud::Ptr cloud(new PointCloud);
@@ -396,6 +408,7 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
     // NOTE: Eq. (9) misses M in the denominator
 
     MatrixXf P(M, N);
+    MatrixXf d_M_full(M, N);
     {
       for (int i = 0; i < M; ++i) {
         for (int j = 0; j < N; ++j) {
@@ -416,6 +429,74 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
       P = P.array().rowwise() / den.array();
 
       // TODO: Implement Mahalanobis distance metric here.
+
+      // Get the Mahalanobis distance of each point to each Gaussian
+      double const sigma2_inverse = 1.0 / sigma2;
+      Eigen::MatrixXf covariance_inverse = Eigen::MatrixXf(3, 3);
+      covariance_inverse << sigma2_inverse,            0.0,            0.0,
+                                       0.0, sigma2_inverse,            0.0,
+                                       0.0,            0.0, sigma2_inverse;
+      for (int m = 0; m < M; ++m)
+      {
+        auto const& y_m = TY.col(m);
+        for (int i = 0; i < N; ++i)
+        {
+          auto const& x_i = X.col(i);
+          d_M_full(m, i) = mahalanobis_distance(y_m, covariance_inverse, x_i);
+        }
+      }
+
+      // Find the two closest Gaussians to each point (by Mahalanobis distance) for each template.
+      // NOTE: This isn't quite as trivial as finding the two closest Gaussians since we need to
+      //  respect edges of the template. Instead, we'll find the closest Gaussian, then find the
+      //  next closest Gaussian to the point that is connected to that Gaussian.
+      // NOTE: Use the connectivity graph added to the deformable object tracking now.
+      Eigen::Matrix2Xi pointwise_closest_gaussians = Eigen::Matrix2Xi::Zero(N);
+      for (int pt_idx = 0; pt_idx < N; ++pt_idx)
+      {
+        float val_min = 1e15;
+        float val_second_min = 1e15;
+        int idx_min = -1;
+        int idx_second_min = -1;
+        auto const& dists = d_M_full.col(pt_idx);
+
+        for (int m_idx = 0; m_idx < M; ++m_idx)
+        {
+          float const distance = dists(m_idx);
+          if (distance < val_min)
+          {
+            // Move the min distance Gaussian to the second minimum distance.
+            val_second_min = val_min;
+            idx_second_min = idx_min;
+
+            // Update the minimum distance Gaussian
+            val_min = distance;
+            idx_min = m_idx;
+          }
+          else if (distance < val_second_min)
+          {
+            // Just update the second minimum distance.
+            val_second_min = distance;
+            idx_second_min = m_idx;
+          }
+        }
+        pointwise_closest_gaussians(0, pt_idx) = idx_min;
+        pointwise_closest_gaussians(1, pt_idx) = idx_second_min;
+      }
+
+      // Compute the projection of each point onto the line formed between the two closest Gaussians
+      // for each template.
+
+
+      // Form the synthetic Gaussian based on the projection of the point onto the line formed by
+      // the two closest Gaussians.
+
+      // Compute the sum of distances.
+
+      // Find the association prior for each point and Gaussian pair based on the point's distance
+      // to this template compared to the sum of distances.
+      // e^(-this_distance / distance_sum)
+
     }
 
     // Fast Gaussian Transformation to calculate Pt1, P1, PX
