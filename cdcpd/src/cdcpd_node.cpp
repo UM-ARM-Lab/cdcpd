@@ -471,11 +471,10 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     auto obstacle_constraints = get_obstacle_constraints();
 
     auto const hsv_mask = getHsvMask(ph, rgb);
-    PointCloud::Ptr vertices = deformable_objects.form_vertices_cloud();
     Eigen::RowVectorXd max_segment_lengths =
         deformable_objects.form_max_segment_length_matrix();
-    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, vertices, obstacle_constraints,
-        max_segment_lengths, q_dot, q_config, gripper_indices);
+    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, deformable_objects,
+        obstacle_constraints, max_segment_lengths, q_dot, q_config, gripper_indices);
     deformable_objects.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
@@ -496,11 +495,10 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     pcl::fromPCLPointCloud2(points_v2, *points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
-    PointCloud::Ptr vertices = deformable_objects.form_vertices_cloud();
     Eigen::RowVectorXd max_segment_lengths =
         deformable_objects.form_max_segment_length_matrix();
-    auto const out = (*cdcpd)(points, vertices, obstacle_constraints, max_segment_lengths, q_dot,
-        q_config, gripper_indices);
+    auto const out = (*cdcpd)(points, deformable_objects, obstacle_constraints, max_segment_lengths,
+        q_dot, q_config, gripper_indices);
     deformable_objects.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);

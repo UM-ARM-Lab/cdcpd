@@ -375,7 +375,7 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
 }
 
 Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-                     const Eigen::VectorXf &Y_emit_prior)
+                     const Eigen::VectorXf &Y_emit_prior, TrackingMap const& tracking_map)
 {
   // downsampled_cloud: PointXYZ pointer to downsampled point clouds
   // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
@@ -607,7 +607,7 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
-    const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+    const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
     ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const std::vector<bool> &is_grasped, const int pred_choice)
@@ -628,6 +628,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp status changed, recomputing correspondences");
 
     // get the previous tracking result
+    PointCloud::ConstPtr const template_cloud = tracking_map.form_vertices_cloud();
     const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
 
     auto const num_gripper = idx_map.size();
@@ -662,8 +663,9 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     }
   }
 
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
-                                    max_segment_length, q_dot, q_config, pred_choice);
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, tracking_map,
+                                    obstacle_constraints, max_segment_length, q_dot, q_config,
+                                    pred_choice);
 
   last_grasp_status = is_grasped;
 
@@ -672,20 +674,21 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
 // NOTE: this is the one I'm current using for rgb + depth
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
-    const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+    const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
     ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const Eigen::MatrixXi &gripper_idx, const int pred_choice)
 {
   this->gripper_idx = gripper_idx;
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, template_cloud, obstacle_constraints,
+  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, tracking_map,
+                                    obstacle_constraints,
                                     max_segment_length, q_dot, q_config, pred_choice);
   return cdcpd_out;
 }
 
 // NOTE: for point cloud inputs that need to be segmented/filtered.
 CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
-    const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
+    TrackingMap const& tracking_map, ObstacleConstraints obstacle_constraints,
     Eigen::RowVectorXd const max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
     const int pred_choice)
@@ -715,6 +718,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     cloud_downsampled = downsamplePointCloud(cloud_segmented);
   }
 
+  PointCloud::ConstPtr const template_cloud = tracking_map.form_vertices_cloud();
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
 
   // TODO: check whether the change is needed here for unit conversion
@@ -737,7 +741,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
   std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx, q_config);
 
   Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
-    pred_fixed_points, q_dot, q_config, pred_choice);
+    pred_fixed_points, tracking_map, q_dot, q_config, pred_choice);
   output.original_cloud = points;
   output.masked_point_cloud = cloud_segmented;
   output.downsampled_cloud = cloud_downsampled;
@@ -746,7 +750,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
-    const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+    const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
     ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const int pred_choice)
@@ -774,6 +778,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
+  PointCloud::ConstPtr const template_cloud = tracking_map.form_vertices_cloud();
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
   // TODO: check whether the change is needed here for unit conversion
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
@@ -796,7 +801,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx, q_config);
 
   Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
-    pred_fixed_points, q_dot, q_config, pred_choice);
+    pred_fixed_points, tracking_map, q_dot, q_config, pred_choice);
   output.original_cloud = entire_cloud;
   output.masked_point_cloud = cloud;
   output.downsampled_cloud = cloud_downsampled;
@@ -808,6 +813,7 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
       Eigen::Matrix3Xf const& X, ObstacleConstraints obstacle_constraints,
       Eigen::RowVectorXd const max_segment_length,
       std::vector<FixedPoint> pred_fixed_points,
+      TrackingMap const& tracking_map,
       const smmap::AllGrippersSinglePoseDelta &q_dot,  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config, int pred_choice)
 {
@@ -818,7 +824,7 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   {
     Stopwatch stopwatch_cpd("CPD");
     TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
-    TY = cpd(X, Y, TY_pred, Y_emit_prior);
+    TY = cpd(X, Y, TY_pred, Y_emit_prior, tracking_map);
   }
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);

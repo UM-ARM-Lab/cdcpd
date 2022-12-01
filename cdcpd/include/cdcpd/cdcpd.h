@@ -30,6 +30,7 @@
 #include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"
 #include "cdcpd/stopwatch.h"
+#include "cdcpd/tracking_map.h"
 
 typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointXYZHSV PointHSV;
@@ -113,7 +114,7 @@ class CDCPD {
   // If you have want gripper constraints to be added and removed automatically based on is_grasped
   // and distance
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
-      const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+      const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const std::vector<bool> &is_grasped = {},
@@ -121,13 +122,13 @@ class CDCPD {
 
   // If you want to used a known correspondence between grippers and node indices (gripper_idx)
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
-      const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+      const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
       int pred_choice = 0);
 
-  Output operator()(const PointCloudRGB::Ptr &points, const PointCloud::Ptr template_cloud,
+  Output operator()(const PointCloudRGB::Ptr &points, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
@@ -147,7 +148,7 @@ class CDCPD {
   // TODO(Dylan): This should call the point cloud method (without segmentation) as it repeats the
   // same code.
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
-      const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
+      const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
@@ -155,19 +156,26 @@ class CDCPD {
   // This is the most basic implementation of CDCPD.
   // No input manipulation is done for you, you're expected to pass in the inputs to the algorithm
   // as indicated by the paper.
+  // TODO(Dylan): Clean up just passing in the TrackingMap. There's redundant information passing
+  // in both Y and the TrackingMap since the latter contains Y.
   Output operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
       Eigen::Matrix3Xf const& X, ObstacleConstraints obstacle_constraints,
       Eigen::RowVectorXd const max_segment_length,
       std::vector<FixedPoint> pred_fixed_points,
+      TrackingMap const& tracking_map,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
 
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices, const cv::Mat &depth,
       const cv::Mat &mask, const Eigen::Matrix3f &intrinsics, float kvis);
 
+  // TODO(Dylan): Clean up passing in the tracking_map. This is passing in way too much information.
   Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X, const Eigen::Matrix3Xf &Y,
-      const Eigen::Matrix3Xf &Y_pred, const Eigen::VectorXf &Y_emit_prior);
+      const Eigen::Matrix3Xf &Y_pred, const Eigen::VectorXf &Y_emit_prior,
+      TrackingMap const& tracking_map);
 
+  // TODO(Dylan): Pass in something that differentiates templates and their Gaussians as we want to
+  // apply dynamics to the templates distinctly.
   Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P,
       const smmap::AllGrippersSinglePoseDelta &q_dot,
       const smmap::AllGrippersSinglePose &q_config, int pred_choice);

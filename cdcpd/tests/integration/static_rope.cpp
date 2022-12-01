@@ -12,21 +12,27 @@
 
 #include "cdcpd/deformable_object_configuration.h"
 #include "cdcpd/cdcpd.h"
+#include "cdcpd/tracking_map.h"
 #include "test_resim_utils.h"
 
 #define PRINT_DEBUG_MESSAGES false
 
-RopeConfiguration getInitialTracking(float const max_rope_length, int const num_points)
+std::shared_ptr<DeformableObjectConfiguration> getInitialTracking(float const max_rope_length,
+    int const num_points)
 {
     Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
     Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
     start_position << -max_rope_length / 2, 0, 1.0;
     end_position << max_rope_length / 2, 0, 1.0;
 
-    RopeConfiguration rope_configuration(num_points, max_rope_length, start_position, end_position);
-    rope_configuration.initializeTracking();
+    auto rope_configuration = std::make_shared<RopeConfiguration>(num_points, max_rope_length,
+        start_position, end_position);
+    rope_configuration->initializeTracking();
 
-    return rope_configuration;
+    // Upcast to DeformableObjectConfiguration pointer
+    std::shared_ptr<DeformableObjectConfiguration> def_obj_config = rope_configuration;
+
+    return def_obj_config;
 }
 
 CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_initial)
@@ -60,11 +66,10 @@ CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_ini
 // Resimulate CDCPD on a set of previously recorded input point clouds in a bag file.
 PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
     std::vector<boost::shared_ptr<PointCloudRGB>> const& input_clouds,
-    PointCloud::Ptr const& initial_tracked_points, float const max_rope_length,
+    TrackingMap& tracking_map, float const max_rope_length,
     int const num_points)
 {
     // Do some setup of parameters and gripper configuration.
-    PointCloud::Ptr tracked_points = initial_tracked_points;
 
     ObstacleConstraints obstacle_constraints;  // No need to specify anything with this demo.
 
@@ -83,9 +88,9 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
     {
         // Run a single "iteration" of CDCPD mimicing the points_callback lambda function found in
         // cdcpd_node.cpp
-        CDCPD::Output out = cdcpd_sim(cloud, tracked_points, obstacle_constraints,
+        CDCPD::Output out = cdcpd_sim(cloud, tracking_map, obstacle_constraints,
             max_segment_lengths, q_dot, q_config, gripper_indices);
-        tracked_points = out.gurobi_output;
+        tracking_map.update_def_obj_vertices(out.gurobi_output);
 
         // Do a health check of CDCPD
         if (out.status == OutputStatus::NoPointInFilteredCloud ||
@@ -96,9 +101,12 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
             ROS_ERROR(err_msg.c_str());
         }
     }
-    return tracked_points;
+    PointCloud::Ptr tracked_points_final = tracking_map.form_vertices_cloud();
+    return tracked_points_final;
 }
 
+// Run CDCPD on rosbag input so as to simulate a full run of CDCPD and test that the
+// functionality has not changed significantly since recording of the bag file.
 TEST(StaticRope, testResimPointEquivalency)
 {
     // Read in the ros bagfile that we'll be resimulating and checking CDCPD performance against.
@@ -108,16 +116,18 @@ TEST(StaticRope, testResimPointEquivalency)
     bag.open(bag_file_path, rosbag::bagmode::Read);
     auto pt_cloud_last = readLastCdcpdOutput(bag);
 
-    // Run CDCPD on rosbag input so as to simulate a full run of CDCPD and test that the
-    // functionality has not changed significantly since recording of the bag file.
+    // Setup the initial tracking of the rope.
     float const max_rope_length = 0.46F;  // Taken from kinect_tripodB.launch
     int const num_points = 15;  // Taken from kinect_tripodB.launch
-    RopeConfiguration rope_configuration = getInitialTracking(max_rope_length, num_points);
-    CDCPD cdcpd_sim = initializeCdcpdSimulator(rope_configuration.initial_);
+    auto def_obj_config = getInitialTracking(max_rope_length, num_points);
+    TrackingMap tracking_map;
+    tracking_map.add_def_obj_configuration(def_obj_config);
+
+    CDCPD cdcpd_sim = initializeCdcpdSimulator(def_obj_config->initial_);
 
     auto input_clouds = readCdcpdInputPointClouds(bag);
     PointCloud::Ptr tracked_points = resimulateCdcpd(cdcpd_sim, input_clouds,
-        rope_configuration.initial_.getPointCloudCopy(), max_rope_length, num_points);
+        tracking_map, max_rope_length, num_points);
 
     expectPointCloudsEqual(*pt_cloud_last, *tracked_points);
 
