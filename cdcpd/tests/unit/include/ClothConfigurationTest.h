@@ -93,11 +93,6 @@ TEST(ClothConfigurationTest, rectangularTemplate)
     ClothConfiguration config_test{cloth_length, cloth_width, grid_size_initial_guess};
     config_test.initializeTracking();
 
-
-    std::cout << "Edges: " << std::endl << config_test.initial_.getEdges() << std::endl;
-    std::cout << "Vertices: " << std::endl << config_test.initial_.getVertices() << std::endl;
-
-
     // Setup the expected points and vertices
     std::vector<cv::Point3f> verts_expected = {
         {0, 0, 0},
