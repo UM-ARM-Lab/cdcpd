@@ -133,7 +133,19 @@ class CDCPD {
       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
       int pred_choice = 0);
 
+  // TODO(Dylan): Figure out a better (more uniform) way to organize the call structure. As it
+  // stands, this should be an operator overload but it can't be as it has the same arguments as
+  // the above point cloud method, but this method does not do the segmentation.
+//   Output doCdcpdPointCloudAlreadySegmented(const PointCloudRGB::Ptr &filtered_points,
+//       const PointCloud::Ptr template_cloud,
+//       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
+//       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
+//       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
+//       int pred_choice = 0);
+
   // The common implementation that the above overloads call
+  // TODO(Dylan): This should call the point cloud method (without segmentation) as it repeats the
+  // same code.
   Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
       const cv::Matx33d &intrinsics, const PointCloud::Ptr template_cloud,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,

@@ -446,18 +446,15 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
         }
       }
 
-      // Find the two closest Gaussians to each point (by Mahalanobis distance) for each template.
-      // NOTE: This isn't quite as trivial as finding the two closest Gaussians since we need to
-      //  respect edges of the template. Instead, we'll find the closest Gaussian, then find the
-      //  next closest Gaussian to the point that is connected to that Gaussian.
+      // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
       // NOTE: Use the connectivity graph added to the deformable object tracking now.
-      Eigen::Matrix2Xi pointwise_closest_gaussians = Eigen::Matrix2Xi::Zero(N);
+      int const num_templates = 2;  // Prototyping with 2 templates while I figure out how to pass
+      // in a dynamic amount of templates
+      Eigen::MatrixXi pointwise_closest_gaussians = Eigen::MatrixXi::Zero(num_templates, N);
       for (int pt_idx = 0; pt_idx < N; ++pt_idx)
       {
         float val_min = 1e15;
-        float val_second_min = 1e15;
         int idx_min = -1;
-        int idx_second_min = -1;
         auto const& dists = d_M_full.col(pt_idx);
 
         for (int m_idx = 0; m_idx < M; ++m_idx)
@@ -465,24 +462,23 @@ Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_
           float const distance = dists(m_idx);
           if (distance < val_min)
           {
-            // Move the min distance Gaussian to the second minimum distance.
-            val_second_min = val_min;
-            idx_second_min = idx_min;
-
             // Update the minimum distance Gaussian
             val_min = distance;
             idx_min = m_idx;
           }
-          else if (distance < val_second_min)
-          {
-            // Just update the second minimum distance.
-            val_second_min = distance;
-            idx_second_min = m_idx;
-          }
         }
-        pointwise_closest_gaussians(0, pt_idx) = idx_min;
-        pointwise_closest_gaussians(1, pt_idx) = idx_second_min;
+        // pointwise_closest_gaussians(0, pt_idx) = idx_min;
+        // pointwise_closest_gaussians(1, pt_idx) = idx_second_min;
       }
+
+      // Find the closest Gaussian to the point that is a neighbor to the closest Gaussian in the
+      // connectivity graph.
+      // for (int pt_idx = 0; pt_idx < N; ++pt_idx)
+      // {
+      //   // int const gaussian_idx = pointwise_closest_gaussians(0, pt_idx);
+
+      // }
+
 
       // Compute the projection of each point onto the line formed between the two closest Gaussians
       // for each template.
@@ -821,8 +817,8 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   Matrix3Xf TY, TY_pred;
   {
     Stopwatch stopwatch_cpd("CPD");
-  TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
-  TY = cpd(X, Y, TY_pred, Y_emit_prior);
+    TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
+    TY = cpd(X, Y, TY_pred, Y_emit_prior);
   }
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
@@ -833,15 +829,15 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   {
     Stopwatch stopwatch_optimization("Optimization");
 
-  // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
-  // ???: most likely not 1.0
-  Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
+    // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
+    // ???: most likely not 1.0
+    Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
     auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints,
         max_segment_length);
     Y_opt = opt_out.first;
     objective_value = opt_out.second;
 
-  ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
+    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
   }
 
   // NOTE: set stateful member variables for next time
