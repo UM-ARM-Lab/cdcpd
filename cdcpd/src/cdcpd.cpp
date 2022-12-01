@@ -700,7 +700,6 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
 
   // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
   // template_edges: (2, K) matrix corresponding to E in the paper
-  total_frames_ += 1;
 
   // Perform HSV segmentation
   boost::shared_ptr<PointCloud> cloud_segmented;
@@ -739,17 +738,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
   // Add points to X according to the previous template
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
 
-  std::vector<FixedPoint> pred_fixed_points;
-  auto const num_grippers = std::min(
-      static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
-  for (auto col = 0u; col < num_grippers; ++col) {
-    FixedPoint pt;
-    pt.template_index = gripper_idx(0, col);
-    pt.position(0) = q_config[col](0, 3);
-    pt.position(1) = q_config[col](1, 3);
-    pt.position(2) = q_config[col](2, 3);
-    pred_fixed_points.push_back(pt);
-  }
+  std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx, q_config);
 
   Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
     pred_fixed_points, q_dot, q_config, pred_choice);
@@ -776,8 +765,6 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   assert(depth.type() == CV_16U);
   assert(mask.type() == CV_8U);
   assert(rgb.rows == depth.rows && rgb.cols == depth.cols);
-
-  total_frames_ += 1;
 
   Eigen::Matrix3d intrinsics_eigen_tmp;
   cv::cv2eigen(intrinsics, intrinsics_eigen_tmp);
@@ -810,16 +797,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
   const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
 
-  std::vector<FixedPoint> pred_fixed_points;
-  auto const num_grippers = std::min(static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
-  for (auto col = 0u; col < num_grippers; ++col) {
-    FixedPoint pt;
-    pt.template_index = gripper_idx(0, col);
-    pt.position(0) = q_config[col](0, 3);
-    pt.position(1) = q_config[col](1, 3);
-    pt.position(2) = q_config[col](2, 3);
-    pred_fixed_points.push_back(pt);
-  }
+  std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx, q_config);
 
   Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
     pred_fixed_points, q_dot, q_config, pred_choice);
@@ -837,6 +815,8 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
       const smmap::AllGrippersSinglePoseDelta &q_dot,  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config, int pred_choice)
 {
+  total_frames_ += 1;
+
   // CPD and prediction using dynamics model.
   Matrix3Xf TY, TY_pred;
   {
@@ -900,4 +880,21 @@ PointCloud::Ptr CDCPD::downsamplePointCloud(PointCloud::Ptr cloud_in)
     ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                   "Points in filtered point cloud: " << cloud_downsampled->width);
     return cloud_downsampled;
+}
+
+std::vector<FixedPoint> CDCPD::getPredictedFixedPoints(Eigen::MatrixXi const& gripper_idx,
+    smmap::AllGrippersSinglePose const& q_config)
+{
+    std::vector<FixedPoint> pred_fixed_points;
+    auto const num_grippers = std::min(
+        static_cast<size_t>(gripper_idx.cols()), static_cast<size_t>(q_config.size()));
+    for (auto col = 0u; col < num_grippers; ++col) {
+        FixedPoint pt;
+        pt.template_index = gripper_idx(0, col);
+        pt.position(0) = q_config[col](0, 3);
+        pt.position(1) = q_config[col](1, 3);
+        pt.position(2) = q_config[col](2, 3);
+        pred_fixed_points.push_back(pt);
+    }
+    return pred_fixed_points;
 }

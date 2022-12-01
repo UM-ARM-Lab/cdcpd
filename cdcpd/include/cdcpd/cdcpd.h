@@ -199,6 +199,10 @@ protected:
 
     // Perform VoxelGrid filter downsampling.
     PointCloud::Ptr downsamplePointCloud(PointCloud::Ptr cloud_in);
+
+    // Returns a vector of `FixedPoint`s based on the gripper's point correspondance.
+    std::vector<FixedPoint> getPredictedFixedPoints(Eigen::MatrixXi const& gripper_idx,
+        smmap::AllGrippersSinglePose const& q_config);
 };
 
 #endif
