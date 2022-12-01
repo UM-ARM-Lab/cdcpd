@@ -140,6 +140,16 @@ class CDCPD {
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
 
+  // This is the most basic implementation of CDCPD.
+  // No input manipulation is done for you, you're expected to pass in the inputs to the algorithm
+  // as indicated by the paper.
+  Output operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
+      Eigen::Matrix3Xf const& X, ObstacleConstraints obstacle_constraints,
+      Eigen::RowVectorXd const max_segment_length,
+      std::vector<FixedPoint> pred_fixed_points,
+      const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
+      const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
+
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices, const cv::Mat &depth,
       const cv::Mat &mask, const Eigen::Matrix3f &intrinsics, float kvis);
 
@@ -184,6 +194,11 @@ class CDCPD {
   std::vector<bool> last_grasp_status;
   float objective_value_threshold_;
   int total_frames_ = 0;
+
+protected:
+
+    // Perform VoxelGrid filter downsampling.
+    PointCloud::Ptr downsamplePointCloud(PointCloud::Ptr cloud_in);
 };
 
 #endif

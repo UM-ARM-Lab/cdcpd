@@ -687,7 +687,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   return cdcpd_out;
 }
 
-// NOTE: for point cloud inputs
+// NOTE: for point cloud inputs that need to be segmented/filtered.
 CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     const PointCloud::Ptr template_cloud, ObstacleConstraints obstacle_constraints,
     Eigen::RowVectorXd const max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
@@ -717,18 +717,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     cloud_segmented = boost::make_shared<PointCloud>();
     pcl::copyPointCloud(segmenter->get_segmented_cloud(), *cloud_segmented);
 
-    ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-        "filtered cloud: (" << cloud_segmented->height << " x " << cloud_segmented->width << ")");
-
-    /// Perform VoxelGrid filter downsampling.
-    pcl::VoxelGrid<pcl::PointXYZ> sor;
-    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: "
-        << cloud_segmented->width);
-    sor.setInputCloud(cloud_segmented);
-    sor.setLeafSize(0.02f, 0.02f, 0.02f);
-    sor.filter(*cloud_downsampled);
-    ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-                                  "Points in filtered point cloud: " << cloud_downsampled->width);
+    cloud_downsampled = downsamplePointCloud(cloud_segmented);
   }
 
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
@@ -762,47 +751,13 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
     pred_fixed_points.push_back(pt);
   }
 
-  Matrix3Xf TY, TY_pred;
-  {
-    Stopwatch stopwatch_cpd("CPD");
-    TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
-    TY = cpd(X, Y, TY_pred, Y_emit_prior);
-  }
+  Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
+    pred_fixed_points, q_dot, q_config, pred_choice);
+  output.original_cloud = points;
+  output.masked_point_cloud = cloud_segmented;
+  output.downsampled_cloud = cloud_downsampled;
 
-  // Next step: optimization.
-  ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
-
-  Matrix3Xf Y_opt;
-  double objective_value;
-  {
-    Stopwatch stopwatch_optimization("Optimization");
-
-    // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
-    // ???: most likely not 1.0
-    Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
-    auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints,
-        max_segment_length);
-    Y_opt = opt_out.first;
-    objective_value = opt_out.second;
-
-    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
-  }
-
-  // Set stateful member variables for next iteration of CDCPD
-  last_lower_bounding_box = Y_opt.rowwise().minCoeff();
-  last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
-
-  // Gather information for forming output struct.
-  PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
-  PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);
-  PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
-  auto status = OutputStatus::Success;
-  if (total_frames_ > 10 and objective_value > objective_value_threshold_) {
-    ROS_WARN_STREAM_NAMED(LOGNAME + ".objective", "Objective too high!");
-    status = OutputStatus::ObjectiveTooHigh;
-  }
-
-  return CDCPD::Output{points, cloud_segmented, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
+  return output;
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
@@ -836,21 +791,11 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
                                  "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
-  // STOP HERE
-
-  /// VoxelGrid filter downsampling
-  PointCloud::Ptr cloud_downsampled(new PointCloud);
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
   // TODO: check whether the change is needed here for unit conversion
   Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
+  PointCloud::Ptr cloud_downsampled = downsamplePointCloud(cloud);
 
-  pcl::VoxelGrid<pcl::PointXYZ> sor;
-  ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: " << cloud->width);
-  sor.setInputCloud(cloud);
-  sor.setLeafSize(0.02f, 0.02f, 0.02f);
-  sor.filter(*cloud_downsampled);
-  ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-                                 "Points in filtered point cloud: " << cloud_downsampled->width);
   if (cloud_downsampled->width == 0) {
     ROS_ERROR_STREAM_NAMED(LOGNAME, "No points in the filtered point cloud");
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
@@ -876,23 +821,48 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     pred_fixed_points.push_back(pt);
   }
 
+  Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
+    pred_fixed_points, q_dot, q_config, pred_choice);
+  output.original_cloud = entire_cloud;
+  output.masked_point_cloud = cloud;
+  output.downsampled_cloud = cloud_downsampled;
+
+  return output;
+}
+
+CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
+      Eigen::Matrix3Xf const& X, ObstacleConstraints obstacle_constraints,
+      Eigen::RowVectorXd const max_segment_length,
+      std::vector<FixedPoint> pred_fixed_points,
+      const smmap::AllGrippersSinglePoseDelta &q_dot,  // TODO: this should be one data structure
+      const smmap::AllGrippersSinglePose &q_config, int pred_choice)
+{
+  // CPD and prediction using dynamics model.
   Matrix3Xf TY, TY_pred;
+  {
+    Stopwatch stopwatch_cpd("CPD");
   TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
   TY = cpd(X, Y, TY_pred, Y_emit_prior);
-
-  // Next step: optimization.
+  }
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
+
+  // Next step: optimization.
+  Matrix3Xf Y_opt;
+  double objective_value;
+  {
+    Stopwatch stopwatch_optimization("Optimization");
 
   // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
   // ???: most likely not 1.0
   Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
-  auto const opt_out =
-      opt(TY, template_edges, pred_fixed_points, obstacle_constraints, max_segment_length);
-  Matrix3Xf Y_opt = opt_out.first;
-  double objective_value = opt_out.second;
+    auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints,
+        max_segment_length);
+    Y_opt = opt_out.first;
+    objective_value = opt_out.second;
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
+  }
 
   // NOTE: set stateful member variables for next time
   last_lower_bounding_box = Y_opt.rowwise().minCoeff();
@@ -908,5 +878,26 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     status = OutputStatus::ObjectiveTooHigh;
   }
 
-  return CDCPD::Output{entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, status};
+  Output output;
+  output.cpd_output = cdcpd_cpd;
+  output.cpd_predict = cdcpd_pred;
+  output.gurobi_output = cdcpd_out;
+  output.status = status;
+
+  return output;
+}
+
+// Perform VoxelGrid filter downsampling.
+PointCloud::Ptr CDCPD::downsamplePointCloud(PointCloud::Ptr cloud_in)
+{
+    PointCloud::Ptr cloud_downsampled(new PointCloud);
+    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points", "Points in cloud before leaf: "
+        << cloud_in->width);
+    sor.setInputCloud(cloud_in);
+    sor.setLeafSize(0.02f, 0.02f, 0.02f);
+    sor.filter(*cloud_downsampled);
+    ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
+                                  "Points in filtered point cloud: " << cloud_downsampled->width);
+    return cloud_downsampled;
 }
