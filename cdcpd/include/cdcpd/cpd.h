@@ -63,3 +63,20 @@ public:
 
     MatrixXf calculate_gaussian_kernel() override;
 };
+
+class CPDMultiTemplate : public CPDInterface
+{
+public:
+    CPDMultiTemplate(std::string const log_name_base, double const tolerance, int const max_iterations,
+        double const initial_sigma_scale, double const w, double const alpha, double const beta,
+        double const zeta, double const start_lambda, MatrixXf const m_lle);
+    ~CPDMultiTemplate(){}
+
+    Matrix3Xf operator()(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
+        const Eigen::VectorXf &Y_emit_prior, TrackingMap const& tracking_map) override;
+
+    MatrixXf calculate_gaussian_kernel() override;
+
+protected:
+    MatrixXf calculate_mahalanobis_matrix();
+};
