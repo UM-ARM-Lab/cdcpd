@@ -24,6 +24,9 @@ public:
 
     virtual MatrixXf calculate_gaussian_kernel() = 0;
 
+    MatrixXf calculate_P_matrix(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
+        const Eigen::VectorXf &Y_emit_prior, Matrix3Xf const& TY, double const sigma2);
+
     double initial_sigma2(MatrixXf const& X, MatrixXf const& Y);
 
 protected:

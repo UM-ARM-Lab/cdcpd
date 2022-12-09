@@ -15,6 +15,38 @@ CPDInterface::CPDInterface(std::string const log_name_base, double const toleran
     , m_lle_(m_lle)
 {}
 
+MatrixXf CPDInterface::calculate_P_matrix(const Matrix3Xf &X, const Matrix3Xf &Y,
+    const Matrix3Xf &Y_pred, const Eigen::VectorXf &Y_emit_prior, Matrix3Xf const& TY,
+    double const sigma2)
+{
+    int const N = X.cols();
+    int const M = Y.cols();
+    int const D = Y.rows();
+
+    MatrixXf P(M, N);
+    for (int i = 0; i < M; ++i)
+    {
+        for (int j = 0; j < N; ++j)
+        {
+            P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
+        }
+    }
+
+    float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+    c *= w_ / (1 - w_);
+    c *= static_cast<double>(M) / N;
+
+    P = (-P / (2 * sigma2)).array().exp().matrix();
+    P.array().colwise() *= Y_emit_prior.array();
+
+    RowVectorXf den = P.colwise().sum();
+    den.array() += c;
+
+    P = P.array().rowwise() / den.array();
+
+    return P;
+}
+
 double CPDInterface::initial_sigma2(MatrixXf const& X, MatrixXf const& Y)
 {
     // X: (3, N) matrix, X^t in Algorithm 1
@@ -64,43 +96,18 @@ Matrix3Xf CPD::operator()(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3X
     int iterations = 0;
     double error = tolerance_ + 1;  // loop runs the first time
 
-    std::chrono::time_point<std::chrono::system_clock> start, end;
-    start = std::chrono::system_clock::now();
-
     while (iterations <= max_iterations_ && error > tolerance_)
     {
         double qprev = sigma2;
         // Expectation step
-        int N = X.cols();
-        int M = Y.cols();
-        int D = Y.rows();
+        int const M = Y.cols();
+        int const D = Y.rows();
 
         // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
         // Calculate Eq. (9) (Line 5 in Algorithm 1)
         // NOTE: Eq. (9) misses M in the denominator
 
-        MatrixXf P(M, N);
-        {
-            for (int i = 0; i < M; ++i)
-            {
-                for (int j = 0; j < N; ++j)
-                {
-                    P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
-                }
-            }
-
-            float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-            c *= w_ / (1 - w_);
-            c *= static_cast<double>(M) / N;
-
-            P = (-P / (2 * sigma2)).array().exp().matrix();
-            P.array().colwise() *= Y_emit_prior.array();
-
-            RowVectorXf den = P.colwise().sum();
-            den.array() += c;
-
-            P = P.array().rowwise() / den.array();
-        }
+        MatrixXf const P = calculate_P_matrix(X, Y, Y_pred, Y_emit_prior, TY, sigma2);
 
         // Fast Gaussian Transformation to calculate Pt1, P1, PX
         MatrixXf PX = (P * X.transpose()).transpose();
