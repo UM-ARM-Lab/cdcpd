@@ -26,6 +26,7 @@
 #include <arc_utilities/ros_helpers.hpp>
 #include <opencv2/core.hpp>
 
+#include "cdcpd/cpd.h"
 #include "cdcpd/obs_util.h"
 #include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"
@@ -169,11 +170,6 @@ class CDCPD {
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices, const cv::Mat &depth,
       const cv::Mat &mask, const Eigen::Matrix3f &intrinsics, float kvis);
 
-  // TODO(Dylan): Clean up passing in the tracking_map. This is passing in way too much information.
-  Eigen::Matrix3Xf cpd(const Eigen::Matrix3Xf &X, const Eigen::Matrix3Xf &Y,
-      const Eigen::Matrix3Xf &Y_pred, const Eigen::VectorXf &Y_emit_prior,
-      TrackingMap const& tracking_map);
-
   // TODO(Dylan): Pass in something that differentiates templates and their Gaussians as we want to
   // apply dynamics to the templates distinctly.
   Eigen::Matrix3Xd predict(const Eigen::Matrix3Xd &P,
@@ -190,22 +186,18 @@ class CDCPD {
   Eigen::Matrix3Xf original_template;
   Eigen::Matrix2Xi template_edges;
 
+  std::shared_ptr<CPDInterface> cpd_runner;
+
   // CdcpdParameters params;
   Eigen::Vector3f last_lower_bounding_box;
   Eigen::Vector3f last_upper_bounding_box;
   int lle_neighbors;
   Eigen::MatrixXf m_lle;
   Eigen::MatrixXf L_lle;
-  double tolerance_cpd;
-  double alpha;
-  double beta;
   double w;
-  double initial_sigma_scale;
   float start_lambda;
   double k;
-  int max_iterations;
   float kvis;
-  float zeta;
   float obstacle_cost_weight;
   float fixed_points_weight;
   bool use_recovery = false;

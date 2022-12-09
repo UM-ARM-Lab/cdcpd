@@ -129,37 +129,6 @@ static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat)
   return cloud;
 }
 
-static double initial_sigma2(const MatrixXf &X, const MatrixXf &Y)
-{
-  // X: (3, N) matrix, X^t in Algorithm 1
-  // Y: (3, M) matrix, Y^(t-1) in Algorithm 1
-  // Implement Line 2 of Algorithm 1
-  double total_error = 0.0;
-  assert(X.rows() == Y.rows());
-  for (int i = 0; i < X.cols(); ++i) {
-    for (int j = 0; j < Y.cols(); ++j) {
-      total_error += (X.col(i) - Y.col(j)).squaredNorm();
-    }
-  }
-  return total_error / (X.cols() * Y.cols() * X.rows());
-}
-
-static MatrixXf gaussian_kernel(const MatrixXf &Y, double beta)
-{
-  // Y: (3, M) matrix, corresponding to Y^(t-1) in Eq. 13.5 (Y^t in VI.A)
-  // beta: beta in Eq. 13.5 (between 13 and 14)
-  MatrixXf diff(Y.cols(), Y.cols());
-  diff.setZero();
-  for (int i = 0; i < Y.cols(); ++i) {
-    for (int j = 0; j < Y.cols(); ++j) {
-      diff(i, j) = (Y.col(i) - Y.col(j)).squaredNorm();
-    }
-  }
-  // ???: beta should be beta^2
-  MatrixXf kernel = (-diff / (2 * beta * beta)).array().exp();
-  return kernel;
-}
-
 MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree,
     int lle_neighbors, double reg)
 {
@@ -374,173 +343,6 @@ static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
   return {unfiltered_cloud, filtered_cloud};
 }
 
-Matrix3Xf CDCPD::cpd(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-                     const Eigen::VectorXf &Y_emit_prior, TrackingMap const& tracking_map)
-{
-  // downsampled_cloud: PointXYZ pointer to downsampled point clouds
-  // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
-  // depth: CV_16U depth image
-  // mask: CV_8U mask for segmentation label
-  // Y_emit_prior: vector with a probability per tracked point
-
-  /// CPD step
-  std::string const logname_cpd = LOGNAME + ".cpd";
-
-  // G: (M, M) Guassian kernel matrix
-  MatrixXf G = gaussian_kernel(original_template, beta);  // Y, beta);
-
-  // TY: Y^(t) in Algorithm 1
-  Matrix3Xf TY = Y;
-  double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale;
-
-  int iterations = 0;
-  double error = tolerance_cpd + 1;  // loop runs the first time
-
-  while (iterations <= max_iterations && error > tolerance_cpd) {
-    double qprev = sigma2;
-    // Expectation step
-    int N = X.cols();
-    int M = Y.cols();
-    int D = Y.rows();
-
-    // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
-    // Calculate Eq. (9) (Line 5 in Algorithm 1)
-    // NOTE: Eq. (9) misses M in the denominator
-
-    MatrixXf P(M, N);
-    MatrixXf d_M_full(M, N);
-    {
-      for (int i = 0; i < M; ++i) {
-        for (int j = 0; j < N; ++j) {
-          P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
-        }
-      }
-
-      float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
-      c *= w / (1 - w);
-      c *= static_cast<double>(M) / N;
-
-      P = (-P / (2 * sigma2)).array().exp().matrix();
-      P.array().colwise() *= Y_emit_prior.array();
-
-      RowVectorXf den = P.colwise().sum();
-      den.array() += c;
-
-      P = P.array().rowwise() / den.array();
-
-      // TODO: Implement Mahalanobis distance metric here.
-
-      // Get the Mahalanobis distance of each point to each Gaussian
-      double const sigma2_inverse = 1.0 / sigma2;
-      Eigen::MatrixXf covariance_inverse = Eigen::MatrixXf(3, 3);
-      covariance_inverse << sigma2_inverse,            0.0,            0.0,
-                                       0.0, sigma2_inverse,            0.0,
-                                       0.0,            0.0, sigma2_inverse;
-      for (int m = 0; m < M; ++m)
-      {
-        auto const& y_m = TY.col(m);
-        for (int i = 0; i < N; ++i)
-        {
-          auto const& x_i = X.col(i);
-          d_M_full(m, i) = mahalanobis_distance(y_m, covariance_inverse, x_i);
-        }
-      }
-
-      // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
-      // NOTE: Use the connectivity graph added to the deformable object tracking now.
-      int const num_templates = 2;  // Prototyping with 2 templates while I figure out how to pass
-      // in a dynamic amount of templates
-      Eigen::MatrixXi pointwise_closest_gaussians = Eigen::MatrixXi::Zero(num_templates, N);
-      for (int pt_idx = 0; pt_idx < N; ++pt_idx)
-      {
-        float val_min = 1e15;
-        int idx_min = -1;
-        auto const& dists = d_M_full.col(pt_idx);
-
-        for (int m_idx = 0; m_idx < M; ++m_idx)
-        {
-          float const distance = dists(m_idx);
-          if (distance < val_min)
-          {
-            // Update the minimum distance Gaussian
-            val_min = distance;
-            idx_min = m_idx;
-          }
-        }
-        // pointwise_closest_gaussians(0, pt_idx) = idx_min;
-        // pointwise_closest_gaussians(1, pt_idx) = idx_second_min;
-      }
-
-      // Find the closest Gaussian to the point that is a neighbor to the closest Gaussian in the
-      // connectivity graph.
-      // for (int pt_idx = 0; pt_idx < N; ++pt_idx)
-      // {
-      //   // int const gaussian_idx = pointwise_closest_gaussians(0, pt_idx);
-
-      // }
-
-
-      // Compute the projection of each point onto the line formed between the two closest Gaussians
-      // for each template.
-
-
-      // Form the synthetic Gaussian based on the projection of the point onto the line formed by
-      // the two closest Gaussians.
-
-      // Compute the sum of distances.
-
-      // Find the association prior for each point and Gaussian pair based on the point's distance
-      // to this template compared to the sum of distances.
-      // e^(-this_distance / distance_sum)
-
-    }
-
-    // Fast Gaussian Transformation to calculate Pt1, P1, PX
-    MatrixXf PX = (P * X.transpose()).transpose();
-
-    // // Maximization step
-    VectorXf Pt1 = P.colwise().sum();
-    VectorXf P1 = P.rowwise().sum();
-    float Np = P1.sum();
-
-    // NOTE: lambda means gamma here
-    // Corresponding to Eq. (18) in the paper
-    auto const lambda = start_lambda;
-    MatrixXf p1d = P1.asDiagonal();
-
-    auto const current_zeta = ROSHelpers::GetParamDebugLog<float>(ph, "zeta", 10.0);
-    MatrixXf A = (P1.asDiagonal() * G) + alpha * sigma2 * MatrixXf::Identity(M, M)
-      + sigma2 * lambda * (m_lle * G) + current_zeta * G;
-
-    MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle) * Y.transpose()
-      + zeta * (Y_pred.transpose() - Y.transpose());
-
-    MatrixXf W = (A).householderQr().solve(B);
-
-    TY = Y + (G * W).transpose();
-
-    // Corresponding to Eq. (19) in the paper
-    VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
-    double xPx = Pt1.dot(xPxtemp);
-    VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
-    double yPy = P1.dot(yPytemp);
-    double trPXY = (TY.array() * PX.array()).sum();
-    sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
-
-    if (sigma2 <= 0) {
-      sigma2 = tolerance_cpd / 10;
-    }
-
-    error = std::abs(sigma2 - qprev);
-    iterations++;
-  }
-
-  ROS_DEBUG_STREAM_NAMED(logname_cpd, "cpd error: " << error << " itr: " << iterations);
-  ROS_DEBUG_STREAM_NAMED(logname_cpd, "cpd std dev: " << std::pow(sigma2, 0.5));
-
-  return TY;
-}
-
 Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseDelta &q_dot,
                          const smmap::AllGrippersSinglePose &q_config, const int pred_choice)
 {
@@ -581,16 +383,10 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
       last_upper_bounding_box(original_template.rowwise().maxCoeff()),       // TODO make configurable?
       lle_neighbors(8),                                                      // TODO make configurable?
       m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)),  // TODO make configurable?
-      tolerance_cpd(1e-4),                                                       // TODO make configurable?
-      alpha(alpha),                                                          // TODO make configurable?
-      beta(beta),                                                            // TODO make configurable?
       w(0.1),                                                                // TODO make configurable?
-      initial_sigma_scale(1.0 / 8),                                          // TODO make configurable?
       start_lambda(lambda),
       k(k),
-      max_iterations(100),  // TODO make configurable?
       kvis(1e3),
-      zeta(zeta),
       obstacle_cost_weight(obstacle_cost_weight),
       fixed_points_weight(fixed_points_weight),
       use_recovery(use_recovery),
@@ -604,6 +400,18 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
   kdtree.setInputCloud(template_cloud);
   // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
   L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+
+  // TODO(Dylan): Make these parameters configurable via ROS params?
+  double const tolerance_cpd = 1e-4;
+  double const initial_sigma_scale = 1.0 / 8.0;
+  int const max_cpd_iterations = 100;
+
+  // TODO(Dylan): Make choice of CPD algorithm here based on ROS params or using a CDCPD builder.
+  auto cpd_runner_choice = std::make_shared<CPD>(LOGNAME, tolerance_cpd, max_cpd_iterations,
+      initial_sigma_scale, w, alpha, beta, zeta, start_lambda, m_lle);
+
+  // Upcast the cpd_runner_choice to the CPDInterface that we'll interact with to run CPD.
+  cpd_runner = cpd_runner_choice;
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
@@ -824,7 +632,7 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   {
     Stopwatch stopwatch_cpd("CPD");
     TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
-    TY = cpd(X, Y, TY_pred, Y_emit_prior, tracking_map);
+    TY = (*cpd_runner)(X, Y, TY_pred, Y_emit_prior, tracking_map);
   }
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);

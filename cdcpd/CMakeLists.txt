@@ -63,6 +63,7 @@ catkin_package(
 add_library(cdcpd SHARED
         src/deformable_object_configuration.cpp
         src/cdcpd.cpp
+        src/cpd.cpp
         src/optimizer.cpp
         src/obs_util.cpp
         src/past_template_matcher.cpp
