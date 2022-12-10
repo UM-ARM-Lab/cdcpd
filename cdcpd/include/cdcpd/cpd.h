@@ -100,9 +100,11 @@ protected:
         TrackingMap const& tracking_map, double const sigma2);
 
     // Computes the Mahalanobis distance of a point from the given Gaussian.
-    float mahalanobis_distance(Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& gaussian_centroid,
-        Eigen::Matrix3Xf const& covariance_inverse,
-        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt);
+    // NOTE: Using Eigen::Ref means that this function will accept either Eigen::Block or
+    // Eigen::Matrix types.
+    float mahalanobis_distance(const Eigen::Ref<const VectorXf>& gaussian_centroid,
+        const Eigen::Ref<const MatrixXf>& covariance_inverse,
+        const Eigen::Ref<const VectorXf>& pt);
 
     // Finds the closest Gaussians (returns the index) to the given points for each template.
     std::shared_ptr<MatrixXi> find_pointwise_closest_gaussians(MatrixXf const& d_M,
@@ -126,5 +128,11 @@ protected:
 
     std::shared_ptr<MatrixXf> calculate_mahalanobis_matrix(Matrix3Xf const& X, Matrix3Xf const& TY,
         double const sigma2);
+
+    // Calculates the distance of all masked segmentation points (X) to each template.
+    std::shared_ptr<MatrixXf> calculate_point_to_template_distance(Matrix3Xf const& X,
+        SyntheticGaussianCentroidsVector const& synthetic_centroids, double const sigma2);
+
+    Eigen::MatrixXf get_covariance_inverse(float const sigma2);
 
 };

@@ -290,9 +290,12 @@ MatrixXf CPDMultiTemplate::calculate_association_prior(const Matrix3Xf &X, const
     // Calculate the Mahalanobis distance between each point and the associated synthetic Gaussian
     // for each template.
     // Return type should be a matrix with shape (num_templates, points)
+    std::shared_ptr<MatrixXf> point_to_template_dists =
+        calculate_point_to_template_distance(X, synthetic_gaussians, sigma2);
 
     // Compute the pointwise sum of synthetic Gaussian distances across all templates.
     // Simple eigen colwise sum.
+    Eigen::RowVectorXf const pointwise_template_dists = point_to_template_dists->colwise().sum();
 
     // Association prior is just the distance of the point to a specific template divided by the
     // distance to all templates.
@@ -304,9 +307,9 @@ MatrixXf CPDMultiTemplate::calculate_association_prior(const Matrix3Xf &X, const
 }
 
 float CPDMultiTemplate::mahalanobis_distance(
-    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& gaussian_centroid,
-    Eigen::Matrix3Xf const& covariance_inverse,
-    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt)
+    const Eigen::Ref<const VectorXf>& gaussian_centroid,
+    const Eigen::Ref<const MatrixXf>& covariance_inverse,
+    const Eigen::Ref<const VectorXf>& pt)
 {
     auto const diff = pt - gaussian_centroid;
     // Using sum here as a means to convert 1x1 Eigen matrix to a double.
@@ -489,11 +492,7 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(Matrix3
     MatrixXf& d_M = *d_M_ptr;
 
     // Get the Mahalanobis distance of each point to each Gaussian
-    double const sigma2_inverse = 1.0 / sigma2;
-    Eigen::MatrixXf covariance_inverse = Eigen::MatrixXf(3, 3);
-    covariance_inverse << sigma2_inverse,            0.0,            0.0,
-                                    0.0, sigma2_inverse,            0.0,
-                                    0.0,            0.0, sigma2_inverse;
+    Eigen::MatrixXf covariance_inverse = get_covariance_inverse(sigma2);
     for (int m = 0; m < M_; ++m)
     {
         auto const& y_m = TY.col(m);
@@ -505,4 +504,35 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(Matrix3
     }
 
     return d_M_ptr;
+}
+
+std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_point_to_template_distance(Matrix3Xf const& X,
+    SyntheticGaussianCentroidsVector const& synthetic_centroids, double const sigma2)
+{
+    int const num_templates = synthetic_centroids.size();
+    auto pt_to_template_dists_ptr = std::make_shared<MatrixXf>(MatrixXf::Zero(num_templates, N_));
+    MatrixXf& pt_to_template_dists = *pt_to_template_dists_ptr;
+    MatrixXf cov_inv = get_covariance_inverse(sigma2);
+
+    for (int template_idx = 0; template_idx < num_templates; ++template_idx)
+    {
+        MatrixXf const& synthetic_centroids_this_template = *synthetic_centroids.at(template_idx);
+        for (int pt_idx = 0; pt_idx < N_; ++pt_idx)
+        {
+            auto const& centroid = synthetic_centroids_this_template.col(pt_idx);
+            auto const& pt = X.col(pt_idx);
+            pt_to_template_dists(template_idx, pt_idx) =
+                mahalanobis_distance(centroid, cov_inv, pt);
+        }
+    }
+}
+
+Eigen::MatrixXf CPDMultiTemplate::get_covariance_inverse(float const sigma2)
+{
+    float const sigma2_inverse = 1.0 / sigma2;
+    Eigen::MatrixXf covariance_inverse = Eigen::MatrixXf(3, 3);
+    covariance_inverse << sigma2_inverse,            0.0,            0.0,
+                                    0.0, sigma2_inverse,            0.0,
+                                    0.0,            0.0, sigma2_inverse;
+    return covariance_inverse;
 }
