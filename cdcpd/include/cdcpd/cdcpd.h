@@ -167,6 +167,10 @@ class CDCPD {
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
 
+  Eigen::Vector3f get_last_lower_bounding_box() { return last_lower_bounding_box_; }
+
+  Eigen::Vector3f get_last_upper_bounding_box() { return last_upper_bounding_box_; }
+
   Eigen::VectorXf visibility_prior(const Eigen::Matrix3Xf &vertices, const cv::Mat &depth,
       const cv::Mat &mask, const Eigen::Matrix3f &intrinsics, float kvis);
 
@@ -176,38 +180,37 @@ class CDCPD {
       const smmap::AllGrippersSinglePoseDelta &q_dot,
       const smmap::AllGrippersSinglePose &q_config, int pred_choice);
 
-  ros::NodeHandle nh;
-  ros::NodeHandle ph;
-
-  std::unique_ptr<smmap::ConstraintJacobianModel> constraint_jacobian_model;
-  std::unique_ptr<smmap::DiminishingRigidityModel> diminishing_rigidity_model;
-
-  // PastTemplateMatcher template_matcher;
-  Eigen::Matrix3Xf original_template;
-  Eigen::Matrix2Xi template_edges;
-
-  std::shared_ptr<CPDInterface> cpd_runner;
-
-  // CdcpdParameters params;
-  Eigen::Vector3f last_lower_bounding_box;
-  Eigen::Vector3f last_upper_bounding_box;
-  int lle_neighbors;
-  Eigen::MatrixXf m_lle;
-  Eigen::MatrixXf L_lle;
-  double w;
-  float start_lambda;
-  double k;
-  float kvis;
-  float obstacle_cost_weight;
-  float fixed_points_weight;
-  bool use_recovery = false;
-  Eigen::MatrixXi gripper_idx;
-  std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr;
-  std::vector<bool> last_grasp_status;
-  float objective_value_threshold_;
-  int total_frames_ = 0;
-
 protected:
+    ros::NodeHandle nh_;
+    ros::NodeHandle ph_;
+
+    std::unique_ptr<smmap::ConstraintJacobianModel> constraint_jacobian_model_;
+    std::unique_ptr<smmap::DiminishingRigidityModel> diminishing_rigidity_model_;
+
+    // PastTemplateMatcher template_matcher;
+    Eigen::Matrix3Xf original_template_;
+    Eigen::Matrix2Xi template_edges_;
+
+    std::shared_ptr<CPDInterface> cpd_runner_;
+
+    // CdcpdParameters params;
+    Eigen::Vector3f last_lower_bounding_box_;
+    Eigen::Vector3f last_upper_bounding_box_;
+    int lle_neighbors_;
+    Eigen::MatrixXf m_lle_;
+    Eigen::MatrixXf L_lle_;
+    double w_;
+    float start_lambda_;
+    double k_;
+    float kvis_;
+    float obstacle_cost_weight_;
+    float fixed_points_weight_;
+    bool use_recovery_ = false;
+    Eigen::MatrixXi gripper_idx_;
+    std::shared_ptr<const sdf_tools::SignedDistanceField> sdf_ptr_;
+    std::vector<bool> last_grasp_status_;
+    float objective_value_threshold_;
+    int total_frames_ = 0;
 
     // Perform VoxelGrid filter downsampling.
     PointCloud::Ptr downsamplePointCloud(PointCloud::Ptr cloud_in);

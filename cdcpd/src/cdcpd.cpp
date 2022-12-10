@@ -341,9 +341,9 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseD
     world.object_configuration_ = P;
     world.all_grippers_single_pose_ = q_config;
     if (pred_choice == 1) {
-      return constraint_jacobian_model->getObjectDelta(world, q_dot) + P;
+      return constraint_jacobian_model_->getObjectDelta(world, q_dot) + P;
     } else {
-      return diminishing_rigidity_model->getObjectDelta(world, q_dot) + P;
+      return diminishing_rigidity_model_->getObjectDelta(world, q_dot) + P;
     }
   }
 }
@@ -363,31 +363,31 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
     const bool use_recovery, const double alpha, const double beta, const double lambda,
     const double k, const float zeta, const float obstacle_cost_weight,
     const float fixed_points_weight)
-    : nh(nh),
-      ph(ph),
-      original_template(template_cloud->getMatrixXfMap().topRows(3)),
-      template_edges(_template_edges),
-      last_lower_bounding_box(original_template.rowwise().minCoeff()),       // TODO make configurable?
-      last_upper_bounding_box(original_template.rowwise().maxCoeff()),       // TODO make configurable?
-      lle_neighbors(8),                                                      // TODO make configurable?
-      m_lle(locally_linear_embedding(template_cloud, lle_neighbors, 1e-3)),  // TODO make configurable?
-      w(0.1),                                                                // TODO make configurable?
-      start_lambda(lambda),
-      k(k),
-      kvis(1e3),
-      obstacle_cost_weight(obstacle_cost_weight),
-      fixed_points_weight(fixed_points_weight),
-      use_recovery(use_recovery),
-      last_grasp_status({false, false}),
+    : nh_(nh),
+      ph_(ph),
+      original_template_(template_cloud->getMatrixXfMap().topRows(3)),
+      template_edges_(_template_edges),
+      last_lower_bounding_box_(original_template_.rowwise().minCoeff()),       // TODO make configurable?
+      last_upper_bounding_box_(original_template_.rowwise().maxCoeff()),       // TODO make configurable?
+      lle_neighbors_(8),                                                      // TODO make configurable?
+      m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make configurable?
+      w_(0.1),                                                                // TODO make configurable?
+      start_lambda_(lambda),
+      k_(k),
+      kvis_(1e3),
+      obstacle_cost_weight_(obstacle_cost_weight),
+      fixed_points_weight_(fixed_points_weight),
+      use_recovery_(use_recovery),
+      last_grasp_status_({false, false}),
       objective_value_threshold_(objective_value_threshold)
 {
-  last_lower_bounding_box = last_lower_bounding_box - bounding_box_extend;
-  last_upper_bounding_box = last_upper_bounding_box + bounding_box_extend;
+  last_lower_bounding_box_ = last_lower_bounding_box_ - bounding_box_extend;
+  last_upper_bounding_box_ = last_upper_bounding_box_ + bounding_box_extend;
 
   pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
   kdtree.setInputCloud(template_cloud);
   // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-  L_lle = barycenter_kneighbors_graph(kdtree, lle_neighbors, 0.001);
+  L_lle_ = barycenter_kneighbors_graph(kdtree, lle_neighbors_, 0.001);
 
   // TODO(Dylan): Make these parameters configurable via ROS params?
   double const tolerance_cpd = 1e-4;
@@ -396,10 +396,10 @@ CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr templa
 
   // TODO(Dylan): Make choice of CPD algorithm here based on ROS params or using a CDCPD builder.
   auto cpd_runner_choice = std::make_shared<CPD>(LOGNAME, tolerance_cpd, max_cpd_iterations,
-      initial_sigma_scale, w, alpha, beta, zeta, start_lambda, m_lle);
+      initial_sigma_scale, w_, alpha, beta, zeta, start_lambda_, m_lle_);
 
   // Upcast the cpd_runner_choice to the CPDInterface that we'll interact with to run CPD.
-  cpd_runner = cpd_runner_choice;
+  cpd_runner_ = cpd_runner_choice;
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
@@ -413,14 +413,14 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     if (j < q_config.size() and j < q_dot.size()) {
       idx_map.push_back(j);
     } else {
-      ROS_ERROR_STREAM_NAMED(LOGNAME, "is_grasped index " << j << " given but only " << q_config.size()
-                                                          << " gripper configs and " << q_dot.size()
-                                                          << " gripper velocities given.");
+      ROS_ERROR_STREAM_NAMED(LOGNAME, "is_grasped index " << j << " given but only "
+          << q_config.size() << " gripper configs and " << q_dot.size()
+          << " gripper velocities given.");
     }
   }
 
   // associate each gripper with the closest point in the current estimate
-  if (is_grasped != last_grasp_status) {
+  if (is_grasped != last_grasp_status_) {
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "grasp status changed, recomputing correspondences");
 
     // get the previous tracking result
@@ -438,7 +438,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
       ROS_DEBUG_STREAM_NAMED(LOGNAME, "closest point index: " << minCol);
     }
 
-    gripper_idx = grippers;
+    gripper_idx_ = grippers;
 
     {
       std::vector<smmap::GripperData> grippers_data;
@@ -463,7 +463,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
                                     obstacle_constraints, max_segment_length, q_dot, q_config,
                                     pred_choice);
 
-  last_grasp_status = is_grasped;
+  last_grasp_status_ = is_grasped;
 
   return cdcpd_out;
 }
@@ -475,7 +475,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const Eigen::MatrixXi &gripper_idx, const int pred_choice)
 {
-  this->gripper_idx = gripper_idx;
+  this->gripper_idx_ = gripper_idx;
   auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, tracking_map,
                                     obstacle_constraints,
                                     max_segment_length, q_dot, q_config, pred_choice);
@@ -491,7 +491,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
 {
   Stopwatch stopwatch_cdcpd("CDCPD");
   // FIXME: this has a lot of duplicate code
-  this->gripper_idx = gripper_idx;
+  this->gripper_idx_ = gripper_idx;
 
   // template_cloud: point clouds corresponding to Y^t (Y in IV.A) in the paper
   // template_edges: (2, K) matrix corresponding to E in the paper
@@ -501,8 +501,8 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
   PointCloud::Ptr cloud_downsampled(new PointCloud);
   {
     Stopwatch stopwatch_segmentation("Segmentation");
-    auto segmenter = std::make_unique<SegmenterHSV>(ph, last_lower_bounding_box,
-        last_upper_bounding_box);
+    auto segmenter = std::make_unique<SegmenterHSV>(ph_, last_lower_bounding_box_,
+        last_upper_bounding_box_);
     segmenter->segment(points);
 
     // Drop color info from the point cloud.
@@ -568,16 +568,16 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
   // entire_cloud: pointer to the entire point cloud
   // cloud: pointer to the point clouds selected
-  auto [entire_cloud, cloud] =
-      point_clouds_from_images(depth, rgb, mask, intrinsics_eigen, last_lower_bounding_box - bounding_box_extend,
-                               last_upper_bounding_box + bounding_box_extend);
+  auto [entire_cloud, cloud] = point_clouds_from_images(depth, rgb, mask, intrinsics_eigen,
+      last_lower_bounding_box_ - bounding_box_extend,
+      last_upper_bounding_box_ + bounding_box_extend);
   ROS_INFO_STREAM_THROTTLE_NAMED(1, LOGNAME + ".points",
-                                 "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
+      "Points in filtered: (" << cloud->height << " x " << cloud->width << ")");
 
   PointCloud::ConstPtr const template_cloud = tracking_map.form_vertices_cloud();
   const Matrix3Xf Y = template_cloud->getMatrixXfMap().topRows(3);
   // TODO: check whether the change is needed here for unit conversion
-  Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis);
+  Eigen::VectorXf Y_emit_prior = visibility_prior(Y, depth, mask, intrinsics_eigen, kvis_);
   PointCloud::Ptr cloud_downsampled = downsamplePointCloud(cloud);
 
   if (cloud_downsampled->width == 0) {
@@ -586,15 +586,15 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
 
-    return CDCPD::Output{
-        entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out, OutputStatus::NoPointInFilteredCloud};
+    return CDCPD::Output{entire_cloud, cloud, cloud_downsampled, cdcpd_cpd, cdcpd_pred, cdcpd_out,
+      OutputStatus::NoPointInFilteredCloud};
   }
   Matrix3Xf X = cloud_downsampled->getMatrixXfMap().topRows(3);
   // Add points to X according to the previous template
 
   const Matrix3Xf &entire = entire_cloud->getMatrixXfMap().topRows(3);
 
-  std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx, q_config);
+  std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx_, q_config);
 
   Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
     pred_fixed_points, tracking_map, q_dot, q_config, pred_choice);
@@ -620,7 +620,7 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   {
     Stopwatch stopwatch_cpd("CPD");
     TY_pred = predict(Y.cast<double>(), q_dot, q_config, pred_choice).cast<float>();
-    TY = (*cpd_runner)(X, Y, TY_pred, Y_emit_prior, tracking_map);
+    TY = (*cpd_runner_)(X, Y, TY_pred, Y_emit_prior, tracking_map);
   }
 
   ROS_DEBUG_STREAM_NAMED(LOGNAME, "fixed points" << pred_fixed_points);
@@ -633,8 +633,8 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
 
     // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
     // ???: most likely not 1.0
-    Optimizer opt(original_template, Y, start_lambda, obstacle_cost_weight, fixed_points_weight);
-    auto const opt_out = opt(TY, template_edges, pred_fixed_points, obstacle_constraints,
+    Optimizer opt(original_template_, Y, start_lambda_, obstacle_cost_weight_, fixed_points_weight_);
+    auto const opt_out = opt(TY, template_edges_, pred_fixed_points, obstacle_constraints,
         max_segment_length);
     Y_opt = opt_out.first;
     objective_value = opt_out.second;
@@ -643,8 +643,8 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   }
 
   // NOTE: set stateful member variables for next time
-  last_lower_bounding_box = Y_opt.rowwise().minCoeff();
-  last_upper_bounding_box = Y_opt.rowwise().maxCoeff();
+  last_lower_bounding_box_ = Y_opt.rowwise().minCoeff();
+  last_upper_bounding_box_ = Y_opt.rowwise().maxCoeff();
 
   PointCloud::Ptr cdcpd_out = mat_to_cloud(Y_opt);
   PointCloud::Ptr cdcpd_cpd = mat_to_cloud(TY);

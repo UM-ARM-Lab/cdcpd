@@ -510,10 +510,11 @@ void CDCPD_Moveit_Node::publish_bbox() const
     bbox_msg.header.stamp = ros::Time::now();
     bbox_msg.header.frame_id = node_params.camera_frame;
 
-    auto const bbox_size = extent_to_env_size(cdcpd->last_lower_bounding_box,
-        cdcpd->last_upper_bounding_box);
-    auto const bbox_center = extent_to_center(cdcpd->last_lower_bounding_box,
-        cdcpd->last_upper_bounding_box);
+    Eigen::Vector3f const bbox_lower = cdcpd->get_last_lower_bounding_box();
+    Eigen::Vector3f const bbox_upper = cdcpd->get_last_upper_bounding_box();
+
+    auto const bbox_size = extent_to_env_size(bbox_lower, bbox_upper);
+    auto const bbox_center = extent_to_center(bbox_lower, bbox_upper);
     bbox_msg.pose.position.x = bbox_center.x();
     bbox_msg.pose.position.y = bbox_center.y();
     bbox_msg.pose.position.z = bbox_center.z();
