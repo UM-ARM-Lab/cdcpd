@@ -9,6 +9,10 @@ using Eigen::Matrix3Xf;
 using Eigen::MatrixXf;
 using Eigen::RowVectorXf;
 using Eigen::VectorXf;
+using Eigen::MatrixXi;
+using Eigen::MatrixXd;
+
+typedef std::vector<std::shared_ptr<MatrixXd> > SyntheticGaussianCentroidsVector;
 
 class CPDInterface
 {
@@ -73,6 +77,10 @@ public:
     MatrixXf calculate_gaussian_kernel() override;
 };
 
+// Performs an augmented version of CPD, designed for multi-template tracking.
+// NOTE: There's a lot of functions that return pointers to matrices that can get confusing.
+//       the reason for this is so that we create the matrices on the heap instead of the stack
+//       which avoids expensive matrix copies every time we call a function that creates a matrix.
 class CPDMultiTemplate : public CPDInterface
 {
 public:
@@ -87,5 +95,29 @@ public:
     MatrixXf calculate_gaussian_kernel() override;
 
 protected:
-    MatrixXf calculate_mahalanobis_matrix();
+    // Computes the pointwise association prior
+    MatrixXf calculate_association_prior(const Matrix3Xf &X, const Matrix3Xf &TY,
+        TrackingMap const& tracking_map, double const sigma2);
+
+    // Computes the Mahalanobis distance of a point from the given Gaussian.
+    float mahalanobis_distance(Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& gaussian_centroid,
+        Eigen::Matrix3Xf const& covariance_inverse,
+        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt);
+
+    // Finds the closest Gaussians (returns the index) to the given points for each template.
+    std::shared_ptr<MatrixXi> find_pointwise_closest_gaussians(MatrixXf const& d_M,
+        TrackingMap const& tracking_map);
+
+    // Finds nearest neighboring Gaussian to points given the closest Gaussians for each template.
+    std::shared_ptr<MatrixXi> find_pointwise_second_closest_gaussians(MatrixXf const& d_M,
+        TrackingMap const& tracking_map, MatrixXi const& closest_gaussians);
+
+    Eigen::VectorXd project_point_onto_line();
+
+    // Returns vector of length num_templates of pointers to matrices of shape (D_, num_points)
+    SyntheticGaussianCentroidsVector find_synthetic_gaussian_centroids();
+
+    std::shared_ptr<MatrixXf> calculate_mahalanobis_matrix(Matrix3Xf const& X, Matrix3Xf const& TY,
+        double const sigma2);
+
 };

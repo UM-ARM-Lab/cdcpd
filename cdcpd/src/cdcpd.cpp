@@ -107,18 +107,6 @@ class CompHSV : public pcl::ComparisonBase<PointHSV>
   CompHSV() : component_offset_(), compare_val_() {}  // not allowed
 };
 
-// Computes the Mahalanobis distance of a point from the given Gaussian.
-float mahalanobis_distance(Eigen::Block<Eigen::Matrix3Xf, 3, 1, true> const& gaussian_centroid,
-    Eigen::Matrix3Xf const& covariance_inverse,
-    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt)
-{
-    Eigen::Matrix3Xf const diff = pt - gaussian_centroid;
-    // Using sum here as a means to convert 1x1 Eigen matrix to a double.
-    float const d_M = (diff.transpose() * covariance_inverse * diff).sum();
-
-    return d_M;
-}
-
 static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat)
 {
   PointCloud::Ptr cloud(new PointCloud);

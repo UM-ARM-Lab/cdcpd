@@ -203,19 +203,23 @@ Matrix3Xf CPDMultiTemplate::operator()(const Matrix3Xf &X, const Matrix3Xf &Y,
     int iterations = 0;
     double error = tolerance_ + 1;  // loop runs the first time
 
+    N_ = X.cols();
+    M_ = Y.cols();
+    D_ = Y.rows();
+
     while (iterations <= max_iterations_ && error > tolerance_) {
         double qprev = sigma2;
         // Expectation step
-        int N = X.cols();
-        int M = Y.cols();
-        int D = Y.rows();
 
         // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
         // Calculate Eq. (9) (Line 5 in Algorithm 1)
         // NOTE: Eq. (9) misses M in the denominator
 
-        MatrixXf P = calculate_P_matrix();
-        MatrixXf d_M_full(M, N);
+        MatrixXf P_naive = calculate_P_matrix(X, Y, Y_pred, Y_emit_prior, TY, sigma2);
+        MatrixXf association_prior = calculate_association_prior(X, TY, tracking_map, sigma2);
+
+        // Multiply P by the association prior for each point.
+        MatrixXf P = P_naive * association_prior;
 
         // Fast Gaussian Transformation to calculate Pt1, P1, PX
         MatrixXf PX = (P * X.transpose()).transpose();
@@ -230,7 +234,7 @@ Matrix3Xf CPDMultiTemplate::operator()(const Matrix3Xf &X, const Matrix3Xf &Y,
         auto const lambda = start_lambda_;
         MatrixXf p1d = P1.asDiagonal();
 
-        MatrixXf A = (P1.asDiagonal() * G) + alpha_ * sigma2 * MatrixXf::Identity(M, M)
+        MatrixXf A = (P1.asDiagonal() * G) + alpha_ * sigma2 * MatrixXf::Identity(M_, M_)
         + sigma2 * lambda * (m_lle_ * G) + zeta_ * G;
 
         MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle_) * Y.transpose()
@@ -246,7 +250,7 @@ Matrix3Xf CPDMultiTemplate::operator()(const Matrix3Xf &X, const Matrix3Xf &Y,
         VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
         double yPy = P1.dot(yPytemp);
         double trPXY = (TY.array() * PX.array()).sum();
-        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D));
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D_));
 
         if (sigma2 <= 0) {
         sigma2 = tolerance_ / 10;
@@ -267,91 +271,189 @@ MatrixXf CPDMultiTemplate::calculate_gaussian_kernel()
 
 }
 
-MatrixXf CPDMultiTemplate::calculate_mahalanobis_matrix()
+MatrixXf CPDMultiTemplate::calculate_association_prior(const Matrix3Xf &X, const Matrix3Xf &TY,
+    TrackingMap const& tracking_map, double const sigma2)
 {
-// //     // TODO: Implement Mahalanobis distance metric here.
+    std::shared_ptr<MatrixXf> d_M_ptr = calculate_mahalanobis_matrix(X, TY, sigma2);
 
-// //     // Get the Mahalanobis distance of each point to each Gaussian
-// //     double const sigma2_inverse = 1.0 / sigma2;
-// //     Eigen::MatrixXf covariance_inverse = Eigen::MatrixXf(3, 3);
-// //     covariance_inverse << sigma2_inverse,            0.0,            0.0,
-// //                                     0.0, sigma2_inverse,            0.0,
-// //                                     0.0,            0.0, sigma2_inverse;
-// //     for (int m = 0; m < M; ++m)
-// //     {
-// //         auto const& y_m = TY.col(m);
-// //         for (int i = 0; i < N; ++i)
-// //         {
-// //         auto const& x_i = X.col(i);
-// //         d_M_full(m, i) = mahalanobis_distance(y_m, covariance_inverse, x_i);
-// //         }
-// //     }
+    // Find the closest Gaussian to a point (by Mahalanobis distance), then find the neighbor of the
+    // closest Gaussian that has the minimum distance to the point.
+    auto closest_gaussians = find_pointwise_closest_gaussians(*d_M_ptr, tracking_map);
+    auto second_closest_guassians = find_pointwise_second_closest_gaussians(*d_M_ptr, tracking_map, *closest_gaussians);
 
-// //     // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
-// //     // NOTE: Use the connectivity graph added to the deformable object tracking now.
-// //     int const num_templates = 2;  // Prototyping with 2 templates while I figure out how to pass
-// //     // in a dynamic amount of templates
-// //     int const num_gaussians_in_template_0 = 15;
-// //     Eigen::MatrixXi pointwise_closest_gaussians = Eigen::MatrixXi::Zero(num_templates, N);
-// //     for (int pt_idx = 0; pt_idx < N; ++pt_idx)
-// //     {
-// //         float val_min = 1e15;
-// //         int idx_min = -1;
-// //         auto const& dists = d_M_full.col(pt_idx);
+    // From the two closest Gaussians, calculate the synthetic Gaussian for each point for each
+    // template.
+    SyntheticGaussianCentroidsVector synthetic_gaussians = find_synthetic_gaussian_centroids();
 
-// //         // I wonder if I can do the Gaussian-template assignments really stupidly at first where
-// //         // the first 15 Gaussians belong to template 0 and the last 15 belong to template 1?
-// //         // Find the closest Gaussian for template 0.
-// //         for (int m_idx = 0; m_idx < num_gaussians_in_template_0; ++m_idx)
-// //         {
-// //         float const distance = dists(m_idx);
-// //         if (distance < val_min)
-// //         {
-// //             // Update the minimum distance Gaussian
-// //             val_min = distance;
-// //             idx_min = m_idx;
-// //         }
-// //         }
-// //         pointwise_closest_gaussians(0, pt_idx) = idx_min;
+    // Calculate the Mahalanobis distance between each point and the associated synthetic Gaussian
+    // for each template.
+    // Return type should be a matrix with shape (num_templates, points)
 
-// //         // Find the closest Gaussian for template 1.
-// //         val_min = 1e15;
-// //         idx_min = -1;
-// //         for (int m_idx = num_gaussians_in_template_0; m_idx < M; ++m_idx)
-// //         {
-// //         float const distance = dists(m_idx);
-// //         if (distance < val_min)
-// //         {
-// //             // Update the minimum distance Gaussian
-// //             val_min = distance;
-// //             idx_min = m_idx;
-// //         }
-// //         }
-// //         pointwise_closest_gaussians(1, pt_idx) = idx_min;
-// //     }
+    // Compute the pointwise sum of synthetic Gaussian distances across all templates.
+    // Simple eigen colwise sum.
 
-// //     // Find the closest Gaussian to the point that is a neighbor to the closest Gaussian in the
-// //     // connectivity graph.
-// //     // for (int pt_idx = 0; pt_idx < N; ++pt_idx)
-// //     // {
-// //     //   // int const gaussian_idx = pointwise_closest_gaussians(0, pt_idx);
+    // Association prior is just the distance of the point to a specific template divided by the
+    // distance to all templates.
+    // TODO(Dylan): Potentially make this exponential?
 
-// //     // }
+    // Find the association prior for each point and Gaussian pair based on the point's distance
+    // to each template compared to the sum of distances.
+    // e^(-this_distance / distance_sum)
+}
+
+float CPDMultiTemplate::mahalanobis_distance(
+    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& gaussian_centroid,
+    Eigen::Matrix3Xf const& covariance_inverse,
+    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt)
+{
+    auto const diff = pt - gaussian_centroid;
+    // Using sum here as a means to convert 1x1 Eigen matrix to a double.
+    float const d_M = (diff.transpose() * covariance_inverse * diff).sum();
+
+    return d_M;
+}
+
+// TODO(Dylan): Update to be general and use tracking map to iterate through all templates.
+std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(MatrixXf const& d_M, TrackingMap const& tracking_map)
+{
+    // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
+    std::vector<TemplateVertexAssignment> vertex_assignments =
+        tracking_map.get_vertex_assignments();
+    int const num_templates = vertex_assignments.size();
+
+    // Pre-allocate the returned matrix so we don't incur extra overhead of dynamically expanding
+    // the matrices.
+    auto pointwise_closest_gaussians_ptr = std::shared_ptr<MatrixXi>(
+        new MatrixXi(MatrixXi::Zero(num_templates, N_)) );
+    Eigen::MatrixXi& pointwise_closest_gaussians = *pointwise_closest_gaussians_ptr;
+
+    for (int pt_idx = 0; pt_idx < N_; ++pt_idx)
+    {
+        auto const& dists = d_M.col(pt_idx);
+
+        // Though we don't use a reference for this Eigen column block, the values that we assign to
+        // it within the loop are still saved in the original pointwise_closest_gaussians.
+        auto pts_closest_gaussians = pointwise_closest_gaussians.col(pt_idx);
+
+        // Iterate through each template's vertices to find the minimum distance Gaussian for this
+        // template/point combination.
+        int template_idx = 0;
+        for (auto const& assignment : vertex_assignments)
+        {
+            float val_min = 1e15;
+            int idx_min = -1;
+            for (int m_idx = assignment.idx_start; m_idx < assignment.idx_end; ++m_idx)
+            {
+                float const distance = dists(m_idx);
+                if (distance < val_min)
+                {
+                    // Update the minimum distance Gaussian
+                    val_min = distance;
+                    idx_min = m_idx;
+                }
+            }
+            pts_closest_gaussians(template_idx) = idx_min;
+            ++template_idx;
+        }
+    }
+
+    return pointwise_closest_gaussians_ptr;
+}
+
+std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_second_closest_gaussians(
+    MatrixXf const& d_M, TrackingMap const& tracking_map, MatrixXi const& closest_gaussians)
+{
+    // Find the closest Gaussian to the point that is a neighbor to the closest Gaussian in the
+    // connectivity graph.
+    std::vector<int> const template_order = tracking_map.get_def_obj_id_iteration_order();
+    std::vector<std::shared_ptr<ConnectivityGraph> > graphs = tracking_map.get_tracked_graphs();
+    int const num_templates = graphs.size();
+
+    // Pre-allocate the returned matrix so we don't incur extra overhead of dynamically expanding
+    // the matrices.
+    auto closest_neighboring_gaussians_ptr = std::shared_ptr<MatrixXi>(
+        new MatrixXi(MatrixXi::Zero(num_templates, N_)) );
+    Eigen::MatrixXi& closest_neighboring_gaussians = *closest_neighboring_gaussians_ptr;
+
+    // Find the neighbor of the closest Gaussian to each point that's closest to the point for each
+    // template.
+    for (int template_idx = 0; template_idx < num_templates; ++template_idx)
+    {
+        // Get the connectivity graph for this template.
+        ConnectivityGraph const& connectivity_graph = *graphs.at(template_idx);
+        NodeMap const& node_map = connectivity_graph.get_node_map();
+
+        // Define some intermediate variables for faster access to data.
+        auto const pts_closest_gaussians = closest_gaussians.row(template_idx);
+        auto pts_closest_gaussian_neighbor = closest_neighboring_gaussians.row(template_idx);
+
+        for (int pt_idx = 0; pt_idx < N_; ++pt_idx)
+        {
+            auto const pts_d_M = d_M.col(pt_idx);
+            int const closest_gaussian_idx = pts_closest_gaussians(pt_idx);
+
+            auto const closest_gaussian_node = node_map.at(closest_gaussian_idx);
+            NodeMap const& neighbors = closest_gaussian_node->get_neighbors();
+
+            // Search the node's neighbors for the next closest Gaussian.
+            float dist_min = 1e15;
+            int idx_min = -1;
+            for (auto const& neighbor : neighbors)
+            {
+                int const neighbor_idx = neighbor.first;
+                float const neighbor_dist = pts_d_M(neighbor_idx);
+                if (neighbor_dist < dist_min)
+                {
+                    dist_min = neighbor_dist;
+                    idx_min = neighbor_idx;
+                }
+            }
+
+            pts_closest_gaussian_neighbor(pt_idx) = idx_min;
+        }
+    }
+    return closest_neighboring_gaussians_ptr;
+}
+
+SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centroids()
+{
+    // Compute the projection of each point onto the line formed between the two closest Gaussians
+    // for each template.
 
 
-// //     // Compute the projection of each point onto the line formed between the two closest Gaussians
-// //     // for each template.
+    // TODO: If we decide to use different variances for each Gaussian, then the following steps
+    // will become necessary.
+    // 1. From the projection, we can calculate the distance of the synthetic Gaussian centroid to
+    //    the closest and second closest tracked Gaussians.
+    // 2. Calculate the variance of the synthetic Gaussian for this template by computing average of
+    //    variances weighted by Mahalanobis distance to the two Gaussians.
+    // 3. Form the synthetic Gaussian based on the projection of the point onto the line formed by
+    //    the two closest Gaussians.
+}
 
+std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(Matrix3Xf const& X, Matrix3Xf const& TY,
+    double const sigma2)
+{
+    // Creating a matrix on the heap so we don't have to worry about expensive matrix copy
+    // constructors when returning from functions.
+    auto d_M_ptr = std::shared_ptr<MatrixXf>( new MatrixXf(MatrixXf::Zero(M_, N_)) );
+    MatrixXf& d_M = *d_M_ptr;
 
-// //     // Form the synthetic Gaussian based on the projection of the point onto the line formed by
-// //     // the two closest Gaussians.
+    // Get the Mahalanobis distance of each point to each Gaussian
+    double const sigma2_inverse = 1.0 / sigma2;
+    Eigen::MatrixXf covariance_inverse = Eigen::MatrixXf(3, 3);
+    covariance_inverse << sigma2_inverse,            0.0,            0.0,
+                                    0.0, sigma2_inverse,            0.0,
+                                    0.0,            0.0, sigma2_inverse;
+    for (int m = 0; m < M_; ++m)
+    {
+        auto const& y_m = TY.col(m);
+        for (int i = 0; i < N_; ++i)
+        {
+            auto const& x_i = X.col(i);
+            d_M(m, i) = mahalanobis_distance(y_m, covariance_inverse, x_i);
+        }
+    }
 
-// //     // Compute the sum of distances.
-
-// //     // Find the association prior for each point and Gaussian pair based on the point's distance
-// //     // to this template compared to the sum of distances.
-// //     // e^(-this_distance / distance_sum)
-
-
-// //     // Multiply P by the association prior for each point.
+    return d_M_ptr;
 }
