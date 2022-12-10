@@ -19,22 +19,18 @@ MatrixXf CPDInterface::calculate_P_matrix(const Matrix3Xf &X, const Matrix3Xf &Y
     const Matrix3Xf &Y_pred, const Eigen::VectorXf &Y_emit_prior, Matrix3Xf const& TY,
     double const sigma2)
 {
-    int const N = X.cols();
-    int const M = Y.cols();
-    int const D = Y.rows();
-
-    MatrixXf P(M, N);
-    for (int i = 0; i < M; ++i)
+    MatrixXf P(M_, N_);
+    for (int i = 0; i < M_; ++i)
     {
-        for (int j = 0; j < N; ++j)
+        for (int j = 0; j < N_; ++j)
         {
             P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
         }
     }
 
-    float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D) / 2);
+    float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D_) / 2);
     c *= w_ / (1 - w_);
-    c *= static_cast<double>(M) / N;
+    c *= static_cast<double>(M_) / N_;
 
     P = (-P / (2 * sigma2)).array().exp().matrix();
     P.array().colwise() *= Y_emit_prior.array();
@@ -79,6 +75,10 @@ Matrix3Xf CPD::operator()(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3X
     // Y_pred: (3, M) matrix of predicted tracked point locations.
     // Y_emit_prior: vector with a probability per tracked point that that Gaussian would generate
     //     samples at this time step. Generated from the visibility prior.
+
+    M_ = Y.cols();
+    N_ = X.cols();
+    D_ = Y.rows();
 
     // G: (M, M) Guassian kernel matrix
     {

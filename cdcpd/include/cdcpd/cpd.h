@@ -48,6 +48,15 @@ protected:
     // I don't love that I have to put this here to calculate the Gaussian kernel matrix. Maybe
     // refactor?
     Matrix3Xf original_template_;
+
+    // Number of Gaussians considered in the CPD iteration.
+    int M_;
+
+    // Number of masked points in the CPD iteration.
+    int N_;
+
+    // Dimension of the CPD points.
+    int D_;
 };
 
 class CPD : public CPDInterface
