@@ -416,7 +416,7 @@ std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_second_closest_gaussi
     return closest_neighboring_gaussians_ptr;
 }
 
-Eigen::VectorXf project_point_onto_line(
+Eigen::VectorXf CPDMultiTemplate::project_point_onto_line(
     Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_start,
     Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_end,
     Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt)
