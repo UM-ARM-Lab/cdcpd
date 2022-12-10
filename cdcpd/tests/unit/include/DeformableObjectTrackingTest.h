@@ -35,35 +35,41 @@ protected:
 
     bool areConnectivityNodesEqual(ConnectivityNode const& node_1, ConnectivityNode const& node_2)
     {
-        bool nodes_equal = true;
-
-        nodes_equal = nodes_equal && (node_1.id == node_2.id);
+        if (node_1.get_id() != node_2.get_id())
+        {
+            return false;
+        }
 
         // Check if the nodes have the same neighbors.
-        auto const& neighbors_2 = node_2.neighbors;
-        for (auto const& neighb_1 : node_1.neighbors)
+        for (auto const& neighbor_pair : node_1.get_neighbors())
         {
-            int const id_neighbor_1 = neighb_1.first;
-            // If the node one's neighbor isn't in node two's neighbors, the nodes aren't equal.
-            if (neighbors_2.count(id_neighbor_1) == 0)
+            int const neighbor_id = neighbor_pair.first;
+            if (!node_2.is_neighbor_node(neighbor_id))
+            {
+                return false;
+            }
+        }
+        for (auto const& neighbor_pair : node_2.get_neighbors())
+        {
+            int const neighbor_id = neighbor_pair.first;
+            if (!node_1.is_neighbor_node(neighbor_id))
             {
                 return false;
             }
         }
 
-        return nodes_equal;
+        return true;
     }
 
-    bool doNodesMatch(ConnectivityGraph const& graph_1, ConnectivityGraph const& graph_2)
+    bool doGraphNodeMapsMatch(ConnectivityGraph const& graph_1, ConnectivityGraph const& graph_2)
     {
         // Check if all nodes in graph 1 are in graph 2
-        bool nodes_match = true;
-        for (auto const& pair_1 : graph_1.nodes)
+        for (auto const& pair_1 : graph_1.get_node_map())
         {
             int const id_node_1 = pair_1.first;
             auto const node_1 = pair_1.second;
 
-            int const num_matching_nodes = graph_2.nodes.count(id_node_1);
+            int const num_matching_nodes = graph_2.get_node_map().count(id_node_1);
             if (num_matching_nodes > 1)
             {
                 std::cout << "Found " << num_matching_nodes
@@ -76,7 +82,7 @@ protected:
                 return false;
             }
         }
-        return nodes_match;
+        return true;
     }
 
     bool areConnectivityGraphsEqual(ConnectivityGraph const& graph_1,
@@ -85,21 +91,22 @@ protected:
         bool graphs_equal = true;
 
         // Check that all nodes in graph 1 are in graph 2 and vice versa.
-        graphs_equal = graphs_equal && doNodesMatch(graph_1, graph_2);
-        graphs_equal = graphs_equal && doNodesMatch(graph_2, graph_1);
+        graphs_equal = graphs_equal && doGraphNodeMapsMatch(graph_1, graph_2);
+        graphs_equal = graphs_equal && doGraphNodeMapsMatch(graph_2, graph_1);
         if (!graphs_equal)
         {
             return false;
         }
 
-        for (auto const& pair_1 : graph_1.nodes)
+        NodeMap const& node_map_2 = graph_2.get_node_map();
+        for (auto const& pair_1 : graph_1.get_node_map())
         {
             int const id_node_1 = pair_1.first;
             auto const node_1 = pair_1.second;
 
             // First check if the node from graph 1 is even in graph 2
-            auto it_potential_node_2 = graph_2.nodes.find(id_node_1);
-            bool const is_node_1_in_graph_2 = it_potential_node_2 != graph_2.nodes.end();
+            auto it_potential_node_2 = node_map_2.find(id_node_1);
+            bool const is_node_1_in_graph_2 = it_potential_node_2 != node_map_2.end();
             if (is_node_1_in_graph_2)
             {
                 auto const node_2 = it_potential_node_2->second;
@@ -142,12 +149,14 @@ TEST_F(DeformableObjectTrackingTest, copyConstructorDifferentTracks)
     bool are_graphs_equal = areConnectivityGraphsEqual(track_1->getConnectivityGraph(),
         track_2->getConnectivityGraph());
     EXPECT_FALSE(are_graphs_equal);
+
+    are_graphs_equal = areConnectivityGraphsEqual(track_2->getConnectivityGraph(),
+        track_1->getConnectivityGraph());
+    EXPECT_FALSE(are_graphs_equal);
 }
 
 TEST_F(DeformableObjectTrackingTest, copyConstructorSameTracks)
 {
-    using namespace std;
-
     // Copy track 1 back into track 2 to make sure everything is the same.
     track_2 = std::make_shared<DeformableObjectTracking>(*track_1);
     auto const& track_1_vertices = track_1->getVertices();
@@ -165,5 +174,9 @@ TEST_F(DeformableObjectTrackingTest, copyConstructorSameTracks)
 
     bool are_graphs_equal = areConnectivityGraphsEqual(track_1->getConnectivityGraph(),
         track_2->getConnectivityGraph());
+    EXPECT_TRUE(are_graphs_equal);
+
+    are_graphs_equal = areConnectivityGraphsEqual(track_2->getConnectivityGraph(),
+        track_1->getConnectivityGraph());
     EXPECT_TRUE(are_graphs_equal);
 }

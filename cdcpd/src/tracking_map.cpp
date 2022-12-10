@@ -49,6 +49,32 @@ std::vector<TemplateVertexAssignment> TrackingMap::get_vertex_assignments() cons
     return vertex_assignments;
 }
 
+std::vector<std::shared_ptr<ConnectivityGraph> > TrackingMap::get_tracked_graphs() const
+{
+    std::vector<std::shared_ptr<ConnectivityGraph> > tracked_graphs;
+    std::vector<TemplateVertexAssignment> const vertex_assignments = get_vertex_assignments();
+
+    int def_obj_idx = 0;
+    for (int const def_obj_id : ordered_def_obj_ids_)
+    {
+        TemplateVertexAssignment const& assignment = vertex_assignments.at(def_obj_idx);
+
+        // Including just as a sanity check that iteration order is preserved.
+        assert(assignment.template_id == def_obj_id);
+
+        auto const def_obj_config = tracking_map.at(def_obj_id);
+        ConnectivityGraph const& old_graph = def_obj_config->tracked_.getConnectivityGraph();
+
+        // Get a new connectivity graph that matches the vertex indices in the aggregate
+        // point cloud/matrix
+        auto updated_graph = std::make_shared<ConnectivityGraph>(old_graph, assignment.idx_start);
+
+        tracked_graphs.push_back(updated_graph);
+        ++def_obj_idx;
+    }
+    return tracked_graphs;
+}
+
 void TrackingMap::add_def_obj_configuration(
     std::shared_ptr<DeformableObjectConfiguration> const def_obj_config)
 {

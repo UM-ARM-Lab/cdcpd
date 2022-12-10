@@ -12,6 +12,9 @@
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
+class ConnectivityNode;
+typedef std::map<int, std::shared_ptr<ConnectivityNode> > NodeMap;
+
 enum DeformableObjectType
 {
     rope,
@@ -27,10 +30,19 @@ class ConnectivityNode
 public:
     ConnectivityNode(int const node_id);
 
-    void add_neighbor_node(std::shared_ptr<ConnectivityNode> const neighbor);
+    int get_id() const { return id_; }
 
-    int const id;
-    std::map<int, std::shared_ptr<ConnectivityNode> > neighbors;
+    NodeMap const& get_neighbors() const { return neighbors_; }
+
+    void set_id(int const id) { id_ = id; }
+
+    void insert_neighbor_node(std::shared_ptr<ConnectivityNode> const neighbor);
+
+    bool is_neighbor_node(int const id_neighbor) const;
+
+protected:
+    int id_;
+    NodeMap neighbors_;
 };
 
 // Represents the edges of deformable object templates as a graph for easy traversal.
@@ -40,7 +52,22 @@ public:
     ConnectivityGraph();
     ConnectivityGraph(Eigen::Matrix2Xi const& edge_list);
 
-    std::map<int, std::shared_ptr<ConnectivityNode> > nodes;
+    // Copies the given graph, adding `id_offset` to the node IDs. Useful when forming the
+    // connectivity graph describing the vertex indices in the aggregate point cloud/matrices of all
+    // tracked templates.
+    ConnectivityGraph(ConnectivityGraph const& old_graph, int const id_offset);
+
+    NodeMap const& get_node_map() const { return nodes_; }
+
+    std::shared_ptr<ConnectivityNode> insert_node(int const node_id);
+
+    void insert_edge(int const id_node_1, int const id_node_2);
+
+    void insert_edge(std::shared_ptr<ConnectivityNode> node_1,
+        std::shared_ptr<ConnectivityNode> node_2);
+
+protected:
+    NodeMap nodes_;
 };
 
 class DeformableObjectTracking

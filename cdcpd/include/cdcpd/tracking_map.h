@@ -35,9 +35,18 @@ public:
     // Returns the total number of tracked edges.
     int get_total_num_edges() const;
 
-    // Returns a map that indicates which vertices belong to which template.
-    // The tuple indicates the start and end vertex indexes that belong to that template.
+    // Returns a vector of template-vertex assignments in the same ID order as
+    // `get_def_obj_id_iteration_order()`.
     std::vector<TemplateVertexAssignment> get_vertex_assignments() const;
+
+    // Returns a vector indicating the order in which configurations are iterated over in order to
+    // form the aggregate vertex point cloud/matrix.
+    std::vector<int> get_def_obj_id_iteration_order() const { return ordered_def_obj_ids_; }
+
+    // Returns a vector of template connectivity graphs where the graph's node IDs respect the index
+    // of where that tracked vertex will be placed in the aggregate point cloud/matrix.
+    // NOTE: vector is in the same order as `get_def_obj_id_iteration_order()`.
+    std::vector<std::shared_ptr<ConnectivityGraph> > get_tracked_graphs() const;
 
     // Adds the given deformable object configuration to our tracking map.
     void add_def_obj_configuration(std::shared_ptr<DeformableObjectConfiguration> const def_obj_config);

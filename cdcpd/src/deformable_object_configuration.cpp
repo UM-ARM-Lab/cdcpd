@@ -16,17 +16,22 @@ DeformableObjectType get_deformable_object_type(std::string const& def_obj_type_
 }
 
 ConnectivityNode::ConnectivityNode(int const node_id)
-    : id(node_id),
-      neighbors()
+    : id_(node_id),
+      neighbors_()
 {}
 
-void ConnectivityNode::add_neighbor_node(std::shared_ptr<ConnectivityNode> const neighbor)
+void ConnectivityNode::insert_neighbor_node(std::shared_ptr<ConnectivityNode> const neighbor)
 {
-    neighbors.insert({neighbor->id, neighbor});
+    neighbors_.insert({neighbor->id_, neighbor});
+}
+
+bool ConnectivityNode::is_neighbor_node(int const id_neighbor) const
+{
+    return neighbors_.count(id_neighbor) != 0;
 }
 
 ConnectivityGraph::ConnectivityGraph()
-    : nodes()
+    : nodes_()
 {}
 
 ConnectivityGraph::ConnectivityGraph(Eigen::Matrix2Xi const& edge_list)
@@ -38,22 +43,60 @@ ConnectivityGraph::ConnectivityGraph(Eigen::Matrix2Xi const& edge_list)
         int const& id_1 = edge(0, 0);
         int const& id_2 = edge(1, 0);
 
-        auto node_1 = std::make_shared<ConnectivityNode>(id_1);
-        auto node_2 = std::make_shared<ConnectivityNode>(id_2);
-
-        // Using map::insert here as insert respects if the key, value pair is already in the map.
-        auto insertion_pair_1 = nodes.insert({id_1, node_1});
-        auto insertion_pair_2 = nodes.insert({id_2, node_2});
-
-        // Add the nodes as neighbors. We're overwriting the nodes we defined earlier as the
-        // map::insert function returns an iterator to the already present node in the map if there
-        // was already a node with that ID.
-        node_1 = insertion_pair_1.first->second;
-        node_2 = insertion_pair_2.first->second;
-
-        node_1->add_neighbor_node(node_2);
-        node_2->add_neighbor_node(node_1);
+        insert_edge(id_1, id_2);
     }
+}
+
+ConnectivityGraph::ConnectivityGraph(ConnectivityGraph const& old_graph, int const id_offset)
+{
+    for (auto const& old_node_pair : old_graph.nodes_)
+    {
+        int const id_old = old_node_pair.first;
+        std::shared_ptr<ConnectivityNode> node_old = old_node_pair.second;
+
+        int const id_new = id_old + id_offset;
+        std::shared_ptr<ConnectivityNode> node_new = insert_node(id_new);
+
+        // Add neighbors to the new node if they aren't present.
+        for (auto const& neighbor_pair_old : node_old->get_neighbors())
+        {
+            int const id_neighbor_new = neighbor_pair_old.first + id_offset;
+            auto node_neighbor = insert_node(id_neighbor_new);
+
+            insert_edge(node_new, node_neighbor);
+        }
+    }
+}
+
+std::shared_ptr<ConnectivityNode> ConnectivityGraph::insert_node(int const node_id)
+{
+    auto node = std::make_shared<ConnectivityNode>(node_id);
+
+    // Using map::insert here as insert respects if the key, value pair is already in the map.
+    auto insertion_pair = nodes_.insert({node_id, node});
+    auto const& map_iterator = insertion_pair.first;
+
+    // This either points to the node we just created or the node that was already in the map with
+    // the node_id key.
+    node = map_iterator->second;
+
+    return node;
+}
+
+void ConnectivityGraph::insert_edge(int const id_node_1, int const id_node_2)
+{
+    auto node_1 = insert_node(id_node_1);
+    auto node_2 = insert_node(id_node_2);
+
+    node_1->insert_neighbor_node(node_2);
+    node_2->insert_neighbor_node(node_1);
+}
+
+void ConnectivityGraph::insert_edge(std::shared_ptr<ConnectivityNode> node_1,
+    std::shared_ptr<ConnectivityNode> node_2)
+{
+    node_1->insert_neighbor_node(node_2);
+    node_2->insert_neighbor_node(node_1);
 }
 
 DeformableObjectTracking::DeformableObjectTracking()
