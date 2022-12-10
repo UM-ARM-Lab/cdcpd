@@ -12,7 +12,7 @@ using Eigen::VectorXf;
 using Eigen::MatrixXi;
 using Eigen::MatrixXd;
 
-typedef std::vector<std::shared_ptr<MatrixXd> > SyntheticGaussianCentroidsVector;
+typedef std::vector<std::shared_ptr<MatrixXf> > SyntheticGaussianCentroidsVector;
 
 class CPDInterface
 {
@@ -112,10 +112,17 @@ protected:
     std::shared_ptr<MatrixXi> find_pointwise_second_closest_gaussians(MatrixXf const& d_M,
         TrackingMap const& tracking_map, MatrixXi const& closest_gaussians);
 
-    Eigen::VectorXd project_point_onto_line();
+    // Computes the projection of a vector from start->pt onto start->end with clipping if the
+    // projection extends past the vector from start->end
+    Eigen::VectorXf project_point_onto_line(
+        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_start,
+        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_end,
+        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt);
 
     // Returns vector of length num_templates of pointers to matrices of shape (D_, num_points)
-    SyntheticGaussianCentroidsVector find_synthetic_gaussian_centroids();
+    SyntheticGaussianCentroidsVector find_synthetic_gaussian_centroids(const Matrix3Xf &X,
+        const Matrix3Xf &TY, MatrixXi const& closest_gaussians,
+        MatrixXi const& second_closest_gaussians);
 
     std::shared_ptr<MatrixXf> calculate_mahalanobis_matrix(Matrix3Xf const& X, Matrix3Xf const& TY,
         double const sigma2);

@@ -278,12 +278,14 @@ MatrixXf CPDMultiTemplate::calculate_association_prior(const Matrix3Xf &X, const
 
     // Find the closest Gaussian to a point (by Mahalanobis distance), then find the neighbor of the
     // closest Gaussian that has the minimum distance to the point.
-    auto closest_gaussians = find_pointwise_closest_gaussians(*d_M_ptr, tracking_map);
-    auto second_closest_guassians = find_pointwise_second_closest_gaussians(*d_M_ptr, tracking_map, *closest_gaussians);
+    auto const closest_gaussians = find_pointwise_closest_gaussians(*d_M_ptr, tracking_map);
+    auto const second_closest_guassians =
+        find_pointwise_second_closest_gaussians(*d_M_ptr, tracking_map, *closest_gaussians);
 
     // From the two closest Gaussians, calculate the synthetic Gaussian for each point for each
     // template.
-    SyntheticGaussianCentroidsVector synthetic_gaussians = find_synthetic_gaussian_centroids();
+    SyntheticGaussianCentroidsVector const synthetic_gaussians =
+        find_synthetic_gaussian_centroids(X, TY, *closest_gaussians, *second_closest_guassians);
 
     // Calculate the Mahalanobis distance between each point and the associated synthetic Gaussian
     // for each template.
@@ -313,7 +315,6 @@ float CPDMultiTemplate::mahalanobis_distance(
     return d_M;
 }
 
-// TODO(Dylan): Update to be general and use tracking map to iterate through all templates.
 std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(MatrixXf const& d_M, TrackingMap const& tracking_map)
 {
     // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
@@ -415,11 +416,58 @@ std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_second_closest_gaussi
     return closest_neighboring_gaussians_ptr;
 }
 
-SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centroids()
+Eigen::VectorXf project_point_onto_line(
+    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_start,
+    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_end,
+    Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt)
 {
+    auto const edge_line = line_end - line_start;
+    auto const pt_line = pt - line_start;
+    Eigen::VectorXf projection = (edge_line.dot(pt_line) / edge_line.dot(edge_line)) * edge_line;
+
+    if (projection.norm() > edge_line.norm())
+    {
+        // This means the point extends past the edge line, so we just set the synthetic Gaussian
+        // centroid to be the closest centroid.
+        projection = line_end;
+    }
+    else
+    {
+        // Otherwise, we add back the origin of this projection to get the coordinates.
+        projection += line_start;
+    }
+    return projection;
+}
+
+SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centroids(
+    const Matrix3Xf &X, const Matrix3Xf &TY, MatrixXi const& closest_gaussians,
+    MatrixXi const& second_closest_gaussians)
+{
+    SyntheticGaussianCentroidsVector synthetic_gaussian_centroids_all_templates;
+
     // Compute the projection of each point onto the line formed between the two closest Gaussians
     // for each template.
+    for (int template_idx = 0; template_idx < closest_gaussians.rows(); ++template_idx)
+    {
+        auto projections_ptr = std::make_shared<MatrixXf>(MatrixXf::Zero(D_, N_));
+        MatrixXf& projections = *projections_ptr;
+        for (int pt_idx = 0; pt_idx < N_; ++pt_idx)
+        {
+            int const idx_closest = closest_gaussians(template_idx, pt_idx);
+            int const idx_second_closest = second_closest_gaussians(template_idx, pt_idx);
 
+            auto const& pt = X.col(pt_idx);
+            auto const& cent_closest = TY.col(idx_closest);
+            auto const& cent_second_closest = TY.col(idx_second_closest);
+
+            // The arguments may appear to be backwards at first, but using the second closest
+            // centroid as the origin of the projection lends itself to easy clipping if the
+            // projection extends past the line formed between the two Gaussians.
+            projections.col(pt_idx) =
+                project_point_onto_line(cent_second_closest, cent_closest, pt);
+        }
+        synthetic_gaussian_centroids_all_templates.push_back(projections_ptr);
+    }
 
     // TODO: If we decide to use different variances for each Gaussian, then the following steps
     // will become necessary.
@@ -429,6 +477,7 @@ SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centr
     //    variances weighted by Mahalanobis distance to the two Gaussians.
     // 3. Form the synthetic Gaussian based on the projection of the point onto the line formed by
     //    the two closest Gaussians.
+    return synthetic_gaussian_centroids_all_templates;
 }
 
 std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(Matrix3Xf const& X, Matrix3Xf const& TY,
