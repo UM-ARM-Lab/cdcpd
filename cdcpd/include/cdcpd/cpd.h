@@ -23,15 +23,19 @@ public:
     virtual ~CPDInterface(){}
 
     // TODO(Dylan): Clean up passing in the tracking_map. This is passing in way too much information.
-    virtual Matrix3Xf operator()(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-        const Eigen::VectorXf &Y_emit_prior, TrackingMap const& tracking_map) = 0;
+    virtual Matrix3Xf operator()(const Eigen::Ref<const Matrix3Xf>& X,
+        const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
+        const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) = 0;
 
     virtual MatrixXf calculate_gaussian_kernel() = 0;
 
-    MatrixXf calculate_P_matrix(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-        const Eigen::VectorXf &Y_emit_prior, Matrix3Xf const& TY, double const sigma2);
+    MatrixXf calculate_P_matrix(const Eigen::Ref<const Matrix3Xf>& X,
+        const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
+        const Eigen::Ref<const VectorXf>& Y_emit_prior, const Eigen::Ref<const Matrix3Xf>&  TY,
+        double const sigma2);
 
-    double initial_sigma2(MatrixXf const& X, MatrixXf const& Y);
+    double initial_sigma2(const Eigen::Ref<const MatrixXf>&  X,
+        const Eigen::Ref<const MatrixXf>&  Y);
 
 protected:
     std::string const log_name_;
@@ -71,8 +75,9 @@ public:
         double const zeta, double const start_lambda, MatrixXf const m_lle);
     ~CPD(){}
 
-    Matrix3Xf operator()(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-        const Eigen::VectorXf &Y_emit_prior, TrackingMap const& tracking_map) override;
+    Matrix3Xf operator()(const Eigen::Ref<const Matrix3Xf>& X,
+        const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
+        const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) override;
 
     MatrixXf calculate_gaussian_kernel() override;
 };
@@ -89,15 +94,17 @@ public:
         double const zeta, double const start_lambda, MatrixXf const m_lle);
     ~CPDMultiTemplate(){}
 
-    Matrix3Xf operator()(const Matrix3Xf &X, const Matrix3Xf &Y, const Matrix3Xf &Y_pred,
-        const Eigen::VectorXf &Y_emit_prior, TrackingMap const& tracking_map) override;
+    Matrix3Xf operator()(const Eigen::Ref<const Matrix3Xf>& X,
+        const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
+        const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) override;
 
     MatrixXf calculate_gaussian_kernel() override;
 
 protected:
     // Computes the pointwise association prior
-    MatrixXf calculate_association_prior(const Matrix3Xf &X, const Matrix3Xf &TY,
-        TrackingMap const& tracking_map, double const sigma2);
+    MatrixXf calculate_association_prior(const Eigen::Ref<const Matrix3Xf>& X,
+        const Eigen::Ref<const Matrix3Xf>& TY, TrackingMap const& tracking_map,
+        double const sigma2);
 
     // Computes the Mahalanobis distance of a point from the given Gaussian.
     // NOTE: Using Eigen::Ref means that this function will accept either Eigen::Block or
@@ -107,32 +114,35 @@ protected:
         const Eigen::Ref<const VectorXf>& pt);
 
     // Finds the closest Gaussians (returns the index) to the given points for each template.
-    std::shared_ptr<MatrixXi> find_pointwise_closest_gaussians(MatrixXf const& d_M,
-        TrackingMap const& tracking_map);
+    std::shared_ptr<MatrixXi> find_pointwise_closest_gaussians(
+        const Eigen::Ref<const MatrixXf>& d_M, TrackingMap const& tracking_map);
 
     // Finds nearest neighboring Gaussian to points given the closest Gaussians for each template.
-    std::shared_ptr<MatrixXi> find_pointwise_second_closest_gaussians(MatrixXf const& d_M,
-        TrackingMap const& tracking_map, MatrixXi const& closest_gaussians);
+    std::shared_ptr<MatrixXi> find_pointwise_second_closest_gaussians(
+        const Eigen::Ref<const MatrixXf>& d_M, TrackingMap const& tracking_map,
+        const Eigen::Ref<const MatrixXi>& closest_gaussians);
 
     // Computes the projection of a vector from start->pt onto start->end with clipping if the
     // projection extends past the vector from start->end
-    Eigen::VectorXf project_point_onto_line(
-        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_start,
-        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& line_end,
-        Eigen::Block<const Eigen::Matrix3Xf, 3, 1, true> const& pt);
+    Eigen::VectorXf project_point_onto_line(const Eigen::Ref<const VectorXf>& line_start,
+        const Eigen::Ref<const VectorXf>& line_end, const Eigen::Ref<const VectorXf>& pt);
 
     // Returns vector of length num_templates of pointers to matrices of shape (D_, num_points)
-    SyntheticGaussianCentroidsVector find_synthetic_gaussian_centroids(const Matrix3Xf &X,
-        const Matrix3Xf &TY, MatrixXi const& closest_gaussians,
-        MatrixXi const& second_closest_gaussians);
+    SyntheticGaussianCentroidsVector find_synthetic_gaussian_centroids(
+        const Eigen::Ref<const Matrix3Xf>& X, const Eigen::Ref<const Matrix3Xf>& TY,
+        const Eigen::Ref<const MatrixXi>& closest_gaussians,
+        const Eigen::Ref<const MatrixXi>& second_closest_gaussians);
 
-    std::shared_ptr<MatrixXf> calculate_mahalanobis_matrix(Matrix3Xf const& X, Matrix3Xf const& TY,
-        double const sigma2);
+    std::shared_ptr<MatrixXf> calculate_mahalanobis_matrix(const Eigen::Ref<const Matrix3Xf>& X,
+        const Eigen::Ref<const Matrix3Xf>& TY, double const sigma2);
 
     // Calculates the distance of all masked segmentation points (X) to each template.
-    std::shared_ptr<MatrixXf> calculate_point_to_template_distance(Matrix3Xf const& X,
+    std::shared_ptr<MatrixXf> calculate_point_to_template_distance(
+        const Eigen::Ref<const Matrix3Xf>& X,
         SyntheticGaussianCentroidsVector const& synthetic_centroids, double const sigma2);
 
+    // NOTE: This is a very small matrix (3, 3), so we don't worry about the copy constructor
+    // overhead.
     Eigen::MatrixXf get_covariance_inverse(float const sigma2);
 
 };
