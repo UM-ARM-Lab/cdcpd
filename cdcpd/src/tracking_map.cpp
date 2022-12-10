@@ -30,19 +30,21 @@ int TrackingMap::get_total_num_edges() const
     return num_edges_total;
 }
 
-std::map<int, std::tuple<int, int> > TrackingMap::get_vertex_assignments() const
+std::vector<TemplateVertexAssignment> TrackingMap::get_vertex_assignments() const
 {
     // NOTE: This could be kept track of as a member variable and instead updated any time a
     // deformable object is added/removed.
-    std::map<int, std::tuple<int, int> > vertex_assignments;
+    std::vector<TemplateVertexAssignment> vertex_assignments;
     int idx_begin = 0;
-    for (auto const& configuration : tracking_map)
+    for (int const def_obj_id : ordered_def_obj_ids_)
     {
-        int idx_end = idx_begin + configuration.second->num_points_;
-        std::tuple<int, int> idx_range{idx_begin, idx_end};
-        idx_begin = idx_end;
+        std::shared_ptr<DeformableObjectConfiguration> configuration = tracking_map.at(def_obj_id);
+        int const idx_end = idx_begin + configuration->num_points_;
 
-        vertex_assignments.emplace(configuration.first, idx_range);
+        // Using emplace_back here avoids an unnecessary copy constructor I believe.
+        vertex_assignments.emplace_back(def_obj_id, idx_begin, idx_end);
+
+        idx_begin = idx_end;
     }
     return vertex_assignments;
 }
@@ -61,23 +63,17 @@ void TrackingMap::add_def_obj_configuration(
 
 void TrackingMap::update_def_obj_vertices(pcl::shared_ptr<PointCloud> const vertices_new)
 {
-    auto vertex_assignments = get_vertex_assignments();
+    std::vector<TemplateVertexAssignment> vertex_assignments = get_vertex_assignments();
     auto const& cloud_it_begin = vertices_new->begin();
-    for (auto const& assignment_range : vertex_assignments)
+    for (auto const& assignment : vertex_assignments)
     {
         // Get the deformable object configuration we're updating.
-        int const& def_obj_id = assignment_range.first;
-        std::shared_ptr<DeformableObjectConfiguration>& def_obj_config = tracking_map[def_obj_id];
-
-        // Grab the range of indices where this configuration's points will be stored in the point
-        // cloud.
-        std::tuple<int, int> const& idx_range = assignment_range.second;
-        int const& idx_start = std::get<0>(idx_range);
-        int const& idx_end = std::get<1>(idx_range);
+        std::shared_ptr<DeformableObjectConfiguration>& def_obj_config =
+            tracking_map[assignment.template_id];
 
         // Use the point cloud iterators and std::copy to efficiently update the tracked points.
-        auto const& it_begin = cloud_it_begin + idx_start;
-        auto const& it_end = cloud_it_begin + idx_end;
+        auto const& it_begin = cloud_it_begin + assignment.idx_start;
+        auto const& it_end = cloud_it_begin + assignment.idx_end;
         def_obj_config->tracked_.setPointCloud(it_begin, it_end);
 
         PointCloud::ConstPtr tracked_cloud = def_obj_config->tracked_.getPointCloud();

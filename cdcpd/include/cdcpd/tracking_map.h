@@ -8,6 +8,22 @@
 
 #include "cdcpd/deformable_object_configuration.h"
 
+// Stores the vertex indices that belong to each template in the large point cloud/matrix formed by
+// TrackingMap::form_vertices_cloud()
+struct TemplateVertexAssignment
+{
+    TemplateVertexAssignment(int const template_id_in, int const vertex_idx_start,
+        int const vertex_idx_end)
+        : template_id(template_id_in)
+        , idx_start(vertex_idx_start)
+        , idx_end(vertex_idx_end)
+    {}
+
+    int const template_id;
+    int const idx_start;
+    int const idx_end;
+};
+
 class TrackingMap
 {
 public:
@@ -21,7 +37,7 @@ public:
 
     // Returns a map that indicates which vertices belong to which template.
     // The tuple indicates the start and end vertex indexes that belong to that template.
-    std::map<int, std::tuple<int, int> > get_vertex_assignments() const;
+    std::vector<TemplateVertexAssignment> get_vertex_assignments() const;
 
     // Adds the given deformable object configuration to our tracking map.
     void add_def_obj_configuration(std::shared_ptr<DeformableObjectConfiguration> const def_obj_config);
