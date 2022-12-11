@@ -27,10 +27,7 @@ public:
         const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
         const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) = 0;
 
-    virtual MatrixXf calculate_gaussian_kernel() = 0;
-
     MatrixXf calculate_P_matrix(const Eigen::Ref<const Matrix3Xf>& X,
-        const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
         const Eigen::Ref<const VectorXf>& Y_emit_prior, const Eigen::Ref<const Matrix3Xf>&  TY,
         double const sigma2);
 
@@ -79,7 +76,8 @@ public:
         const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
         const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) override;
 
-    MatrixXf calculate_gaussian_kernel() override;
+protected:
+    MatrixXf calculate_gaussian_kernel();
 };
 
 // Performs an augmented version of CPD, designed for multi-template tracking.
@@ -98,9 +96,12 @@ public:
         const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
         const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) override;
 
-    MatrixXf calculate_gaussian_kernel() override;
-
 protected:
+    // Calculates the Gaussian kernel (G in paper).
+    // NOTE: This is slightly modified for multi-template tracking such that the kernel values for
+    // Gaussians between templates is set to zero.
+    std::shared_ptr<MatrixXf> calculate_gaussian_kernel(TrackingMap const& tracking_map);
+
     // Computes the pointwise association prior
     MatrixXf calculate_association_prior(const Eigen::Ref<const Matrix3Xf>& X,
         const Eigen::Ref<const Matrix3Xf>& TY, TrackingMap const& tracking_map,

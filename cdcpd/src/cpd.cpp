@@ -16,7 +16,6 @@ CPDInterface::CPDInterface(std::string const log_name_base, double const toleran
 {}
 
 MatrixXf CPDInterface::calculate_P_matrix(const Eigen::Ref<const Matrix3Xf>& X,
-    const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
     const Eigen::Ref<const VectorXf>& Y_emit_prior, const Eigen::Ref<const Matrix3Xf>&  TY,
     double const sigma2)
 {
@@ -109,7 +108,7 @@ Matrix3Xf CPD::operator()(const Eigen::Ref<const Matrix3Xf>& X,
         // Calculate Eq. (9) (Line 5 in Algorithm 1)
         // NOTE: Eq. (9) misses M in the denominator
 
-        MatrixXf const P = calculate_P_matrix(X, Y, Y_pred, Y_emit_prior, TY, sigma2);
+        MatrixXf const P = calculate_P_matrix(X, Y_emit_prior, TY, sigma2);
 
         // Fast Gaussian Transformation to calculate Pt1, P1, PX
         MatrixXf PX = (P * X.transpose()).transpose();
@@ -194,10 +193,14 @@ Matrix3Xf CPDMultiTemplate::operator()(const Eigen::Ref<const Matrix3Xf>& X,
     // Y_pred: (3, M) matrix of predicted tracked point locations.
     // Y_emit_prior: vector with a probability per tracked point that that Gaussian would generate
     //     samples at this time step. Generated from the visibility prior.
+    N_ = X.cols();
+    M_ = Y.cols();
+    D_ = Y.rows();
 
     // G: (M, M) Guassian kernel matrix
     // MatrixXf G = gaussian_kernel(original_template, beta);  // Y, beta);
-    MatrixXf G = calculate_gaussian_kernel();
+    std::shared_ptr<MatrixXf> G_ptr = calculate_gaussian_kernel(tracking_map);
+    MatrixXf const& G = *G_ptr;
 
     // TY: Y^(t) in Algorithm 1
     Matrix3Xf TY = Y;
@@ -205,10 +208,6 @@ Matrix3Xf CPDMultiTemplate::operator()(const Eigen::Ref<const Matrix3Xf>& X,
 
     int iterations = 0;
     double error = tolerance_ + 1;  // loop runs the first time
-
-    N_ = X.cols();
-    M_ = Y.cols();
-    D_ = Y.rows();
 
     while (iterations <= max_iterations_ && error > tolerance_) {
         double qprev = sigma2;
@@ -218,7 +217,7 @@ Matrix3Xf CPDMultiTemplate::operator()(const Eigen::Ref<const Matrix3Xf>& X,
         // Calculate Eq. (9) (Line 5 in Algorithm 1)
         // NOTE: Eq. (9) misses M in the denominator
 
-        MatrixXf P_naive = calculate_P_matrix(X, Y, Y_pred, Y_emit_prior, TY, sigma2);
+        MatrixXf P_naive = calculate_P_matrix(X, Y_emit_prior, TY, sigma2);
         MatrixXf association_prior = calculate_association_prior(X, TY, tracking_map, sigma2);
 
         // Multiply P by the association prior for each point.
@@ -269,9 +268,42 @@ Matrix3Xf CPDMultiTemplate::operator()(const Eigen::Ref<const Matrix3Xf>& X,
     return TY;
 }
 
-MatrixXf CPDMultiTemplate::calculate_gaussian_kernel()
+std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_gaussian_kernel(
+    TrackingMap const& tracking_map)
 {
+    std::vector<TemplateVertexAssignment> const vertex_assignments =
+        tracking_map.get_vertex_assignments();
 
+    auto kernel_ptr = std::make_shared<MatrixXf>(M_, M_);
+    MatrixXf& kernel = *kernel_ptr;
+    kernel.setZero();
+
+    // We only assign the kernel non-zero values where the index of the Gaussians belong to the same
+    // template.
+    for (TemplateVertexAssignment const& assignment : vertex_assignments)
+    {
+        // Build the matrix containing the pointwise squared norm for this template.
+        std::shared_ptr<DeformableObjectConfiguration> def_obj_config =
+            tracking_map.tracking_map.at(assignment.template_id);
+        Matrix3Xf const& Y_initial = def_obj_config->initial_.getVertices();
+        int const num_gaussians = assignment.idx_end - assignment.idx_end;
+        MatrixXf diff = MatrixXf(num_gaussians, num_gaussians);
+
+        for (size_t i = 0; i < num_gaussians; ++i)
+        {
+            for (size_t j = 0; j < num_gaussians; ++j)
+            {
+                diff(i, j) = (Y_initial.col(i) - Y_initial.col(j)).squaredNorm();
+            }
+        }
+
+        // Set the portion of the Gaussian kernel matrix to the value calculated from the squared
+        // norms.
+        kernel.block(assignment.idx_start, assignment.idx_start, num_gaussians, num_gaussians)
+            = (-diff / (2.0F * beta_ * beta_)).array().exp();
+    }
+
+    return kernel_ptr;
 }
 
 MatrixXf CPDMultiTemplate::calculate_association_prior(const Eigen::Ref<const Matrix3Xf>& X,
@@ -298,15 +330,49 @@ MatrixXf CPDMultiTemplate::calculate_association_prior(const Eigen::Ref<const Ma
 
     // Compute the pointwise sum of synthetic Gaussian distances across all templates.
     // Simple eigen colwise sum.
-    Eigen::RowVectorXf const pointwise_template_dists = point_to_template_dists->colwise().sum();
+    Eigen::RowVectorXf const pointwise_dist_sum = point_to_template_dists->colwise().sum();
 
-    // Association prior is just the distance of the point to a specific template divided by the
-    // distance to all templates.
-    // TODO(Dylan): Potentially make this exponential?
+    // Compute the distance score for each point/template combination.
+    // Of shape (num_templates, num_points).
+    MatrixXf dist_scores = (point_to_template_dists->array().rowwise() / (-1.0F * pointwise_dist_sum.array())).exp().matrix();
+    // {
+    //     // Ensure that the operation actually does assignment. I'm don't know if this is okay.
+    //     dist_scores.array().rowwise() /= (-1.0F * pointwise_dist_sum.array());
+    // }
 
-    // Find the association prior for each point and Gaussian pair based on the point's distance
-    // to each template compared to the sum of distances.
-    // e^(-this_distance / distance_sum)
+    // dist_scores = dist_scores.array().exp().matrix();
+    // MatrixXf const dist_scores = (point_to_template_dists->rowwise() / pointwise_dist_sum).array().exp().matrix();
+
+    // Now assign the distance scores to the appropriate Gaussian indices.
+    MatrixXf association_prior(M_, N_);
+    std::vector<TemplateVertexAssignment> const vertex_assignments =
+        tracking_map.get_vertex_assignments();
+    for (size_t template_idx = 0; template_idx < vertex_assignments.size(); ++template_idx)
+    {
+        TemplateVertexAssignment const& assignment = vertex_assignments.at(template_idx);
+        Eigen::RowVectorXf const& template_scores = dist_scores.row(template_idx);
+
+        // Calculate the number of Gaussians in this template for using Eigen block expression
+        // assignment
+        int const num_gaussians = assignment.idx_end - assignment.idx_start;
+
+        // for (int pt_idx = 0; pt_idx < N_; ++pt_idx)
+        // {
+        //     // Get the distance metric scores for all Gaussians associated with this template for
+        //     // this point.
+        //     auto score = dist_scores.col(pt_idx);
+        //     association_prior.block(assignment.idx_start, pt_idx, num_gaussians, 1) = score;
+        // }
+
+        // Create a block (a smaller matrix view) of the association prior that represents all of
+        // the Gaussians in this template and all points.
+        auto template_block = association_prior.block(assignment.idx_start, 0, num_gaussians, N_);
+
+        // Assign the same score to each row of the association prior since all Gaussians in the
+        // template receive the same score for a given point.
+        template_block.rowwise() = template_scores;
+    }
+    return association_prior;
 }
 
 float CPDMultiTemplate::mahalanobis_distance(
@@ -321,7 +387,8 @@ float CPDMultiTemplate::mahalanobis_distance(
     return d_M;
 }
 
-std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(const Eigen::Ref<const MatrixXf>&  d_M, TrackingMap const& tracking_map)
+std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(
+    const Eigen::Ref<const MatrixXf>&  d_M, TrackingMap const& tracking_map)
 {
     // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
     std::vector<TemplateVertexAssignment> vertex_assignments =
@@ -487,7 +554,8 @@ SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centr
     return synthetic_gaussian_centroids_all_templates;
 }
 
-std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(const Eigen::Ref<const Matrix3Xf>&  X, const Eigen::Ref<const Matrix3Xf>&  TY,
+std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(
+    const Eigen::Ref<const Matrix3Xf>&  X, const Eigen::Ref<const Matrix3Xf>&  TY,
     double const sigma2)
 {
     // Creating a matrix on the heap so we don't have to worry about expensive matrix copy
@@ -510,7 +578,8 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(const E
     return d_M_ptr;
 }
 
-std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_point_to_template_distance(const Eigen::Ref<const Matrix3Xf>&  X,
+std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_point_to_template_distance(
+    const Eigen::Ref<const Matrix3Xf>&  X,
     SyntheticGaussianCentroidsVector const& synthetic_centroids, double const sigma2)
 {
     int const num_templates = synthetic_centroids.size();
@@ -529,6 +598,7 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_point_to_template_distance
                 mahalanobis_distance(centroid, cov_inv, pt);
         }
     }
+    return pt_to_template_dists_ptr;
 }
 
 Eigen::MatrixXf CPDMultiTemplate::get_covariance_inverse(float const sigma2)
