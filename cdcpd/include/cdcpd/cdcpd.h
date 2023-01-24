@@ -31,6 +31,7 @@
 #include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"
 #include "cdcpd/stopwatch.h"
+#include "cdcpd/segmenter.h"
 #include "cdcpd/tracking_map.h"
 
 typedef pcl::PointXYZRGB PointRGB;
@@ -89,6 +90,23 @@ public:
     bool const use_recovery;
 };
 
+class CDCPDIterationInputs
+{
+public:
+    // CDCPDIterationInputs();
+
+    Eigen::Matrix3Xf Y;
+    Eigen::VectorXf Y_emit_prior;
+    Eigen::Matrix3Xf X;
+    ObstacleConstraints obstacle_constraints;
+    Eigen::RowVectorXd max_segment_length;
+    std::vector<FixedPoint> pred_fixed_points;
+    TrackingMap tracking_map;
+    smmap::AllGrippersSinglePoseDelta q_dot;
+    smmap::AllGrippersSinglePose q_config;
+    int pred_choice;
+};
+
 class CDCPD {
  public:
   struct Output {
@@ -106,11 +124,11 @@ class CDCPD {
       double beta = 1.0, double lambda = 1.0, double k = 100.0, float zeta = 10.0,
       float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
-  CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-      const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold,
-      bool use_recovery = false, double alpha = 0.5, double beta = 1.0, double lambda = 1.0,
-      double k = 100.0, float zeta = 10.0, float obstacle_cost_weight = 1.0,
-      float fixed_points_weight = 10.0);
+//   CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
+//       const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold,
+//       bool use_recovery = false, double alpha = 0.5, double beta = 1.0, double lambda = 1.0,
+//       double k = 100.0, float zeta = 10.0, float obstacle_cost_weight = 1.0,
+//       float fixed_points_weight = 10.0);
 
   // If you have want gripper constraints to be added and removed automatically based on is_grasped
   // and distance
@@ -154,6 +172,9 @@ class CDCPD {
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
       const smmap::AllGrippersSinglePose &q_config = {}, int pred_choice = 0);
 
+  // Runs the most basic implementation of CDCPD without passing all input args via method call.
+  Output run(CDCPDIterationInputs const& inputs);
+
   // This is the most basic implementation of CDCPD.
   // No input manipulation is done for you, you're expected to pass in the inputs to the algorithm
   // as indicated by the paper.
@@ -181,8 +202,8 @@ class CDCPD {
       const smmap::AllGrippersSinglePose &q_config, int pred_choice);
 
 protected:
-    ros::NodeHandle nh_;
-    ros::NodeHandle ph_;
+    // ros::NodeHandle nh_;
+    // ros::NodeHandle ph_;
 
     std::unique_ptr<smmap::ConstraintJacobianModel> constraint_jacobian_model_;
     std::unique_ptr<smmap::DiminishingRigidityModel> diminishing_rigidity_model_;
@@ -211,6 +232,9 @@ protected:
     std::vector<bool> last_grasp_status_;
     float objective_value_threshold_;
     int total_frames_ = 0;
+
+    // Temporary solution for decoupling ROS node handlers from CDCPD library for pybind11
+    std::unique_ptr<SegmenterHSV> segmenter;
 
     // Perform VoxelGrid filter downsampling.
     PointCloud::Ptr downsamplePointCloud(PointCloud::Ptr cloud_in);

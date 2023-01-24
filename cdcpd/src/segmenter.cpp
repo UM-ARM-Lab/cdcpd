@@ -82,3 +82,13 @@ void SegmenterHSV::segment(const PointCloudRGB::Ptr & input_points)
     // Store results of segmentation in member variable
     segmented_points_ = std::make_unique<PointCloudHSV>(*filtered_points_hsv);
 }
+
+void SegmenterHSV::set_last_lower_bounding_box(Eigen::Vector3f const& last_lower_bounding_box)
+{
+    last_lower_bounding_box_ = last_lower_bounding_box;
+}
+
+void SegmenterHSV::set_last_upper_bounding_box(Eigen::Vector3f const& last_upper_bounding_box)
+{
+    last_upper_bounding_box_ = last_upper_bounding_box;
+}

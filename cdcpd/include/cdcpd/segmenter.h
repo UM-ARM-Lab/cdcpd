@@ -69,7 +69,13 @@ public:
 
     virtual void segment(const PointCloudRGB::Ptr & input_points);
 
-    Eigen::Vector3f const last_lower_bounding_box_;
-    Eigen::Vector3f const last_upper_bounding_box_;
+    void set_last_lower_bounding_box(Eigen::Vector3f const& last_lower_bounding_box);
+
+    void set_last_upper_bounding_box(Eigen::Vector3f const& last_upper_bounding_box);
+
+protected:
+
+    Eigen::Vector3f last_lower_bounding_box_;
+    Eigen::Vector3f last_upper_bounding_box_;
     SegmenterParameters const params_;
 };

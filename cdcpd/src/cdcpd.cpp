@@ -20,7 +20,6 @@
 #include <string>
 
 #include "cdcpd/obs_util.h"
-#include "cdcpd/segmenter.h"
 
 std::string const LOGNAME = "cdcpd";
 
@@ -350,36 +349,36 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseD
 
 // This is for the case where the gripper indices are unknown (in real experiment)
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different data-type for python
-    const Matrix2Xi &template_edges, const float objective_value_threshold, const bool use_recovery,
+    const Matrix2Xi &_template_edges, const float objective_value_threshold, const bool use_recovery,
     const double alpha, const double beta, const double lambda, const double k, const float zeta,
     const float obstacle_cost_weight, const float fixed_points_weight)
-    : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges,
-        objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
-        fixed_points_weight)
-{}
+//     : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges,
+//         objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
+//         fixed_points_weight)
+// {}
 
-CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-    const Matrix2Xi &_template_edges, const float objective_value_threshold,
-    const bool use_recovery, const double alpha, const double beta, const double lambda,
-    const double k, const float zeta, const float obstacle_cost_weight,
-    const float fixed_points_weight)
-    : nh_(nh),
-      ph_(ph),
-      original_template_(template_cloud->getMatrixXfMap().topRows(3)),
-      template_edges_(_template_edges),
-      last_lower_bounding_box_(original_template_.rowwise().minCoeff()),       // TODO make configurable?
-      last_upper_bounding_box_(original_template_.rowwise().maxCoeff()),       // TODO make configurable?
-      lle_neighbors_(8),                                                      // TODO make configurable?
-      m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make configurable?
-      w_(0.1),                                                                // TODO make configurable?
-      start_lambda_(lambda),
-      k_(k),
-      kvis_(1e3),
-      obstacle_cost_weight_(obstacle_cost_weight),
-      fixed_points_weight_(fixed_points_weight),
-      use_recovery_(use_recovery),
-      last_grasp_status_({false, false}),
-      objective_value_threshold_(objective_value_threshold)
+// CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
+//     const Matrix2Xi &_template_edges, const float objective_value_threshold,
+//     const bool use_recovery, const double alpha, const double beta, const double lambda,
+//     const double k, const float zeta, const float obstacle_cost_weight,
+//     const float fixed_points_weight)
+//     : nh_(nh),
+//       ph_(ph),
+      : original_template_(template_cloud->getMatrixXfMap().topRows(3)),
+        template_edges_(_template_edges),
+        last_lower_bounding_box_(original_template_.rowwise().minCoeff()),       // TODO make configurable?
+        last_upper_bounding_box_(original_template_.rowwise().maxCoeff()),       // TODO make configurable?
+        lle_neighbors_(8),                                                      // TODO make configurable?
+        m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make configurable?
+        w_(0.1),                                                                // TODO make configurable?
+        start_lambda_(lambda),
+        k_(k),
+        kvis_(1e3),
+        obstacle_cost_weight_(obstacle_cost_weight),
+        fixed_points_weight_(fixed_points_weight),
+        use_recovery_(use_recovery),
+        last_grasp_status_({false, false}),
+        objective_value_threshold_(objective_value_threshold)
 {
   last_lower_bounding_box_ = last_lower_bounding_box_ - bounding_box_extend;
   last_upper_bounding_box_ = last_upper_bounding_box_ + bounding_box_extend;
@@ -501,8 +500,10 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
   PointCloud::Ptr cloud_downsampled(new PointCloud);
   {
     Stopwatch stopwatch_segmentation("Segmentation");
-    auto segmenter = std::make_unique<SegmenterHSV>(ph_, last_lower_bounding_box_,
-        last_upper_bounding_box_);
+    // auto segmenter = std::make_unique<SegmenterHSV>(ph_, last_lower_bounding_box_,
+    //     last_upper_bounding_box_);
+    segmenter->set_last_lower_bounding_box(last_lower_bounding_box_);
+    segmenter->set_last_upper_bounding_box(last_upper_bounding_box_);
     segmenter->segment(points);
 
     // Drop color info from the point cloud.
@@ -603,6 +604,12 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   output.downsampled_cloud = cloud_downsampled;
 
   return output;
+}
+
+CDCPD::Output CDCPD::run(CDCPDIterationInputs const& in)
+{
+  return (*this)(in.Y, in.Y_emit_prior, in.X, in.obstacle_constraints, in.max_segment_length,
+    in.pred_fixed_points, in.tracking_map, in.q_dot, in.q_config, in.pred_choice);
 }
 
 CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
