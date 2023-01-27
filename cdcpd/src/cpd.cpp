@@ -15,8 +15,8 @@ CPDInterface::CPDInterface(std::string const log_name_base, double const toleran
     , m_lle_(m_lle)
 {}
 
-MatrixXf CPDInterface::calculate_P_matrix(const Eigen::Ref<const Matrix3Xf>& X,
-    const Eigen::Ref<const VectorXf>& Y_emit_prior, const Eigen::Ref<const Matrix3Xf>&  TY,
+MatrixXf CPDInterface::calculate_P_matrix(const Ref<const Matrix3Xf>& X,
+    const Ref<const VectorXf>& Y_emit_prior, const Ref<const Matrix3Xf>&  TY,
     double const sigma2)
 {
     MatrixXf P(M_, N_);
@@ -43,7 +43,7 @@ MatrixXf CPDInterface::calculate_P_matrix(const Eigen::Ref<const Matrix3Xf>& X,
     return P;
 }
 
-double CPDInterface::initial_sigma2(const Eigen::Ref<const MatrixXf>&  X, const Eigen::Ref<const MatrixXf>&  Y)
+double CPDInterface::initial_sigma2(const Ref<const MatrixXf>&  X, const Ref<const MatrixXf>&  Y)
 {
     // X: (3, N) matrix, X^t in Algorithm 1
     // Y: (3, M) matrix, Y^(t-1) in Algorithm 1
@@ -67,9 +67,9 @@ CPD::CPD(std::string const log_name_base, double const tolerance, int const max_
         zeta, start_lambda, m_lle)
 {}
 
-Matrix3Xf CPD::operator()(const Eigen::Ref<const Matrix3Xf>& X,
-    const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
-    const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map)
+Matrix3Xf CPD::operator()(const Ref<const Matrix3Xf>& X,
+    const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
+    const Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map)
 {
     // X: (3, M) matrix of downsampled, masked point cloud
     // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
@@ -184,9 +184,9 @@ CPDMultiTemplate::CPDMultiTemplate(std::string const log_name_base, double const
         zeta, start_lambda, m_lle)
 {}
 
-Matrix3Xf CPDMultiTemplate::operator()(const Eigen::Ref<const Matrix3Xf>& X,
-    const Eigen::Ref<const Matrix3Xf>& Y, const Eigen::Ref<const Matrix3Xf>& Y_pred,
-    const Eigen::Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map)
+Matrix3Xf CPDMultiTemplate::operator()(const Ref<const Matrix3Xf>& X,
+    const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
+    const Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map)
 {
     // X: (3, M) matrix of downsampled, masked point cloud
     // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
@@ -306,8 +306,8 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_gaussian_kernel(
     return kernel_ptr;
 }
 
-MatrixXf CPDMultiTemplate::calculate_association_prior(const Eigen::Ref<const Matrix3Xf>& X,
-    const Eigen::Ref<const Matrix3Xf>& TY, TrackingMap const& tracking_map, double const sigma2)
+MatrixXf CPDMultiTemplate::calculate_association_prior(const Ref<const Matrix3Xf>& X,
+    const Ref<const Matrix3Xf>& TY, TrackingMap const& tracking_map, double const sigma2)
 {
     std::shared_ptr<MatrixXf> d_M_ptr = calculate_mahalanobis_matrix(X, TY, sigma2);
 
@@ -376,9 +376,9 @@ MatrixXf CPDMultiTemplate::calculate_association_prior(const Eigen::Ref<const Ma
 }
 
 float CPDMultiTemplate::mahalanobis_distance(
-    const Eigen::Ref<const VectorXf>& gaussian_centroid,
-    const Eigen::Ref<const MatrixXf>& covariance_inverse,
-    const Eigen::Ref<const VectorXf>& pt)
+    const Ref<const VectorXf>& gaussian_centroid,
+    const Ref<const MatrixXf>& covariance_inverse,
+    const Ref<const VectorXf>& pt)
 {
     auto const diff = pt - gaussian_centroid;
     // Using sum here as a means to convert 1x1 Eigen matrix to a double.
@@ -388,7 +388,7 @@ float CPDMultiTemplate::mahalanobis_distance(
 }
 
 std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(
-    const Eigen::Ref<const MatrixXf>&  d_M, TrackingMap const& tracking_map)
+    const Ref<const MatrixXf>&  d_M, TrackingMap const& tracking_map)
 {
     // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
     std::vector<TemplateVertexAssignment> vertex_assignments =
@@ -435,8 +435,8 @@ std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(
 }
 
 std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_second_closest_gaussians(
-    const Eigen::Ref<const MatrixXf>& d_M, TrackingMap const& tracking_map,
-    const Eigen::Ref<const MatrixXi>& closest_gaussians)
+    const Ref<const MatrixXf>& d_M, TrackingMap const& tracking_map,
+    const Ref<const MatrixXi>& closest_gaussians)
 {
     // Find the closest Gaussian to the point that is a neighbor to the closest Gaussian in the
     // connectivity graph.
@@ -491,8 +491,8 @@ std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_second_closest_gaussi
 }
 
 Eigen::VectorXf CPDMultiTemplate::project_point_onto_line(
-    const Eigen::Ref<const VectorXf>& line_start, const Eigen::Ref<const VectorXf>& line_end,
-    const Eigen::Ref<const VectorXf>& pt)
+    const Ref<const VectorXf>& line_start, const Ref<const VectorXf>& line_end,
+    const Ref<const VectorXf>& pt)
 {
     auto const edge_line = line_end - line_start;
     auto const pt_line = pt - line_start;
@@ -513,9 +513,9 @@ Eigen::VectorXf CPDMultiTemplate::project_point_onto_line(
 }
 
 SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centroids(
-    const Eigen::Ref<const Matrix3Xf>& X, const Eigen::Ref<const Matrix3Xf>& TY,
-    const Eigen::Ref<const MatrixXi>& closest_gaussians,
-    const Eigen::Ref<const MatrixXi>& second_closest_gaussians)
+    const Ref<const Matrix3Xf>& X, const Ref<const Matrix3Xf>& TY,
+    const Ref<const MatrixXi>& closest_gaussians,
+    const Ref<const MatrixXi>& second_closest_gaussians)
 {
     SyntheticGaussianCentroidsVector synthetic_gaussian_centroids_all_templates;
 
@@ -555,7 +555,7 @@ SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centr
 }
 
 std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(
-    const Eigen::Ref<const Matrix3Xf>&  X, const Eigen::Ref<const Matrix3Xf>&  TY,
+    const Ref<const Matrix3Xf>&  X, const Ref<const Matrix3Xf>&  TY,
     double const sigma2)
 {
     // Creating a matrix on the heap so we don't have to worry about expensive matrix copy
@@ -579,7 +579,7 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(
 }
 
 std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_point_to_template_distance(
-    const Eigen::Ref<const Matrix3Xf>&  X,
+    const Ref<const Matrix3Xf>&  X,
     SyntheticGaussianCentroidsVector const& synthetic_centroids, double const sigma2)
 {
     int const num_templates = synthetic_centroids.size();
