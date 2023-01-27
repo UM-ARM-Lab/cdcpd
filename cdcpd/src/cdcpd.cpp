@@ -21,6 +21,8 @@
 
 #include "cdcpd/obs_util.h"
 
+#include <iostream>
+
 std::string const LOGNAME = "cdcpd";
 
 using cv::Mat;
@@ -125,13 +127,17 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
   // lle_neighbors: parameter for lle calculation
   // reg: regularization term (necessary when lle_neighbor > dimension)
   PointCloud::ConstPtr cloud = kdtree.getInputCloud();
+  std::cout << "Cloud height: " << cloud->height << std::endl;
+  std::cout << "Cloud width: " << cloud->width << std::endl;
   assert(cloud->height == 1);
+  std::cout << "After assert\n";
   // adjacencies: save index of adjacent points
   MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
   // B: save weight W_ij
   MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
   MatrixXf v = VectorXf::Ones(lle_neighbors);
   // algorithm: see https://cs.nyu.edu/~roweis/lle/algorithm.html
+  std::cout << "before loop\n";
   for (size_t i = 0; i < cloud->width; ++i) {
     std::vector<int> neighbor_inds(lle_neighbors + 1);
     std::vector<float> neighbor_dists(lle_neighbors + 1);
@@ -154,6 +160,7 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
     VectorXf w = G.llt().solve(v);
     B.row(i) = w / w.sum();
   }
+  std::cout << "Loop done\n";
   MatrixXf graph = MatrixXf::Zero(cloud->width, cloud->width);
   for (ssize_t i = 0; i < graph.rows(); ++i) {
     for (ssize_t j = 0; j < lle_neighbors; ++j) {
@@ -166,17 +173,21 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
 MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_neighbors,
     double reg)
 {
+  std::cout << "LLE begin\n";
   // calculate H in Eq. (18)
   // template_cloud: Y^0 in Eq. (15) and (16)
   // lle_neighbors: parameter for lle calculation
   // reg: regularization term (seems unnecessary)
   pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
   kdtree.setInputCloud(template_cloud);
+  std::cout << "after setting input cloud\n";
   // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
   MatrixXf W = barycenter_kneighbors_graph(kdtree, lle_neighbors, reg);
   // M: (M, M) matrix, corresponding to H in Eq. (18)
+  std::cout << "after barycenter_kneighbors_graph\n";
   MatrixXf M = (W.transpose() * W) - W.transpose() - W;
   M.diagonal().array() += 1;
+  std::cout << "LLE end\n";
   return M;
 }
 
@@ -347,6 +358,18 @@ Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseD
   }
 }
 
+// TEMPORARY FOR PYTHON BINDING.
+// However, I might change to using just a TrackingMap and CDCPD_Parameters instance for
+// initialization.
+CDCPD::CDCPD(TrackingMap const& tracking_map, const float objective_value_threshold,
+    const bool use_recovery, const double alpha, const double beta, const double lambda,
+    const double k, const float zeta, const float obstacle_cost_weight,
+    const float fixed_points_weight)
+    : CDCPD(tracking_map.form_vertices_cloud(), tracking_map.form_edges_matrix(),
+    objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
+    fixed_points_weight)
+{}
+
 // This is for the case where the gripper indices are unknown (in real experiment)
 CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different data-type for python
     const Matrix2Xi &_template_edges, const float objective_value_threshold, const bool use_recovery,
@@ -368,8 +391,12 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
         template_edges_(_template_edges),
         last_lower_bounding_box_(original_template_.rowwise().minCoeff()),       // TODO make configurable?
         last_upper_bounding_box_(original_template_.rowwise().maxCoeff()),       // TODO make configurable?
-        lle_neighbors_(8),                                                      // TODO make configurable?
-        m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make configurable?
+        // lle_neighbors_(std::min(8, static_cast<int>(original_template_.cols()))), // TODO make
+        // configurable?
+        lle_neighbors_(1),
+        m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make
+        // configurable?
+        // m_lle_(Eigen::MatrixXf::Zero(original_template_.cols(), original_template_.cols())),
         w_(0.1),                                                                // TODO make configurable?
         start_lambda_(lambda),
         k_(k),
@@ -380,6 +407,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
         last_grasp_status_({false, false}),
         objective_value_threshold_(objective_value_threshold)
 {
+  // Temporary for Python binding testing.
+  ros::Time::init();
+  std::cout << "Past initializer list\n";
   last_lower_bounding_box_ = last_lower_bounding_box_ - bounding_box_extend;
   last_upper_bounding_box_ = last_upper_bounding_box_ + bounding_box_extend;
 
@@ -394,6 +424,7 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
   int const max_cpd_iterations = 100;
 
   // TODO(Dylan): Make choice of CPD algorithm here based on ROS params or using a CDCPD builder.
+  std::cout << "Before CPD construction\n";
   auto cpd_runner_choice = std::make_shared<CPD>(LOGNAME, tolerance_cpd, max_cpd_iterations,
       initial_sigma_scale, w_, alpha, beta, zeta, start_lambda_, m_lle_);
 
@@ -608,7 +639,9 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
 CDCPD::Output CDCPD::run(CDCPDIterationInputs const& in)
 {
-  return (*this)(in.Y, in.Y_emit_prior, in.X, in.obstacle_constraints, in.max_segment_length,
+  Eigen::Matrix3Xf const Y = in.tracking_map.form_vertices_cloud()->getMatrixXfMap();
+  Eigen::RowVectorXd max_segment_lengths = in.tracking_map.form_max_segment_length_matrix();
+  return (*this)(Y, in.Y_emit_prior, in.X, in.obstacle_constraints, max_segment_lengths,
     in.pred_fixed_points, in.tracking_map, in.q_dot, in.q_config, in.pred_choice);
 }
 

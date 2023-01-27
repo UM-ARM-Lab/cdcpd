@@ -95,11 +95,11 @@ class CDCPDIterationInputs
 public:
     // CDCPDIterationInputs();
 
-    Eigen::Matrix3Xf Y;
+    // Eigen::Matrix3Xf Y;
     Eigen::VectorXf Y_emit_prior;
     Eigen::Matrix3Xf X;
     ObstacleConstraints obstacle_constraints;
-    Eigen::RowVectorXd max_segment_length;
+    // Eigen::RowVectorXd max_segment_length;
     std::vector<FixedPoint> pred_fixed_points;
     TrackingMap tracking_map;
     smmap::AllGrippersSinglePoseDelta q_dot;
@@ -117,7 +117,21 @@ class CDCPD {
     PointCloud::Ptr cpd_predict;
     PointCloud::Ptr gurobi_output;
     OutputStatus status;
+
+    Eigen::Matrix3Xf get_cpd_output()
+    {
+        return cpd_output->getMatrixXfMap().topRows(3);
+    }
+
+    Eigen::Matrix3Xf get_gurobi_output()
+    {
+        return gurobi_output->getMatrixXfMap().topRows(3);
+    }
   };
+
+  CDCPD(TrackingMap const& tracking_map, float objective_value_threshold, bool use_recovery = false,
+      double alpha = 0.5, double beta = 1.0, double lambda = 1.0, double k = 100.0,
+      float zeta = 10.0, float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
   CDCPD(PointCloud::ConstPtr template_cloud, const Eigen::Matrix2Xi &_template_edges,
       float objective_value_threshold, bool use_recovery = false, double alpha = 0.5,

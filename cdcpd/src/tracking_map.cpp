@@ -1,5 +1,7 @@
 #include "cdcpd/tracking_map.h"
 
+#include <iostream>
+
 TrackingMap::TrackingMap()
     : tracking_map(),
       deformable_object_id_next_(0),
@@ -109,6 +111,7 @@ void TrackingMap::update_def_obj_vertices(pcl::shared_ptr<PointCloud> const vert
 
 PointCloud::Ptr TrackingMap::form_vertices_cloud(bool const use_initial_state) const
 {
+    std::cout << "At least made it here!\n";
     PointCloud::Ptr vertices_cloud(new PointCloud);
     // I don't think we actually care about the stamp at this point.
     // bool stamp_copied = false;
@@ -124,11 +127,13 @@ PointCloud::Ptr TrackingMap::form_vertices_cloud(bool const use_initial_state) c
         // Concatenate this deformable object's point cloud with the aggregate point cloud.
         (*vertices_cloud) += (*tracking->getPointCloud());
     }
+    std::cout << "End form_vertices_cloud\n";
     return vertices_cloud;
 }
 
 Eigen::Matrix2Xi TrackingMap::form_edges_matrix(bool const use_initial_state) const
 {
+    std::cout << "Start form_edges_matrix\n";
     int const num_edges_total = get_total_num_edges();
 
     // Initialize an Eigen matrix for keeping track of the edges.
@@ -152,6 +157,7 @@ Eigen::Matrix2Xi TrackingMap::form_edges_matrix(bool const use_initial_state) co
             ++edge_idx_aggregate;
         }
     }
+    std::cout << "End form_edges_matrix\n";
     return edges_total;
 }
 

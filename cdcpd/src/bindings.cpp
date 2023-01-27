@@ -15,34 +15,42 @@ PYBIND11_MODULE(pycdcpd, m)
 {
   m.doc() = "python bindings to cdcpd";
   py::class_<CDCPD>(m, "PyCDCPD")
-      .def(py::init<PointCloud::ConstPtr,
-               const Eigen::Matrix2Xi &,
-               const bool,
-               const double,
-               const double,
-               const double,
-               const double,
-               const float,
-               const bool>(),
-           py::arg("template_cloud"),
-           py::arg("template_edges"),
+      .def(py::init<TrackingMap const&,
+           const float,
+           const bool,
+           const double,
+           const double,
+           const double,
+           const double,
+           const float,
+           const float,
+           const float>(),
+           py::arg("tracking_map"),
+           py::arg("objective_value_threshold"),
            py::arg("use_recovery"),
            py::arg("alpha"),
            py::arg("beta"),
            py::arg("lambda"),
            py::arg("k"),
            py::arg("zeta"),
-           py::arg("is_sim")
+           py::arg("obstacle_cost_weight"),
+           py::arg("fixed_points_weight")
       ) // Constructor
     .def("run", &CDCPD::run);
 
+  py::class_<CDCPD::Output>(m, "CDCPDOutput")
+    .def("get_cpd_output", &CDCPD::Output::get_cpd_output)
+    .def("get_gurobi_output", &CDCPD::Output::get_gurobi_output)
+    ;
+
   py::class_<CDCPDIterationInputs>(m, "CDCPDIterationInputs")
     .def(py::init<>())
-    .def_readwrite("Y", &CDCPDIterationInputs::Y)
+    // Have to translate this one using the tracking map in the CDCPD::run call.
+    // .def_readwrite("Y", &CDCPDIterationInputs::Y)
     .def_readwrite("Y_emit_prior", &CDCPDIterationInputs::Y_emit_prior)
     .def_readwrite("X", &CDCPDIterationInputs::X)
     .def_readwrite("obstacle_constraints", &CDCPDIterationInputs::obstacle_constraints)
-    .def_readwrite("max_segment_length", &CDCPDIterationInputs::max_segment_length)
+    // .def_readwrite("max_segment_length", &CDCPDIterationInputs::max_segment_length)
     .def_readwrite("pred_fixed_points", &CDCPDIterationInputs::pred_fixed_points)
     .def_readwrite("tracking_map", &CDCPDIterationInputs::tracking_map)
     // .def_readwrite("q_dot", &CDCPDIterationInputs::q_dot)
@@ -50,13 +58,52 @@ PYBIND11_MODULE(pycdcpd, m)
     .def_readwrite("pred_choice", &CDCPDIterationInputs::pred_choice);
 
   // How many of these do I actually have to expose? Right now I'm thinking close to all.
-  py::class_<TrackingMap>(m, "TrackingMap");
+  py::class_<TrackingMap>(m, "TrackingMap")
+    .def(py::init<>())
+    .def("add_def_obj_configuration", &TrackingMap::add_def_obj_configuration)
+    .def("form_vertices_cloud", &TrackingMap::form_vertices_cloud)
+    .def("form_edges_matrix", &TrackingMap::form_edges_matrix)
+    .def("get_total_num_points", &TrackingMap::get_total_num_points)
+    .def_readonly("tracking_map", &TrackingMap::tracking_map)
+  ;
 
-  py::class_<DeformableObjectConfiguration>(m, "DeformableObjectConfiguration");
+  // This is an abstract class so we don't need to define the constructor.
+  py::class_<DeformableObjectConfiguration,
+             std::shared_ptr<DeformableObjectConfiguration> >(m, "DeformableObjectConfiguration")
+    // .def(py::init<>())
+    .def_readwrite("num_points_", &DeformableObjectConfiguration::num_points_)
+    .def_readwrite("max_segment_length_", &DeformableObjectConfiguration::max_segment_length_)
+    .def_readwrite("tracked_", &DeformableObjectConfiguration::tracked_)
+    .def_readwrite("initial_", &DeformableObjectConfiguration::initial_);
 
-  py::class_<DeformableObjectTracking>(m, "DeformableObjectTracking");
+  // TODO: Expose the initializeTracking method in both def obj configuration and RopeConfiguration.
 
-  py::class_<RopeConfiguration>(m, "RopeConfiguration");
+  py::class_<RopeConfiguration, DeformableObjectConfiguration, std::shared_ptr<RopeConfiguration> >(m, "RopeConfiguration")
+    .def(py::init<int const, float const, Eigen::Vector3f const, Eigen::Vector3f const>(),
+      py::arg("num_points_"),
+      py::arg("max_rope_length_"),
+      py::arg("rope_start_position"),
+      py::arg("rope_end_position"))
+    .def("initializeTracking", &RopeConfiguration::initializeTracking)
+    .def_readonly("max_rope_length_", &RopeConfiguration::max_rope_length_)
+    .def_readonly("rope_start_position_initial_", &RopeConfiguration::rope_start_position_initial_)
+    .def_readonly("rope_end_position_initial_", &RopeConfiguration::rope_end_position_initial_)
+    ;
 
-  py::class_<ClothConfiguration>(m, "ClothConfiguration");
+  // py::class_<ClothConfiguration>(m, "ClothConfiguration");
+
+  py::class_<DeformableObjectTracking>(m, "DeformableObjectTracking")
+    .def(py::init<>())
+
+    // To do overloading, you have to cast the methods to function pointers.
+    // .def_property("vertices_",
+    //   py::overload_cast<std::vector<cv::Point3f> const&>(&DeformableObjectTracking::setVertices),
+    //    &DeformableObjectTracking::getVertices)
+    // .def_readonly("", &DeformableObjectTracking::)
+    // .def_readonly("", &DeformableObjectTracking::)
+    // .def_readonly("", &DeformableObjectTracking::)
+    // .def_readonly("", &DeformableObjectTracking::)
+    .def("getVerticesCopy", &DeformableObjectTracking::getVerticesCopy)
+    .def("getEdgesCopy", &DeformableObjectTracking::getEdgesCopy);
+    ;
 }
