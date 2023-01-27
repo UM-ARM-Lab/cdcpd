@@ -215,6 +215,10 @@ class CDCPD {
       const smmap::AllGrippersSinglePoseDelta &q_dot,
       const smmap::AllGrippersSinglePose &q_config, int pred_choice);
 
+
+    // Temporarily moving to public so that I can change point associations externally.
+    std::shared_ptr<CPDInterface> cpd_runner_;
+
 protected:
     // ros::NodeHandle nh_;
     // ros::NodeHandle ph_;
@@ -226,7 +230,7 @@ protected:
     Eigen::Matrix3Xf original_template_;
     Eigen::Matrix2Xi template_edges_;
 
-    std::shared_ptr<CPDInterface> cpd_runner_;
+
 
     // CdcpdParameters params;
     Eigen::Vector3f last_lower_bounding_box_;

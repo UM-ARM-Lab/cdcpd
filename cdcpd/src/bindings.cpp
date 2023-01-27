@@ -6,6 +6,7 @@
 #include <pyrosmsg/pyrosmsg.h>
 
 #include <cdcpd/cdcpd.h>
+#include <cdcpd/cpd.h>
 #include <cdcpd/tracking_map.h>
 #include <cdcpd/deformable_object_configuration.h>
 
@@ -15,7 +16,7 @@ PYBIND11_MODULE(pycdcpd, m)
 {
   m.doc() = "Python bindings to CDCPD";
 
-  // Forward declaration to avoid having C++ type names in the generated Python docs.
+  // Somewhat forward declaration to avoid having C++ type names in the generated Python docs.
   auto pyCDCPD = py::class_<CDCPD>(m, "PyCDCPD");
   auto pyCDCPDOutput = py::class_<CDCPD::Output>(m, "CDCPDOutput");
   auto pyCDCPDIterationInputs = py::class_<CDCPDIterationInputs>(m, "CDCPDIterationInputs");
@@ -29,6 +30,23 @@ PYBIND11_MODULE(pycdcpd, m)
                std::shared_ptr<RopeConfiguration> >(m, "RopeConfiguration");
   auto pyDeformableObjectTracking =
     py::class_<DeformableObjectTracking>(m, "DeformableObjectTracking");
+  auto pyCPDInterface = py::class_<CPDInterface, std::shared_ptr<CPDInterface> >(m, "CPDInterface");
+  auto pyCPD = py::class_<CPD, CPDInterface, std::shared_ptr<CPD> >(m, "CPD");
+  auto pyCPDMultiTemplate =
+    py::class_<CPDMultiTemplate,
+               CPDInterface,
+               std::shared_ptr<CPDMultiTemplate> >(m, "CPDMultiTemplate");
+  auto pyCPDMultiTemplateMahalanobis =
+    py::class_<CPDMultiTemplateMahalanobis,
+               CPDMultiTemplate,
+               std::shared_ptr<CPDMultiTemplateMahalanobis> >(m, "CPDMultiTemplateMahalanobis");
+  auto pyCPDMultiTemplateExternalPointAssignment =
+    py::class_<CPDMultiTemplateExternalPointAssignment,
+               CPDMultiTemplate,
+               std::shared_ptr<CPDMultiTemplateExternalPointAssignment> >(
+                 m,
+                 "CPDMultiTemplateExternalPointAssignment"
+               );
 
   pyCDCPD.def(py::init<TrackingMap const&,
                        const float,
@@ -51,7 +69,10 @@ PYBIND11_MODULE(pycdcpd, m)
               py::arg("obstacle_cost_weight"),
               py::arg("fixed_points_weight")
       ) // Constructor
-    .def("run", &CDCPD::run);
+    .def("run", &CDCPD::run)
+    // .def_readonly("m_lle_", &CDCPD::m_lle_)
+    .def_readwrite("cpd_runner", &CDCPD::cpd_runner_)
+    ;
 
   pyCDCPDOutput.def("get_cpd_output", &CDCPD::Output::get_cpd_output)
     .def("get_gurobi_output", &CDCPD::Output::get_gurobi_output)
@@ -67,6 +88,7 @@ PYBIND11_MODULE(pycdcpd, m)
 
   pyTrackingMap.def(py::init<>())
     .def("add_def_obj_configuration", &TrackingMap::add_def_obj_configuration)
+    .def("update_def_obj_vertices_from_mat", &TrackingMap::update_def_obj_vertices_from_mat)
     .def("form_vertices_cloud", &TrackingMap::form_vertices_cloud)
     .def("form_edges_matrix", &TrackingMap::form_edges_matrix)
     .def("get_total_num_points", &TrackingMap::get_total_num_points)
@@ -107,5 +129,42 @@ PYBIND11_MODULE(pycdcpd, m)
     // .def_readonly("", &DeformableObjectTracking::)
     .def("getVerticesCopy", &DeformableObjectTracking::getVerticesCopy)
     .def("getEdgesCopy", &DeformableObjectTracking::getEdgesCopy);
+    ;
+
+    // pyCPDInterface
+    //   // .def(py::init<std::string const,
+    //   //               double const,
+    //   //               int const,
+    //   //               double const,
+    //   //               double const,
+    //   //               double const,
+    //   //               double const,
+    //   //               double const,
+    //   //               double const,
+    //   //               MatrixXf const>(),
+    //   //     py::arg("log_name_base"),
+    //   //     py::arg("tolerance"),
+    //   //     py::arg("max_iterations"),
+    //   //     py::arg("initial_sigma_scale"),
+    //   //     py::arg("w"),
+    //   //     py::arg("alpha"),
+    //   //     py::arg("beta"),
+    //   //     py::arg("zeta"),
+    //   //     py::arg("start_lambda"),
+    //   //     py::arg("m_lle"))
+    // ;
+    pyCPDInterface
+      .def("get_point_assignments", &CPDInterface::get_point_assignments)
+      .def("set_point_assignments", &CPDInterface::set_point_assignments);
+
+
+
+
+
+
+
+
+
+
     ;
 }

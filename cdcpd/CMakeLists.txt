@@ -132,6 +132,14 @@ add_executable(cdcpd_node
 add_dependencies(cdcpd_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(cdcpd_node PRIVATE cdcpd ${catkin_LIBRARIES})
 
+# Generate Python interface files for intellisense/type hinting in IDEs.
+if (pybind11_catkin_FOUND)
+    message("Generating pybind11 function stubs.")
+    get_target_property(PYBIND_INSTALL_PATH pycdcpd LIBRARY_OUTPUT_DIRECTORY)
+    execute_process(COMMAND pybind11-stubgen -o ${PYBIND_INSTALL_PATH} --ignore-invalid=all pycdcpd)
+    message("Stubs saved in: ${PYBIND_INSTALL_PATH}")
+endif()
+
 
 ## Testing
 if (CATKIN_ENABLE_TESTING AND CDCPD_TESTING)

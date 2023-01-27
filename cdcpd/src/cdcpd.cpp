@@ -127,17 +127,17 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
   // lle_neighbors: parameter for lle calculation
   // reg: regularization term (necessary when lle_neighbor > dimension)
   PointCloud::ConstPtr cloud = kdtree.getInputCloud();
-  std::cout << "Cloud height: " << cloud->height << std::endl;
-  std::cout << "Cloud width: " << cloud->width << std::endl;
+  // std::cout << "Cloud height: " << cloud->height << std::endl;
+  // std::cout << "Cloud width: " << cloud->width << std::endl;
   assert(cloud->height == 1);
-  std::cout << "After assert\n";
+  // std::cout << "After assert\n";
   // adjacencies: save index of adjacent points
   MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
   // B: save weight W_ij
   MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
   MatrixXf v = VectorXf::Ones(lle_neighbors);
   // algorithm: see https://cs.nyu.edu/~roweis/lle/algorithm.html
-  std::cout << "before loop\n";
+  // std::cout << "before loop\n";
   for (size_t i = 0; i < cloud->width; ++i) {
     std::vector<int> neighbor_inds(lle_neighbors + 1);
     std::vector<float> neighbor_dists(lle_neighbors + 1);
@@ -160,7 +160,7 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
     VectorXf w = G.llt().solve(v);
     B.row(i) = w / w.sum();
   }
-  std::cout << "Loop done\n";
+  // std::cout << "Loop done\n";
   MatrixXf graph = MatrixXf::Zero(cloud->width, cloud->width);
   for (ssize_t i = 0; i < graph.rows(); ++i) {
     for (ssize_t j = 0; j < lle_neighbors; ++j) {
@@ -173,21 +173,21 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
 MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_neighbors,
     double reg)
 {
-  std::cout << "LLE begin\n";
+  // std::cout << "LLE begin\n";
   // calculate H in Eq. (18)
   // template_cloud: Y^0 in Eq. (15) and (16)
   // lle_neighbors: parameter for lle calculation
   // reg: regularization term (seems unnecessary)
   pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
   kdtree.setInputCloud(template_cloud);
-  std::cout << "after setting input cloud\n";
+  // std::cout << "after setting input cloud\n";
   // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
   MatrixXf W = barycenter_kneighbors_graph(kdtree, lle_neighbors, reg);
   // M: (M, M) matrix, corresponding to H in Eq. (18)
-  std::cout << "after barycenter_kneighbors_graph\n";
+  // std::cout << "after barycenter_kneighbors_graph\n";
   MatrixXf M = (W.transpose() * W) - W.transpose() - W;
   M.diagonal().array() += 1;
-  std::cout << "LLE end\n";
+  // std::cout << "LLE end\n";
   return M;
 }
 
@@ -393,8 +393,9 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
         last_upper_bounding_box_(original_template_.rowwise().maxCoeff()),       // TODO make configurable?
         // lle_neighbors_(std::min(8, static_cast<int>(original_template_.cols()))), // TODO make
         // configurable?
-        lle_neighbors_(1),
-        m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make
+        lle_neighbors_(2),
+        // m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make
+        m_lle_(MatrixXf::Zero(8, 8)),
         // configurable?
         // m_lle_(Eigen::MatrixXf::Zero(original_template_.cols(), original_template_.cols())),
         w_(0.1),                                                                // TODO make configurable?
@@ -409,14 +410,54 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
 {
   // Temporary for Python binding testing.
   ros::Time::init();
-  std::cout << "Past initializer list\n";
+  // std::cout << "Past initializer list\n";
   last_lower_bounding_box_ = last_lower_bounding_box_ - bounding_box_extend;
   last_upper_bounding_box_ = last_upper_bounding_box_ + bounding_box_extend;
 
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-  kdtree.setInputCloud(template_cloud);
+  // Need to make LLE respect separate templates. For right now I'm going to hard code in a split in
+  // the original template but this should likely be recomputed at every time step.
+  // 1. split the template cloud into two separate clouds.
+  PointCloud::Ptr template_cloud1(new PointCloud);
+  PointCloud::Ptr template_cloud2(new PointCloud);
+  // = template_cloud->
+  for (int i = 0; i < 4; ++i)
+  {
+    template_cloud1->push_back(template_cloud->points[i]);
+  }
+  for (int i = 4; i < 8; ++i)
+  {
+    template_cloud2->push_back(template_cloud->points[i]);
+  }
+
+  // ****** m_lle_ ?? This appears to be the same thing as L_lle_ below but I'm pressed for time and
+  // can't look into it.
+  auto m_lle_1 = locally_linear_embedding(template_cloud1, lle_neighbors_, 1e-3);
+  auto m_lle_2 = locally_linear_embedding(template_cloud2, lle_neighbors_, 1e-3);
+  m_lle_ = MatrixXf::Zero(8, 8);
+  m_lle_.block(0, 0, 4, 4) = m_lle_1;
+  m_lle_.block(4, 4, 4, 4) = m_lle_2;
+
+  // ****** Weight Matrix
+  // for template 1
+  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree1;
+  kdtree1.setInputCloud(template_cloud1);
   // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-  L_lle_ = barycenter_kneighbors_graph(kdtree, lle_neighbors_, 0.001);
+  auto L_lle_1 = barycenter_kneighbors_graph(kdtree1, lle_neighbors_, 0.001);
+
+  // for template 2
+  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree2;
+  kdtree2.setInputCloud(template_cloud2);
+  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+  auto L_lle_2 = barycenter_kneighbors_graph(kdtree2, lle_neighbors_, 0.001);
+
+  L_lle_ = MatrixXf::Zero(8, 8);
+  L_lle_.block(0, 0, 4, 4) = L_lle_1;
+  L_lle_.block(4, 4, 4, 4) = L_lle_2;
+
+  // std::cout << "Full L_lle_:" << L_lle_ << std::endl;
+
+  // Combine the two LLEs by using matrix blocks. The matrix should be partioned into a
+  // pseudo-diagonal matrix where there are zeros in the upper right and lower left blocks.
 
   // TODO(Dylan): Make these parameters configurable via ROS params?
   double const tolerance_cpd = 1e-4;
@@ -424,9 +465,13 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
   int const max_cpd_iterations = 100;
 
   // TODO(Dylan): Make choice of CPD algorithm here based on ROS params or using a CDCPD builder.
-  std::cout << "Before CPD construction\n";
-  auto cpd_runner_choice = std::make_shared<CPD>(LOGNAME, tolerance_cpd, max_cpd_iterations,
-      initial_sigma_scale, w_, alpha, beta, zeta, start_lambda_, m_lle_);
+  // std::cout << "Before CPD construction\n";
+  auto cpd_runner_choice =
+    std::make_shared<CPDMultiTemplateExternalPointAssignment>
+    // std::make_shared<CPD>
+      (LOGNAME, tolerance_cpd,
+      max_cpd_iterations, initial_sigma_scale, w_, alpha, beta, zeta, start_lambda_, m_lle_);
+  // std::cout << "Before CPD casting\n";
 
   // Upcast the cpd_runner_choice to the CPDInterface that we'll interact with to run CPD.
   cpd_runner_ = cpd_runner_choice;
@@ -639,7 +684,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
 CDCPD::Output CDCPD::run(CDCPDIterationInputs const& in)
 {
-  Eigen::Matrix3Xf const Y = in.tracking_map.form_vertices_cloud()->getMatrixXfMap();
+  Eigen::Matrix3Xf const Y = in.tracking_map.form_vertices_cloud()->getMatrixXfMap().topRows(3);
   Eigen::RowVectorXd max_segment_lengths = in.tracking_map.form_max_segment_length_matrix();
   return (*this)(Y, in.Y_emit_prior, in.X, in.obstacle_constraints, max_segment_lengths,
     in.pred_fixed_points, in.tracking_map, in.q_dot, in.q_config, in.pred_choice);

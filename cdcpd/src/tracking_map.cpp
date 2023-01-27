@@ -91,32 +91,51 @@ void TrackingMap::add_def_obj_configuration(
 
 void TrackingMap::update_def_obj_vertices(pcl::shared_ptr<PointCloud> const vertices_new)
 {
+    // std::vector<TemplateVertexAssignment> vertex_assignments = get_vertex_assignments();
+    // auto const& cloud_it_begin = vertices_new->begin();
+    // for (auto const& assignment : vertex_assignments)
+    // {
+    //     // Get the deformable object configuration we're updating.
+    //     std::shared_ptr<DeformableObjectConfiguration>& def_obj_config =
+    //         tracking_map[assignment.template_id];
+
+    //     // Use the point cloud iterators and std::copy to efficiently update the tracked points.
+    //     // auto const& it_begin = cloud_it_begin + assignment.idx_start;
+    //     // auto const& it_end = cloud_it_begin + assignment.idx_end;
+    //     // def_obj_config->tracked_.setPointCloud(it_begin, it_end);
+
+    //     // PointCloud::ConstPtr tracked_cloud = def_obj_config->tracked_.getPointCloud();
+    //     // def_obj_config->tracked_.setVertices(tracked_cloud->getMatrixXfMap().topRows(3));
+    // }
+    update_def_obj_vertices_from_mat(vertices_new->getMatrixXfMap().topRows(3));
+}
+
+void TrackingMap::update_def_obj_vertices_from_mat(Eigen::Matrix3Xf const& verts_new)
+{
     std::vector<TemplateVertexAssignment> vertex_assignments = get_vertex_assignments();
-    auto const& cloud_it_begin = vertices_new->begin();
     for (auto const& assignment : vertex_assignments)
     {
         // Get the deformable object configuration we're updating.
         std::shared_ptr<DeformableObjectConfiguration>& def_obj_config =
             tracking_map[assignment.template_id];
 
-        // Use the point cloud iterators and std::copy to efficiently update the tracked points.
-        auto const& it_begin = cloud_it_begin + assignment.idx_start;
-        auto const& it_end = cloud_it_begin + assignment.idx_end;
-        def_obj_config->tracked_.setPointCloud(it_begin, it_end);
-
-        PointCloud::ConstPtr tracked_cloud = def_obj_config->tracked_.getPointCloud();
-        def_obj_config->tracked_.setVertices(tracked_cloud->getMatrixXfMap().topRows(3));
+        // std::cout << "Updating template #" << assignment.template_id << " between indexes = "
+        //     << assignment.idx_start << ", " << assignment.idx_end << std::endl;
+        int const num_cols = assignment.idx_end - assignment.idx_start;
+        def_obj_config->tracked_.setVertices(
+            verts_new.block(0, assignment.idx_start, 3, num_cols));
     }
 }
 
 PointCloud::Ptr TrackingMap::form_vertices_cloud(bool const use_initial_state) const
 {
-    std::cout << "At least made it here!\n";
+    // std::cout << "At least made it here!\n";
     PointCloud::Ptr vertices_cloud(new PointCloud);
     // I don't think we actually care about the stamp at this point.
     // bool stamp_copied = false;
     for (auto const& def_obj_id : ordered_def_obj_ids_)
     {
+        // std::cout << "\tUpdating def obj id #" << def_obj_id << std::endl;
         // Grab the deformable object configuration.
         std::shared_ptr<DeformableObjectConfiguration> const def_obj_config =
             tracking_map.at(def_obj_id);
@@ -124,16 +143,19 @@ PointCloud::Ptr TrackingMap::form_vertices_cloud(bool const use_initial_state) c
         std::shared_ptr<DeformableObjectTracking> tracking =
             get_appropriate_tracking(def_obj_config, use_initial_state);
 
+        // std::cout << "\tWith point cloud width = " << tracking->getPointCloudCopy()->width
+        //     << std::endl;
+
         // Concatenate this deformable object's point cloud with the aggregate point cloud.
         (*vertices_cloud) += (*tracking->getPointCloud());
     }
-    std::cout << "End form_vertices_cloud\n";
+    // std::cout << "End form_vertices_cloud\n";
     return vertices_cloud;
 }
 
 Eigen::Matrix2Xi TrackingMap::form_edges_matrix(bool const use_initial_state) const
 {
-    std::cout << "Start form_edges_matrix\n";
+    // std::cout << "Start form_edges_matrix\n";
     int const num_edges_total = get_total_num_edges();
 
     // Initialize an Eigen matrix for keeping track of the edges.
@@ -157,7 +179,7 @@ Eigen::Matrix2Xi TrackingMap::form_edges_matrix(bool const use_initial_state) co
             ++edge_idx_aggregate;
         }
     }
-    std::cout << "End form_edges_matrix\n";
+    // std::cout << "End form_edges_matrix\n";
     return edges_total;
 }
 

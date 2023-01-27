@@ -24,9 +24,9 @@ public:
         double const zeta, double const start_lambda, MatrixXf const m_lle);
     virtual ~CPDInterface(){}
 
-    VectorXi get_point_assignments(){ return point_assignments_; }
+    MatrixXf get_point_assignments();
 
-    void set_point_assignments(const Ref<const VectorXi>& assignments){ point_assignments_ = assignments; }
+    void set_point_assignments(const Ref<const MatrixXf>& assignments);
 
     // TODO(Dylan): Clean up passing in the tracking_map. This is passing in way too much information.
     virtual Matrix3Xf operator()(const Ref<const Matrix3Xf>& X,
@@ -63,7 +63,9 @@ protected:
     // TODO(Dylan): Determine if I want to keep this. It would be nice to be able pull out point
     // associations given by CPD (if CPD does indeed determine it in our future algorithm) for
     // storage in the CDCPD::Output type.
-    VectorXi point_assignments_;
+    // In R^{M x N} (same shape as P matrix).
+    MatrixXf point_assignments_;
+    bool has_point_assignments_been_set_;
 
     // Number of Gaussians considered in the CPD iteration.
     int M_;
@@ -91,29 +93,41 @@ protected:
     MatrixXf calculate_gaussian_kernel();
 };
 
-// Performs an augmented version of CPD, designed for multi-template tracking.
-// NOTE: There's a lot of functions that return pointers to matrices that can get confusing.
-//       the reason for this is so that we create the matrices on the heap instead of the stack
-//       which avoids expensive matrix copies every time we call a function that creates a matrix.
+// Abstract class for multi-template CPD.
 class CPDMultiTemplate : public CPDInterface
 {
 public:
     CPDMultiTemplate(std::string const log_name_base, double const tolerance, int const max_iterations,
         double const initial_sigma_scale, double const w, double const alpha, double const beta,
         double const zeta, double const start_lambda, MatrixXf const m_lle);
-    ~CPDMultiTemplate(){}
 
-    Matrix3Xf operator()(const Ref<const Matrix3Xf>& X,
-        const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
-        const Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) override;
+    virtual ~CPDMultiTemplate(){}
 
 protected:
     // Calculates the Gaussian kernel (G in paper).
     // NOTE: This is slightly modified for multi-template tracking such that the kernel values for
     // Gaussians between templates is set to zero.
     std::shared_ptr<MatrixXf> calculate_gaussian_kernel(TrackingMap const& tracking_map);
+};
 
-    // Computes the pointwise association prior
+// Performs an augmented version of CPD, designed for multi-template tracking.
+// NOTE: There's a lot of functions that return pointers to matrices that can get confusing.
+//       the reason for this is so that we create the matrices on the heap instead of the stack
+//       which avoids expensive matrix copies every time we call a function that creates a matrix.
+class CPDMultiTemplateMahalanobis : public CPDMultiTemplate
+{
+public:
+    CPDMultiTemplateMahalanobis(std::string const log_name_base, double const tolerance, int const max_iterations,
+        double const initial_sigma_scale, double const w, double const alpha, double const beta,
+        double const zeta, double const start_lambda, MatrixXf const m_lle);
+    ~CPDMultiTemplateMahalanobis(){}
+
+    Matrix3Xf operator()(const Ref<const Matrix3Xf>& X,
+        const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
+        const Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) override;
+
+protected:
+    // Computes the pointwise association prior in R^{M, N}
     MatrixXf calculate_association_prior(const Ref<const Matrix3Xf>& X,
         const Ref<const Matrix3Xf>& TY, TrackingMap const& tracking_map,
         double const sigma2);
@@ -157,4 +171,18 @@ protected:
     // overhead.
     Eigen::MatrixXf get_covariance_inverse(float const sigma2);
 
+};
+
+class CPDMultiTemplateExternalPointAssignment : public CPDMultiTemplate
+{
+public:
+    CPDMultiTemplateExternalPointAssignment(std::string const log_name_base, double const tolerance,
+        int const max_iterations, double const initial_sigma_scale, double const w,
+        double const alpha, double const beta, double const zeta, double const start_lambda,
+        MatrixXf const m_lle);
+    ~CPDMultiTemplateExternalPointAssignment(){}
+
+    Matrix3Xf operator()(const Ref<const Matrix3Xf>& X,
+        const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
+        const Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map) override;
 };

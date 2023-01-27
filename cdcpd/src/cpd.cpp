@@ -1,5 +1,7 @@
 #include "cdcpd/cpd.h"
 
+#include <iostream>
+
 CPDInterface::CPDInterface(std::string const log_name_base, double const tolerance,
     int const max_iterations, double const initial_sigma_scale, double const w, double const alpha,
     double const beta, double const zeta, double const start_lambda, MatrixXf const m_lle)
@@ -13,12 +15,35 @@ CPDInterface::CPDInterface(std::string const log_name_base, double const toleran
     , zeta_(zeta)
     , start_lambda_(start_lambda)
     , m_lle_(m_lle)
-{}
+    , has_point_assignments_been_set_(false)
+{
+    // // std::cout << "past CPDInterface initializer list\n";
+}
+
+MatrixXf CPDInterface::get_point_assignments()
+{
+    if (has_point_assignments_been_set_)
+    {
+        return point_assignments_;
+    }
+    else
+    {
+        // This represents essentially no information on the point-to-template association.
+        return MatrixXf::Ones(M_, N_);
+    }
+}
+
+void CPDInterface::set_point_assignments(const Ref<const MatrixXf>& assignments)
+{
+    has_point_assignments_been_set_ = true;
+    point_assignments_ = assignments;
+}
 
 MatrixXf CPDInterface::calculate_P_matrix(const Ref<const Matrix3Xf>& X,
     const Ref<const VectorXf>& Y_emit_prior, const Ref<const Matrix3Xf>&  TY,
     double const sigma2)
 {
+    // std::cout << "calculate_P_matrix\n\t1";
     MatrixXf P(M_, N_);
     for (int i = 0; i < M_; ++i)
     {
@@ -27,18 +52,29 @@ MatrixXf CPDInterface::calculate_P_matrix(const Ref<const Matrix3Xf>& X,
             P(i, j) = (X.col(j) - TY.col(i)).squaredNorm();
         }
     }
+    // std::cout << "2";
+
+    // auto association_prior = get_point_assignments();
 
     float c = std::pow(2 * M_PI * sigma2, static_cast<double>(D_) / 2);
     c *= w_ / (1 - w_);
     c *= static_cast<double>(M_) / N_;
+    // std::cout << 3;
+
+    // P = P.cwiseProduct(association_prior);
 
     P = (-P / (2 * sigma2)).array().exp().matrix();
     P.array().colwise() *= Y_emit_prior.array();
+    // std::cout << 4;
 
     RowVectorXf den = P.colwise().sum();
     den.array() += c;
 
+    // std::cout << 5;
+
     P = P.array().rowwise() / den.array();
+
+    // std::cout << "6\n";
 
     return P;
 }
@@ -177,14 +213,63 @@ MatrixXf CPD::calculate_gaussian_kernel()
     return kernel;
 }
 
-CPDMultiTemplate::CPDMultiTemplate(std::string const log_name_base, double const tolerance,
-    int const max_iterations, double const initial_sigma_scale, double const w, double const alpha,
-    double const beta, double const zeta, double const start_lambda, MatrixXf const m_lle)
+CPDMultiTemplate::CPDMultiTemplate(std::string const log_name_base, double const tolerance, int const max_iterations,
+    double const initial_sigma_scale, double const w, double const alpha, double const beta,
+    double const zeta, double const start_lambda, MatrixXf const m_lle)
     : CPDInterface(log_name_base, tolerance, max_iterations, initial_sigma_scale, w, alpha, beta,
         zeta, start_lambda, m_lle)
 {}
 
-Matrix3Xf CPDMultiTemplate::operator()(const Ref<const Matrix3Xf>& X,
+std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_gaussian_kernel(
+    TrackingMap const& tracking_map)
+{
+    std::vector<TemplateVertexAssignment> const vertex_assignments =
+        tracking_map.get_vertex_assignments();
+
+    auto kernel_ptr = std::make_shared<MatrixXf>(M_, M_);
+    MatrixXf& kernel = *kernel_ptr;
+    kernel.setZero();
+
+    // We only assign the kernel non-zero values where the index of the Gaussians belong to the same
+    // template.
+    for (TemplateVertexAssignment const& assignment : vertex_assignments)
+    {
+        // Build the matrix containing the pointwise squared norm for this template.
+        std::shared_ptr<DeformableObjectConfiguration> def_obj_config =
+            tracking_map.tracking_map.at(assignment.template_id);
+        Matrix3Xf const& Y_initial = def_obj_config->initial_.getVertices();
+        int const num_gaussians = assignment.idx_end - assignment.idx_start;
+        MatrixXf diff = MatrixXf::Zero(num_gaussians, num_gaussians);
+
+        for (size_t i = 0; i < num_gaussians; ++i)
+        {
+            for (size_t j = 0; j < num_gaussians; ++j)
+            {
+                float this_diff = (Y_initial.col(i) - Y_initial.col(j)).squaredNorm();
+                // std::cout << "This diff: " << this_diff << std::endl;
+                diff(i, j) = this_diff;
+            }
+        }
+
+        // Set the portion of the Gaussian kernel matrix to the value calculated from the squared
+        // norms.
+        kernel.block(assignment.idx_start, assignment.idx_start, num_gaussians, num_gaussians)
+            = (-diff / (2.0F * beta_ * beta_)).array().exp();
+    }
+
+    // std::cout << "Full Gaussian RBF Kernel:\n" << kernel << std::endl;
+
+    return kernel_ptr;
+}
+
+CPDMultiTemplateMahalanobis::CPDMultiTemplateMahalanobis(std::string const log_name_base, double const tolerance,
+    int const max_iterations, double const initial_sigma_scale, double const w, double const alpha,
+    double const beta, double const zeta, double const start_lambda, MatrixXf const m_lle)
+    : CPDMultiTemplate(log_name_base, tolerance, max_iterations, initial_sigma_scale, w, alpha, beta,
+        zeta, start_lambda, m_lle)
+{}
+
+Matrix3Xf CPDMultiTemplateMahalanobis::operator()(const Ref<const Matrix3Xf>& X,
     const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
     const Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map)
 {
@@ -268,45 +353,7 @@ Matrix3Xf CPDMultiTemplate::operator()(const Ref<const Matrix3Xf>& X,
     return TY;
 }
 
-std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_gaussian_kernel(
-    TrackingMap const& tracking_map)
-{
-    std::vector<TemplateVertexAssignment> const vertex_assignments =
-        tracking_map.get_vertex_assignments();
-
-    auto kernel_ptr = std::make_shared<MatrixXf>(M_, M_);
-    MatrixXf& kernel = *kernel_ptr;
-    kernel.setZero();
-
-    // We only assign the kernel non-zero values where the index of the Gaussians belong to the same
-    // template.
-    for (TemplateVertexAssignment const& assignment : vertex_assignments)
-    {
-        // Build the matrix containing the pointwise squared norm for this template.
-        std::shared_ptr<DeformableObjectConfiguration> def_obj_config =
-            tracking_map.tracking_map.at(assignment.template_id);
-        Matrix3Xf const& Y_initial = def_obj_config->initial_.getVertices();
-        int const num_gaussians = assignment.idx_end - assignment.idx_end;
-        MatrixXf diff = MatrixXf(num_gaussians, num_gaussians);
-
-        for (size_t i = 0; i < num_gaussians; ++i)
-        {
-            for (size_t j = 0; j < num_gaussians; ++j)
-            {
-                diff(i, j) = (Y_initial.col(i) - Y_initial.col(j)).squaredNorm();
-            }
-        }
-
-        // Set the portion of the Gaussian kernel matrix to the value calculated from the squared
-        // norms.
-        kernel.block(assignment.idx_start, assignment.idx_start, num_gaussians, num_gaussians)
-            = (-diff / (2.0F * beta_ * beta_)).array().exp();
-    }
-
-    return kernel_ptr;
-}
-
-MatrixXf CPDMultiTemplate::calculate_association_prior(const Ref<const Matrix3Xf>& X,
+MatrixXf CPDMultiTemplateMahalanobis::calculate_association_prior(const Ref<const Matrix3Xf>& X,
     const Ref<const Matrix3Xf>& TY, TrackingMap const& tracking_map, double const sigma2)
 {
     std::shared_ptr<MatrixXf> d_M_ptr = calculate_mahalanobis_matrix(X, TY, sigma2);
@@ -375,7 +422,7 @@ MatrixXf CPDMultiTemplate::calculate_association_prior(const Ref<const Matrix3Xf
     return association_prior;
 }
 
-float CPDMultiTemplate::mahalanobis_distance(
+float CPDMultiTemplateMahalanobis::mahalanobis_distance(
     const Ref<const VectorXf>& gaussian_centroid,
     const Ref<const MatrixXf>& covariance_inverse,
     const Ref<const VectorXf>& pt)
@@ -387,7 +434,7 @@ float CPDMultiTemplate::mahalanobis_distance(
     return d_M;
 }
 
-std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(
+std::shared_ptr<MatrixXi> CPDMultiTemplateMahalanobis::find_pointwise_closest_gaussians(
     const Ref<const MatrixXf>&  d_M, TrackingMap const& tracking_map)
 {
     // Find the closest Gaussian to each point (by Mahalanobis distance) for each template.
@@ -434,7 +481,7 @@ std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_closest_gaussians(
     return pointwise_closest_gaussians_ptr;
 }
 
-std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_second_closest_gaussians(
+std::shared_ptr<MatrixXi> CPDMultiTemplateMahalanobis::find_pointwise_second_closest_gaussians(
     const Ref<const MatrixXf>& d_M, TrackingMap const& tracking_map,
     const Ref<const MatrixXi>& closest_gaussians)
 {
@@ -490,7 +537,7 @@ std::shared_ptr<MatrixXi> CPDMultiTemplate::find_pointwise_second_closest_gaussi
     return closest_neighboring_gaussians_ptr;
 }
 
-Eigen::VectorXf CPDMultiTemplate::project_point_onto_line(
+Eigen::VectorXf CPDMultiTemplateMahalanobis::project_point_onto_line(
     const Ref<const VectorXf>& line_start, const Ref<const VectorXf>& line_end,
     const Ref<const VectorXf>& pt)
 {
@@ -512,7 +559,7 @@ Eigen::VectorXf CPDMultiTemplate::project_point_onto_line(
     return projection;
 }
 
-SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centroids(
+SyntheticGaussianCentroidsVector CPDMultiTemplateMahalanobis::find_synthetic_gaussian_centroids(
     const Ref<const Matrix3Xf>& X, const Ref<const Matrix3Xf>& TY,
     const Ref<const MatrixXi>& closest_gaussians,
     const Ref<const MatrixXi>& second_closest_gaussians)
@@ -554,7 +601,7 @@ SyntheticGaussianCentroidsVector CPDMultiTemplate::find_synthetic_gaussian_centr
     return synthetic_gaussian_centroids_all_templates;
 }
 
-std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(
+std::shared_ptr<MatrixXf> CPDMultiTemplateMahalanobis::calculate_mahalanobis_matrix(
     const Ref<const Matrix3Xf>&  X, const Ref<const Matrix3Xf>&  TY,
     double const sigma2)
 {
@@ -578,7 +625,7 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_mahalanobis_matrix(
     return d_M_ptr;
 }
 
-std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_point_to_template_distance(
+std::shared_ptr<MatrixXf> CPDMultiTemplateMahalanobis::calculate_point_to_template_distance(
     const Ref<const Matrix3Xf>&  X,
     SyntheticGaussianCentroidsVector const& synthetic_centroids, double const sigma2)
 {
@@ -601,7 +648,7 @@ std::shared_ptr<MatrixXf> CPDMultiTemplate::calculate_point_to_template_distance
     return pt_to_template_dists_ptr;
 }
 
-Eigen::MatrixXf CPDMultiTemplate::get_covariance_inverse(float const sigma2)
+Eigen::MatrixXf CPDMultiTemplateMahalanobis::get_covariance_inverse(float const sigma2)
 {
     float const sigma2_inverse = 1.0 / sigma2;
     Eigen::MatrixXf covariance_inverse = Eigen::MatrixXf(3, 3);
@@ -609,4 +656,133 @@ Eigen::MatrixXf CPDMultiTemplate::get_covariance_inverse(float const sigma2)
                                     0.0, sigma2_inverse,            0.0,
                                     0.0,            0.0, sigma2_inverse;
     return covariance_inverse;
+}
+
+CPDMultiTemplateExternalPointAssignment::CPDMultiTemplateExternalPointAssignment(
+    std::string const log_name_base, double const tolerance,
+    int const max_iterations, double const initial_sigma_scale, double const w,
+    double const alpha, double const beta, double const zeta, double const start_lambda,
+    MatrixXf const m_lle)
+    : CPDMultiTemplate(log_name_base, tolerance, max_iterations, initial_sigma_scale, w, alpha,
+        beta, zeta, start_lambda, m_lle)
+{
+    // std::cout << "Past CPDMultiTemplateExternalPointAssignment initializer list" << std::endl;
+}
+
+Matrix3Xf CPDMultiTemplateExternalPointAssignment::operator()(const Ref<const Matrix3Xf>& X,
+    const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
+    const Ref<const VectorXf>& Y_emit_prior, TrackingMap const& tracking_map)
+{
+    // X: (3, M) matrix of downsampled, masked point cloud
+    // Y: (3, M) matrix Y^t (Y in IV.A) in the paper
+    // Y_pred: (3, M) matrix of predicted tracked point locations.
+    // Y_emit_prior: vector with a probability per tracked point that that Gaussian would generate
+    //     samples at this time step. Generated from the visibility prior.
+    // std::cout << "CPD operator()\n";
+    N_ = X.cols();
+    M_ = Y.cols();
+    D_ = Y.rows();
+
+    // std::cout << "X (rows, cols): (" << X.rows() << ", " << X.cols() << ")\n";
+    // std::cout << "Y (rows, cols): (" << Y.rows() << ", " << Y.cols() << ")\n";
+
+    // G: (M, M) Guassian kernel matrix
+    // MatrixXf G = gaussian_kernel(original_template, beta);  // Y, beta);
+    // std::cout << "G kernel calc\n";
+    std::shared_ptr<MatrixXf> G_ptr = calculate_gaussian_kernel(tracking_map);
+    MatrixXf const& G = *G_ptr;
+
+    // TY: Y^(t) in Algorithm 1
+    Matrix3Xf TY = Y;
+    double sigma2 = initial_sigma2(X, TY) * initial_sigma_scale_;
+
+    int iterations = 0;
+    double error = tolerance_ + 1;  // loop runs the first time
+
+    // This class allows external point assignment so we take the point assignment out of the loop.
+    // std::cout << "pre assoc prior\n";
+    MatrixXf const association_prior = get_point_assignments();
+    // std::cout << "association_prior (rows, cols): (" << association_prior.rows() << ", " << association_prior.cols() << ")\n";
+    // std::cout << "post\n";
+    // std::cout << "X:\n" << X << std::endl;
+    // std::cout << "Y_emit_prior:\n" << Y_emit_prior << std::endl;
+
+    while (iterations <= max_iterations_ && error > tolerance_) {\
+        std::cout << "sigma2: " << sigma2 << std::endl;
+        double qprev = sigma2;
+        // Expectation step
+
+        // P: P in Line 5 in Algorithm 1 (mentioned after Eq. (18))
+        // Calculate Eq. (9) (Line 5 in Algorithm 1)
+        // NOTE: Eq. (9) misses M in the denominator
+
+        MatrixXf P_naive = calculate_P_matrix(X, Y_emit_prior, TY, sigma2);
+        // MatrixXf P = calculate_P_matrix(X, Y_emit_prior, TY, sigma2);
+        // std::cout << "P_naive:\n" << P_naive << std::endl;
+        // std::cout << "P_naive (rows, cols): (" << P_naive.rows() << ", " << P_naive.cols() << ")\n";
+
+        // Multiply P by the association prior for each point.
+        // std::cout << "here 1\n";
+        MatrixXf P = P_naive.cwiseProduct(association_prior);
+        // std::cout << "P with association prior:\n" << P << std::endl;
+        // std::cout << "P (rows, cols): (" << P.rows() << ", " << P.cols() << ")\n";
+        // std::cout << "2\n";
+
+        // Fast Gaussian Transformation to calculate Pt1, P1, PX
+        MatrixXf PX = (P * X.transpose()).transpose();
+        // std::cout << "3\n";
+
+        // Maximization step
+        VectorXf Pt1 = P.colwise().sum();
+        VectorXf P1 = P.rowwise().sum();
+        float Np = P1.sum();
+
+        // NOTE: lambda means gamma here
+        // Corresponding to Eq. (18) in the paper
+        // std::cout << "4\n";
+        auto const lambda = start_lambda_;
+        MatrixXf p1d = P1.asDiagonal();
+
+        MatrixXf A = (P1.asDiagonal() * G) + alpha_ * sigma2 * MatrixXf::Identity(M_, M_)
+        + sigma2 * lambda * (m_lle_ * G) + zeta_ * G;
+
+        MatrixXf B = PX.transpose() - (p1d + sigma2 * lambda * m_lle_) * Y.transpose()
+        + zeta_ * (Y_pred.transpose() - Y.transpose());
+
+        MatrixXf W = (A).householderQr().solve(B);
+
+        TY = Y + (G * W).transpose();
+
+        // std::cout << "5\n";
+
+        // Corresponding to Eq. (19) in the paper
+        VectorXf xPxtemp = (X.array() * X.array()).colwise().sum();
+        // std::cout << "5.1\n";
+        // std::cout << "Pt1 (rows, cols): (" << Pt1.rows() << ", " << Pt1.cols() << ")\n";
+        // std::cout << "xPxtemp (rows, cols): (" << xPxtemp.rows() << ", " << xPxtemp.cols() << ")\n";
+        double xPx = Pt1.dot(xPxtemp);
+        // std::cout << "5.2\n";
+        VectorXf yPytemp = (TY.array() * TY.array()).colwise().sum();
+        // std::cout << "5.3\n";
+        double yPy = P1.dot(yPytemp);
+        // std::cout << "5.4\n";
+        double trPXY = (TY.array() * PX.array()).sum();
+        // std::cout << "5.5\n";
+        sigma2 = (xPx - 2 * trPXY + yPy) / (Np * static_cast<double>(D_));
+
+        // std::cout << "6\n";
+
+        if (sigma2 <= 0) {
+        sigma2 = tolerance_ / 10;
+        }
+
+        error = std::abs(sigma2 - qprev);
+        iterations++;
+        // std::cout << std::endl;
+    }
+
+    ROS_DEBUG_STREAM_NAMED(log_name_, "cpd error: " << error << " itr: " << iterations);
+    ROS_DEBUG_STREAM_NAMED(log_name_, "cpd std dev: " << std::pow(sigma2, 0.5));
+
+    return TY;
 }

@@ -54,6 +54,8 @@ public:
     // Updates the vertices for all deformable objects given new points predicted from a CDCPD run.
     void update_def_obj_vertices(pcl::shared_ptr<PointCloud> const vertices_new);
 
+    void update_def_obj_vertices_from_mat(Eigen::Matrix3Xf const& verts_new);
+
     // Forms the vertices matrix for all tracked templates expected by CDCPD
     PointCloud::Ptr form_vertices_cloud(bool const use_initial_state=false) const;
 
