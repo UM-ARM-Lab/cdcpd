@@ -414,67 +414,101 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
   last_lower_bounding_box_ = last_lower_bounding_box_ - bounding_box_extend;
   last_upper_bounding_box_ = last_upper_bounding_box_ + bounding_box_extend;
 
-  // Need to make LLE respect separate templates. For right now I'm going to hard code in a split in
-  // the original template but this should likely be recomputed at every time step.
-  // 1. split the template cloud into two separate clouds.
-  PointCloud::Ptr template_cloud1(new PointCloud);
-  PointCloud::Ptr template_cloud2(new PointCloud);
-  // = template_cloud->
-  for (int i = 0; i < 4; ++i)
-  {
-    template_cloud1->push_back(template_cloud->points[i]);
-  }
-  for (int i = 4; i < 8; ++i)
-  {
-    template_cloud2->push_back(template_cloud->points[i]);
-  }
-
-  // ****** m_lle_ ?? This appears to be the same thing as L_lle_ below but I'm pressed for time and
-  // can't look into it.
-  auto m_lle_1 = locally_linear_embedding(template_cloud1, lle_neighbors_, 1e-3);
-  auto m_lle_2 = locally_linear_embedding(template_cloud2, lle_neighbors_, 1e-3);
-  m_lle_ = MatrixXf::Zero(8, 8);
-  m_lle_.block(0, 0, 4, 4) = m_lle_1;
-  m_lle_.block(4, 4, 4, 4) = m_lle_2;
-
-  // ****** Weight Matrix
-  // for template 1
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree1;
-  kdtree1.setInputCloud(template_cloud1);
-  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-  auto L_lle_1 = barycenter_kneighbors_graph(kdtree1, lle_neighbors_, 0.001);
-
-  // for template 2
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree2;
-  kdtree2.setInputCloud(template_cloud2);
-  // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
-  auto L_lle_2 = barycenter_kneighbors_graph(kdtree2, lle_neighbors_, 0.001);
-
-  L_lle_ = MatrixXf::Zero(8, 8);
-  L_lle_.block(0, 0, 4, 4) = L_lle_1;
-  L_lle_.block(4, 4, 4, 4) = L_lle_2;
-
-  // std::cout << "Full L_lle_:" << L_lle_ << std::endl;
-
-  // Combine the two LLEs by using matrix blocks. The matrix should be partioned into a
-  // pseudo-diagonal matrix where there are zeros in the upper right and lower left blocks.
-
   // TODO(Dylan): Make these parameters configurable via ROS params?
   double const tolerance_cpd = 1e-4;
   double const initial_sigma_scale = 1.0 / 8.0;
   int const max_cpd_iterations = 100;
 
+  bool const doing_multitemplate_tracking = false;
+
+  if (doing_multitemplate_tracking)
+  {
+    std::cout << "Make multi-template LLE more general? Depends on how we proceed with algorithm"
+      << std::endl;
+    // Need to make LLE respect separate templates. For right now I'm going to hard code in a split in
+    // the original template but this should likely be recomputed at every time step.
+    // 1. split the template cloud into two separate clouds.
+    PointCloud::Ptr template_cloud1(new PointCloud);
+    PointCloud::Ptr template_cloud2(new PointCloud);
+    // = template_cloud->
+    for (int i = 0; i < 4; ++i)
+    {
+      template_cloud1->push_back(template_cloud->points[i]);
+    }
+    for (int i = 4; i < 8; ++i)
+    {
+      template_cloud2->push_back(template_cloud->points[i]);
+    }
+
+    // ****** m_lle_ ?? This appears to be the same thing as L_lle_ below but I'm pressed for time and
+    // can't look into it.
+    auto m_lle_1 = locally_linear_embedding(template_cloud1, lle_neighbors_, 1e-3);
+    auto m_lle_2 = locally_linear_embedding(template_cloud2, lle_neighbors_, 1e-3);
+    m_lle_ = MatrixXf::Zero(8, 8);
+    m_lle_.block(0, 0, 4, 4) = m_lle_1;
+    m_lle_.block(4, 4, 4, 4) = m_lle_2;
+
+    // ****** Weight Matrix
+    // for template 1
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree1;
+    kdtree1.setInputCloud(template_cloud1);
+    // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+    auto L_lle_1 = barycenter_kneighbors_graph(kdtree1, lle_neighbors_, 0.001);
+
+    // for template 2
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree2;
+    kdtree2.setInputCloud(template_cloud2);
+    // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+    auto L_lle_2 = barycenter_kneighbors_graph(kdtree2, lle_neighbors_, 0.001);
+
+    // Combine the two LLEs by using matrix blocks. The matrix should be partioned into a
+    // block-diagonal matrix where there are zeros in the upper right and lower left blocks.
+    L_lle_ = MatrixXf::Zero(8, 8);
+    L_lle_.block(0, 0, 4, 4) = L_lle_1;
+    L_lle_.block(4, 4, 4, 4) = L_lle_2;
+  }
+  else
+  {
+    // Need to also make changes to how original CPD is run since it's trying to do an LLE embedding
+    // with more neighbors than actual vertices in the template.
+    int const num_vertices = template_cloud->width;
+    if (num_vertices <= lle_neighbors_)
+    {
+      std::cout << "Skipping LLE since number of LLE neighbors (" << lle_neighbors_
+        << ") > than number of template vertices (" << num_vertices << ")" << std::endl;
+      m_lle_ = MatrixXf::Zero(num_vertices, num_vertices);
+      L_lle_ = MatrixXf::Zero(num_vertices, num_vertices);
+    }
+    else
+    {
+      m_lle_ = locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3);
+
+      pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+      kdtree.setInputCloud(template_cloud);
+      // W: (M, M) matrix, corresponding to L in Eq. (15) and (16)
+      L_lle_ = barycenter_kneighbors_graph(kdtree, lle_neighbors_, 0.001);
+    }
+
+  }
+
+  // std::cout << "Full L_lle_:" << L_lle_ << std::endl;
+
   // TODO(Dylan): Make choice of CPD algorithm here based on ROS params or using a CDCPD builder.
   // std::cout << "Before CPD construction\n";
-  auto cpd_runner_choice =
-    std::make_shared<CPDMultiTemplateExternalPointAssignment>
-    // std::make_shared<CPD>
-      (LOGNAME, tolerance_cpd,
-      max_cpd_iterations, initial_sigma_scale, w_, alpha, beta, zeta, start_lambda_, m_lle_);
+  if (doing_multitemplate_tracking)
+  {
+    cpd_runner_ = std::make_shared<CPDMultiTemplateExternalPointAssignment>(LOGNAME, tolerance_cpd,
+        max_cpd_iterations, initial_sigma_scale, w_, alpha, beta, zeta, start_lambda_, m_lle_);
+  }
+  else
+  {
+    cpd_runner_ = std::make_shared<CPD>(LOGNAME, tolerance_cpd, max_cpd_iterations,
+      initial_sigma_scale, w_, alpha, beta, zeta, start_lambda_, m_lle_);
+  }
   // std::cout << "Before CPD casting\n";
 
   // Upcast the cpd_runner_choice to the CPDInterface that we'll interact with to run CPD.
-  cpd_runner_ = cpd_runner_choice;
+  // cpd_runner_ = cpd_runner_choice;
 }
 
 CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
@@ -600,6 +634,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
 
   if (cloud_downsampled->width == 0) {
     ROS_ERROR_STREAM_NAMED(LOGNAME, "No points in the filtered point cloud");
+    std::cout << "No points in filtered cloud" << std::endl;
     PointCloud::Ptr cdcpd_out = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_cpd = mat_to_cloud(Y);
     PointCloud::Ptr cdcpd_pred = mat_to_cloud(Y);
@@ -719,12 +754,14 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
     // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
     // ???: most likely not 1.0
     Optimizer opt(original_template_, Y, start_lambda_, obstacle_cost_weight_, fixed_points_weight_);
+    std::cout << "Past Optimizer constructor" << std::endl;
     auto const opt_out = opt(TY, template_edges_, pred_fixed_points, obstacle_constraints,
         max_segment_length);
     Y_opt = opt_out.first;
     objective_value = opt_out.second;
 
     ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
+    std::cout << "objective: " << objective_value << std::endl;
   }
 
   // NOTE: set stateful member variables for next time
@@ -736,6 +773,7 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
 
   auto status = OutputStatus::Success;
+  std::cout << "Output status = success" << std::endl;
   if (total_frames_ > 10 and objective_value > objective_value_threshold_) {
     ROS_WARN_STREAM_NAMED(LOGNAME + ".objective", "Objective too high!");
     status = OutputStatus::ObjectiveTooHigh;
