@@ -754,14 +754,14 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
     // NOTE: seems like this should be a function, not a class? is there state like the gurobi env?
     // ???: most likely not 1.0
     Optimizer opt(original_template_, Y, start_lambda_, obstacle_cost_weight_, fixed_points_weight_);
-    std::cout << "Past Optimizer constructor" << std::endl;
+    // std::cout << "Past Optimizer constructor" << std::endl;
     auto const opt_out = opt(TY, template_edges_, pred_fixed_points, obstacle_constraints,
         max_segment_length);
     Y_opt = opt_out.first;
     objective_value = opt_out.second;
 
     ROS_DEBUG_STREAM_NAMED(LOGNAME + ".objective", "objective: " << objective_value);
-    std::cout << "objective: " << objective_value << std::endl;
+    // std::cout << "objective: " << objective_value << std::endl;
   }
 
   // NOTE: set stateful member variables for next time
@@ -773,7 +773,7 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   PointCloud::Ptr cdcpd_pred = mat_to_cloud(TY_pred);
 
   auto status = OutputStatus::Success;
-  std::cout << "Output status = success" << std::endl;
+  // std::cout << "Output status = success" << std::endl;
   if (total_frames_ > 10 and objective_value > objective_value_threshold_) {
     ROS_WARN_STREAM_NAMED(LOGNAME + ".objective", "Objective too high!");
     status = OutputStatus::ObjectiveTooHigh;

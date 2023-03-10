@@ -708,7 +708,7 @@ Matrix3Xf CPDMultiTemplateExternalPointAssignment::operator()(const Ref<const Ma
     // std::cout << "Y_emit_prior:\n" << Y_emit_prior << std::endl;
 
     while (iterations <= max_iterations_ && error > tolerance_) {\
-        std::cout << "sigma2: " << sigma2 << std::endl;
+        // std::cout << "sigma2: " << sigma2 << std::endl;
         double qprev = sigma2;
         // Expectation step
 

@@ -138,6 +138,8 @@ if (pybind11_catkin_FOUND)
     get_target_property(PYBIND_INSTALL_PATH pycdcpd LIBRARY_OUTPUT_DIRECTORY)
     execute_process(COMMAND pybind11-stubgen -o ${PYBIND_INSTALL_PATH} --ignore-invalid=all pycdcpd)
     message("Stubs saved in: ${PYBIND_INSTALL_PATH}")
+else()
+    message("Couldn't find pybind11_catkin!")
 endif()
 
 
