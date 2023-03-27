@@ -574,49 +574,66 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
 
     // Publish markers indication the order of the points
     {
-        auto rope_marker_fn_multi_templates = [&](std::string const& ns)
+        auto form_edge_markers = [&](std::string const& ns)
         {
-            vm::MarkerArray rope_orders;
+            vm::MarkerArray edge_markers;
             int i = 1;
+            int marker_id = 0;
             for (auto const& def_obj_pair : deformable_objects.tracking_map)
             {
                 int const& def_obj_id = def_obj_pair.first;
                 auto const& def_obj_config = def_obj_pair.second;
 
-                vm::Marker order;
-                order.header.frame_id = node_params.camera_frame;
-                order.header.stamp = ros::Time();
-                order.ns = ns;
-                order.type = visualization_msgs::Marker::LINE_STRIP;
-                order.action = visualization_msgs::Marker::ADD;
-                order.pose.orientation.w = 1.0;
-                order.id = def_obj_id;
-                order.scale.x = 0.01;
-                order.color.r = 0.1;
-                order.color.g = i * 0.5;
-                order.color.b = 0.9;
-                order.color.a = 1.0;
+                PointCloud::ConstPtr const cloud = def_obj_config->tracked_.getPointCloud();
 
-                // TODO: This should loop through the edges instead of the points as the edges
-                // actually indicate which points form edges...
-                // Though this isn't a huge deal as of right now as the rope points are guaranteed
-                // to be in edge order if the template was initialized in edge order.
-                for (auto const cloud_point : *def_obj_config->tracked_.getPointCloud())
+                // Make a new marker for each edge in each deformable object.
+                auto const& edge_list = def_obj_config->tracked_.getEdges();
+                for (int edge_idx = 0; edge_idx < edge_list.cols(); ++edge_idx)
                 {
-                    geometry_msgs::Point p;
-                    p.x = cloud_point.x;
-                    p.y = cloud_point.y;
-                    p.z = cloud_point.z;
-                    order.points.push_back(p);
+                    auto const& edge = edge_list.col(edge_idx);
+                    int const id_1 = edge(0, 0);
+                    int const id_2 = edge(1, 0);
+
+                    auto const& pt_start = cloud->at(id_1);
+                    auto const& pt_end = cloud->at(id_2);
+
+                    vm::Marker marker;
+                    marker.header.frame_id = node_params.camera_frame;
+                    marker.header.stamp = ros::Time();
+                    marker.ns = ns;
+                    marker.type = visualization_msgs::Marker::LINE_STRIP;
+                    marker.action = visualization_msgs::Marker::ADD;
+                    marker.pose.orientation.w = 1.0;
+                    marker.id = marker_id;
+                    marker.scale.x = 0.01;
+                    marker.color.r = 0.1;
+                    marker.color.g = i * 0.5;
+                    marker.color.b = 0.9;
+                    marker.color.a = 1.0;
+
+                    geometry_msgs::Point p_start;
+                    p_start.x = pt_start.x;
+                    p_start.y = pt_start.y;
+                    p_start.z = pt_start.z;
+                    marker.points.push_back(p_start);
+
+                    geometry_msgs::Point p_end;
+                    p_end.x = pt_end.x;
+                    p_end.y = pt_end.y;
+                    p_end.z = pt_end.z;
+                    marker.points.push_back(p_end);
+
+                    edge_markers.markers.push_back(marker);
+                    ++marker_id;
                 }
-                rope_orders.markers.push_back(order);
+
                 ++i;
             }
 
-            return rope_orders;
+            return edge_markers;
         };
 
-        auto const rope_marker_array = rope_marker_fn_multi_templates("line_order");
+        auto const rope_marker_array = form_edge_markers("line_order");
         publishers.order_pub.publish(rope_marker_array);
     }
 
