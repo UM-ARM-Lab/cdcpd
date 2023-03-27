@@ -24,7 +24,7 @@ int TrackingMap::get_total_num_edges() const
     for (auto const& tracked_pair : tracking_map)
     {
         std::shared_ptr<DeformableObjectConfiguration> const& def_obj_config = tracked_pair.second;
-        int num_edges = def_obj_config->tracked_.edges_.cols();
+        int num_edges = def_obj_config->tracked_.getEdges().cols();
         num_edges_total += num_edges;
     }
     return num_edges_total;
@@ -78,9 +78,10 @@ void TrackingMap::update_def_obj_vertices(pcl::shared_ptr<PointCloud> const vert
         // Use the point cloud iterators and std::copy to efficiently update the tracked points.
         auto const& it_begin = cloud_it_begin + idx_start;
         auto const& it_end = cloud_it_begin + idx_end;
-        std::copy(it_begin, it_end, def_obj_config->tracked_.points_->begin());
+        def_obj_config->tracked_.setPointCloud(it_begin, it_end);
 
-        def_obj_config->tracked_.vertices_ = def_obj_config->tracked_.points_->getMatrixXfMap().topRows(3);
+        PointCloud::ConstPtr tracked_cloud = def_obj_config->tracked_.getPointCloud();
+        def_obj_config->tracked_.setVertices(tracked_cloud->getMatrixXfMap().topRows(3));
     }
 }
 
@@ -99,7 +100,7 @@ PointCloud::Ptr TrackingMap::form_vertices_cloud(bool const use_initial_state) c
             get_appropriate_tracking(def_obj_config, use_initial_state);
 
         // Concatenate this deformable object's point cloud with the aggregate point cloud.
-        (*vertices_cloud) += (*tracking->points_);
+        (*vertices_cloud) += (*tracking->getPointCloud());
     }
     return vertices_cloud;
 }
@@ -122,7 +123,7 @@ Eigen::Matrix2Xi TrackingMap::form_edges_matrix(bool const use_initial_state) co
         std::shared_ptr<DeformableObjectTracking> tracking =
             get_appropriate_tracking(def_obj_config, use_initial_state);
 
-        Eigen::Matrix2Xi const& edges = tracking->edges_;
+        Eigen::Matrix2Xi const& edges = tracking->getEdges();
         for (int edge_col = 0; edge_col < edges.cols(); ++edge_col)
         {
             edges_total.col(edge_idx_aggregate) = edges.col(edge_col);
@@ -149,7 +150,7 @@ Eigen::RowVectorXd TrackingMap::form_max_segment_length_matrix() const
             tracking_map.at(def_obj_id);
 
         double const def_obj_max_segment_length = def_obj_config->max_segment_length_;
-        for (int i = 0; i < def_obj_config->tracked_.edges_.cols(); ++i)
+        for (int i = 0; i < def_obj_config->tracked_.getEdges().cols(); ++i)
         {
             max_segment_lengths(0, edge_idx_aggregate) = def_obj_max_segment_length;
             ++edge_idx_aggregate;

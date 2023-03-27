@@ -64,6 +64,6 @@ TEST(ClothConfigurationTest, simpleClothConfigurationTemplateInitializationBadGr
     tracking_expected.setVertices(vertices_expected);
     tracking_expected.setEdges(edges_expected);
 
-    expectEigenMatsEqual(config_test.tracked_.vertices_, tracking_expected.vertices_);
-    expectEigenMatsEqual(config_test.tracked_.edges_, tracking_expected.edges_);
+    expectEigenMatsEqual(config_test.tracked_.getVertices(), tracking_expected.getVertices());
+    expectEigenMatsEqual(config_test.tracked_.getEdges(), tracking_expected.getEdges());
 }

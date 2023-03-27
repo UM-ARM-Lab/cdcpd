@@ -51,6 +51,6 @@ TEST(RopeConfigurationTest, simpleRopeConfigTemplateInitialization)
     track_expected.setVertices(vertices_expected);
     track_expected.setEdges(edges_expected);
 
-    expectEigenMatsEqual(config.tracked_.vertices_, track_expected.vertices_);
-    expectEigenMatsEqual(config.tracked_.edges_, track_expected.edges_);
+    expectEigenMatsEqual(config.tracked_.getVertices(), track_expected.getVertices());
+    expectEigenMatsEqual(config.tracked_.getEdges(), track_expected.getEdges());
 }
