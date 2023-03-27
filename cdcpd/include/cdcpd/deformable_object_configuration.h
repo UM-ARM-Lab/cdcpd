@@ -112,8 +112,8 @@ public:
 
     int num_points_;
     float max_segment_length_;
-    DeformableObjectTracking tracked_;
     DeformableObjectTracking initial_;
+    DeformableObjectTracking tracked_;
 };
 
 class RopeConfiguration : public DeformableObjectConfiguration
@@ -147,6 +147,15 @@ public:
         0, 0, 1, 0,
         0, 0, 0, 1);
 
+    // Initial length of the template.
+    float const length_initial_;
+
+    // Initial width of the template.
+    float const width_initial_;
+
+    // The supplied initial guess for the grid size.
+    float const grid_size_initial_guess_;
+
     // Describes the number of points the template is initialized with in the length direction.
     // Length is downwards direction!
     int const num_points_length_;
@@ -156,13 +165,4 @@ public:
     int const num_points_width_;
 
     int const num_edges_;
-
-    // Initial length of the template.
-    float const length_initial_;
-
-    // Initial width of the template.
-    float const width_initial_;
-
-    // The supplied initial guess for the grid size.
-    float const grid_size_initial_guess_;
 };

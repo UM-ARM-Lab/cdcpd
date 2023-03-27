@@ -180,8 +180,8 @@ ClothConfiguration::ClothConfiguration(float const length_initial, float const w
       length_initial_{length_initial},
       width_initial_{width_initial},
       grid_size_initial_guess_{grid_size_initial_guess},
-      num_points_length_{std::ceil(length_initial / grid_size_initial_guess) + 1},
-      num_points_width_{std::ceil(width_initial / grid_size_initial_guess) + 1},
+      num_points_length_{static_cast<int>(std::ceil(length_initial / grid_size_initial_guess)) + 1},
+      num_points_width_{static_cast<int>(std::ceil(width_initial / grid_size_initial_guess)) + 1},
       num_edges_{(num_points_length_ - 1) * num_points_width_
                   + (num_points_width_ - 1) * num_points_length_}
 {
