@@ -62,14 +62,16 @@ public:
     // vertices
     void setVertices(Eigen::Matrix3Xf const& vertices_in);
 
-    // Sets the edges from input edge vector.
+    // Sets the edges from input edge vector and updates the connectivity graph describing edges.
     void setEdges(std::vector<std::tuple<int, int>> const& edges);
 
+    // Sets the edges and updates the connectivity graph describing edges.
     void setEdges(Eigen::Matrix2Xi const& edges_in);
 
     // Sets this tracking's point cloud using std::copy and another point cloud's iterators defining
     // the range over which to copy the points.
-    void setPointCloud(PointCloud::const_iterator const& it_in_begin, PointCloud::const_iterator const& it_in_end);
+    void setPointCloud(PointCloud::const_iterator const& it_in_begin,
+        PointCloud::const_iterator const& it_in_end);
 
     Eigen::Matrix3Xf const& getVertices() const { return vertices_; }
 
@@ -82,6 +84,10 @@ public:
     PointCloud::ConstPtr const getPointCloud() const { return points_; }
 
     PointCloud::Ptr getPointCloudCopy() const { return PointCloud::Ptr(new PointCloud(*points_)); }
+
+    ConnectivityGraph const& getConnectivityGraph() const { return connectivity_graph_; }
+
+    ConnectivityGraph getConnectivityGraphCopy() const { return connectivity_graph_; }
 
 private:
     Eigen::Matrix3Xf vertices_;
