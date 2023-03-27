@@ -165,7 +165,7 @@ class CDCPD {
   int lle_neighbors;
   Eigen::MatrixXf m_lle;
   Eigen::MatrixXf L_lle;
-  double tolerance;
+  double tolerance_cpd;
   double alpha;
   double beta;
   double w;
