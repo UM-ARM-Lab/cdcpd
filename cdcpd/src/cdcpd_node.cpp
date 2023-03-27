@@ -63,7 +63,7 @@ CDCPD_Publishers::CDCPD_Publishers(ros::NodeHandle& nh, ros::NodeHandle& ph)
     template_publisher = nh.advertise<PointCloud>("cdcpd/template", 10);
     pre_template_publisher = nh.advertise<PointCloud>("cdcpd/pre_template", 10);
     output_publisher = nh.advertise<PointCloud>("cdcpd/output", 10);
-    order_pub = nh.advertise<vm::Marker>("cdcpd/order", 10);
+    order_pub = nh.advertise<vm::MarkerArray>("cdcpd/order", 10);
     contact_marker_pub = ph.advertise<vm::MarkerArray>("contacts", 10);
     bbox_pub = ph.advertise<jsk_recognition_msgs::BoundingBox>("bbox", 10);
 }
@@ -103,6 +103,7 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
       model_loader_(std::make_shared<robot_model_loader::RobotModelLoader>(robot_description_)),
       model_(model_loader_->getModel()),
       visual_tools_("robot_root", "cdcpd_moveit_node", scene_monitor_),
+      deformable_objects(),
       tf_listener_(tf_buffer_)
 {
     auto const scene_topic = ros::names::append(robot_namespace,
@@ -136,26 +137,26 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
 
     // initialize start and end points for rope
     auto [init_q_config, init_q_dot] = get_q_config();
-    Eigen::Vector3f start_position{Eigen::Vector3f::Zero()};
-    Eigen::Vector3f end_position{Eigen::Vector3f::Zero()};
-    end_position[2] += node_params.max_rope_length;
+    Eigen::Vector3f start_position_1{Eigen::Vector3f::Zero()};
+    Eigen::Vector3f end_position_1{Eigen::Vector3f::Zero()};
+    end_position_1[2] += node_params.max_rope_length;
     if (gripper_count == 2u) {
-        start_position = init_q_config[0].translation().cast<float>();
-        end_position = init_q_config[1].translation().cast<float>();
+        start_position_1 = init_q_config[0].translation().cast<float>();
+        end_position_1 = init_q_config[1].translation().cast<float>();
     } else if (gripper_count == 1u) {
-        start_position = init_q_config[0].translation().cast<float>();
-        end_position = start_position;
-        end_position[1] += node_params.max_rope_length;
+        start_position_1 = init_q_config[0].translation().cast<float>();
+        end_position_1 = start_position_1;
+        end_position_1[1] += node_params.max_rope_length;
     } else if (gripper_count == 0u) {
-        start_position << -node_params.max_rope_length / 2, 0, 1.0;
-        end_position << node_params.max_rope_length / 2, 0, 1.0;
+        start_position_1 << -node_params.max_rope_length / 2, 0, 1.0;
+        end_position_1 << node_params.max_rope_length / 2, 0, 1.0;
     }
 
-    initialize_deformable_object_configuration(start_position, end_position);
+    initialize_deformable_object_configuration(start_position_1, end_position_1);
 
-    cdcpd = std::make_unique<CDCPD>(nh, ph,
-        deformable_object_configuration_->initial_.points_,
-        deformable_object_configuration_->initial_.edges_,
+    PointCloud::Ptr vertices = deformable_objects.form_vertices_cloud();
+    Eigen::Matrix2Xi edges = deformable_objects.form_edges_matrix();
+    cdcpd = std::make_unique<CDCPD>(nh, ph, vertices, edges,
         cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
         cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
         cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight);
@@ -191,19 +192,20 @@ CDCPD_Moveit_Node::CDCPD_Moveit_Node(std::string const& robot_namespace)
 void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
     Eigen::Vector3f const& rope_start_position, Eigen::Vector3f const& rope_end_position)
 {
+    std::shared_ptr<DeformableObjectConfiguration> deformable_object_configuration;
     if (node_params.deformable_object_type == DeformableObjectType::rope)
     {
-        auto configuration = std::unique_ptr<RopeConfiguration>(new RopeConfiguration(
+        auto configuration = std::shared_ptr<RopeConfiguration>(new RopeConfiguration(
             node_params.num_points, node_params.max_rope_length, rope_start_position,
             rope_end_position));
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
-        deformable_object_configuration_ = std::move(configuration);
+        deformable_object_configuration = configuration;
     }
     else if (node_params.deformable_object_type == DeformableObjectType::cloth)
     {
-        auto configuration = std::unique_ptr<ClothConfiguration>(new ClothConfiguration(
+        auto configuration = std::shared_ptr<ClothConfiguration>(new ClothConfiguration(
             node_params.length_initial_cloth, node_params.width_initial_cloth,
             node_params.grid_size_initial_guess_cloth));
 
@@ -218,8 +220,11 @@ void CDCPD_Moveit_Node::initialize_deformable_object_configuration(
         // Have to call initializeTracking() before casting to base class since it relies on virtual
         // functions.
         configuration->initializeTracking();
-        deformable_object_configuration_ = std::move(configuration);
+        deformable_object_configuration = configuration;
     }
+
+    // Add the initialized configuration to our tracking map.
+    deformable_objects.add_def_obj_configuration(deformable_object_configuration);
 }
 
 ObstacleConstraints CDCPD_Moveit_Node::find_nearest_points_and_normals(
@@ -445,7 +450,7 @@ ObstacleConstraints CDCPD_Moveit_Node::get_moveit_obstacle_constriants(
 
     ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Finding nearest points and normals");
     return find_nearest_points_and_normals(planning_scene, cdcpd_to_moveit);
-  }
+}
 
 void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     cv::Matx33d const& intrinsics)
@@ -458,12 +463,12 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     auto obstacle_constraints = get_obstacle_constraints();
 
     auto const hsv_mask = getHsvMask(ph, rgb);
-    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics,
-                              deformable_object_configuration_->tracked_.points_,
-                              obstacle_constraints,
-                              deformable_object_configuration_->max_segment_length_, q_dot,
-                              q_config, gripper_indices);
-    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
+    PointCloud::Ptr vertices = deformable_objects.form_vertices_cloud();
+    Eigen::RowVectorXd max_segment_lengths =
+        deformable_objects.form_max_segment_length_matrix();
+    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, vertices, obstacle_constraints,
+        max_segment_lengths, q_dot, q_config, gripper_indices);
+    deformable_objects.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
 };
@@ -483,10 +488,12 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
     pcl::fromPCLPointCloud2(points_v2, *points);
     ROS_DEBUG_STREAM_NAMED(LOGNAME, "unfiltered points: " << points->size());
 
-    auto const out = (*cdcpd)(points, deformable_object_configuration_->tracked_.points_,
-        obstacle_constraints, deformable_object_configuration_->max_segment_length_, q_dot,
+    PointCloud::Ptr vertices = deformable_objects.form_vertices_cloud();
+    Eigen::RowVectorXd max_segment_lengths =
+        deformable_objects.form_max_segment_length_matrix();
+    auto const out = (*cdcpd)(points, vertices, obstacle_constraints, max_segment_lengths, q_dot,
         q_config, gripper_indices);
-    deformable_object_configuration_->tracked_.points_ = out.gurobi_output;
+    deformable_objects.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
 }
@@ -514,9 +521,13 @@ void CDCPD_Moveit_Node::publish_bbox() const
 void CDCPD_Moveit_Node::publish_template() const
 {
     auto time = ros::Time::now();
-    deformable_object_configuration_->tracked_.points_->header.frame_id = node_params.camera_frame;
-    pcl_conversions::toPCL(time, deformable_object_configuration_->tracked_.points_->header.stamp);
-    publishers.pre_template_publisher.publish(deformable_object_configuration_->tracked_.points_);
+    // TODO(Dylan): Make this a message array instead of just a single point cloud??
+    // Get the point cloud representing all of our templates.
+    PointCloud::Ptr templates_cloud = deformable_objects.form_vertices_cloud();
+    templates_cloud->header.frame_id = node_params.camera_frame;
+    pcl_conversions::toPCL(time, templates_cloud->header.stamp);
+
+    publishers.pre_template_publisher.publish(templates_cloud);
 }
 
 ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
@@ -524,8 +535,8 @@ ObstacleConstraints CDCPD_Moveit_Node::get_obstacle_constraints()
     ObstacleConstraints obstacle_constraints;
     if (moveit_ready and node_params.moveit_enabled)
     {
-        obstacle_constraints = get_moveit_obstacle_constriants(
-            deformable_object_configuration_->tracked_.points_);
+        PointCloud::Ptr vertices = deformable_objects.form_vertices_cloud();
+        obstacle_constraints = get_moveit_obstacle_constriants(vertices);
         ROS_DEBUG_NAMED(LOGNAME + ".moveit", "Got moveit obstacle constraints");
     }
     return obstacle_constraints;
@@ -563,50 +574,85 @@ void CDCPD_Moveit_Node::publish_outputs(ros::Time const& t0, CDCPD::Output const
 
     // Publish markers indication the order of the points
     {
-        auto rope_marker_fn = [&](PointCloud::ConstPtr cloud, std::string const& ns) {
-            vm::Marker order;
-            order.header.frame_id = node_params.camera_frame;
-            order.header.stamp = ros::Time();
-            order.ns = ns;
-            order.type = visualization_msgs::Marker::LINE_STRIP;
-            order.action = visualization_msgs::Marker::ADD;
-            order.pose.orientation.w = 1.0;
-            order.id = 1;
-            order.scale.x = 0.01;
-            order.color.r = 0.1;
-            order.color.g = 0.6;
-            order.color.b = 0.9;
-            order.color.a = 1.0;
-
-            for (auto pc_iter : *cloud)
+        auto form_edge_markers = [&](std::string const& ns)
+        {
+            vm::MarkerArray edge_markers;
+            int i = 1;
+            int marker_id = 0;
+            for (auto const& def_obj_pair : deformable_objects.tracking_map)
             {
-                geometry_msgs::Point p;
-                p.x = pc_iter.x;
-                p.y = pc_iter.y;
-                p.z = pc_iter.z;
-                order.points.push_back(p);
+                int const& def_obj_id = def_obj_pair.first;
+                auto const& def_obj_config = def_obj_pair.second;
+
+                PointCloud::ConstPtr const cloud = def_obj_config->tracked_.getPointCloud();
+
+                // Make a new marker for each edge in each deformable object.
+                auto const& edge_list = def_obj_config->tracked_.getEdges();
+                for (int edge_idx = 0; edge_idx < edge_list.cols(); ++edge_idx)
+                {
+                    auto const& edge = edge_list.col(edge_idx);
+                    int const id_1 = edge(0, 0);
+                    int const id_2 = edge(1, 0);
+
+                    auto const& pt_start = cloud->at(id_1);
+                    auto const& pt_end = cloud->at(id_2);
+
+                    vm::Marker marker;
+                    marker.header.frame_id = node_params.camera_frame;
+                    marker.header.stamp = ros::Time();
+                    marker.ns = ns;
+                    marker.type = visualization_msgs::Marker::LINE_STRIP;
+                    marker.action = visualization_msgs::Marker::ADD;
+                    marker.pose.orientation.w = 1.0;
+                    marker.id = marker_id;
+                    marker.scale.x = 0.01;
+                    marker.color.r = 0.1;
+                    marker.color.g = i * 0.5;
+                    marker.color.b = 0.9;
+                    marker.color.a = 1.0;
+
+                    geometry_msgs::Point p_start;
+                    p_start.x = pt_start.x;
+                    p_start.y = pt_start.y;
+                    p_start.z = pt_start.z;
+                    marker.points.push_back(p_start);
+
+                    geometry_msgs::Point p_end;
+                    p_end.x = pt_end.x;
+                    p_end.y = pt_end.y;
+                    p_end.z = pt_end.z;
+                    marker.points.push_back(p_end);
+
+                    edge_markers.markers.push_back(marker);
+                    ++marker_id;
+                }
+
+                ++i;
             }
-            return order;
+
+            return edge_markers;
         };
 
-        auto const rope_marker = rope_marker_fn(out.gurobi_output, "line_order");
-        publishers.order_pub.publish(rope_marker);
+        auto const rope_marker_array = form_edge_markers("line_order");
+        publishers.order_pub.publish(rope_marker_array);
     }
 
     // compute length and print that for debugging purposes
-    auto output_length{0.0};
-    for (auto point_idx{0};
-         point_idx < deformable_object_configuration_->tracked_.points_->size() - 1;
-         ++point_idx)
-    {
-        Eigen::Vector3f const p =
-          deformable_object_configuration_->tracked_.points_->at(point_idx + 1).getVector3fMap();
-        Eigen::Vector3f const p_next =
-          deformable_object_configuration_->tracked_.points_->at(point_idx).getVector3fMap();
-        output_length += (p_next - p).norm();
-    }
-    ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
-        << node_params.max_rope_length);
+    // TODO(dylan): This should compute edge length based on the edges matrix, not just off of
+    // points.
+    // auto output_length{0.0};
+    // for (auto point_idx{0};
+    //      point_idx < deformable_object_configuration_->tracked_.points_->size() - 1;
+    //      ++point_idx)
+    // {
+    //     Eigen::Vector3f const p =
+    //       deformable_object_configuration_->tracked_.points_->at(point_idx + 1).getVector3fMap();
+    //     Eigen::Vector3f const p_next =
+    //       deformable_object_configuration_->tracked_.points_->at(point_idx).getVector3fMap();
+    //     output_length += (p_next - p).norm();
+    // }
+    // ROS_DEBUG_STREAM_NAMED(LOGNAME + ".length", "length = " << output_length << " max length = "
+    //     << node_params.max_rope_length);
 
     auto const t1 = ros::Time::now();
     auto const dt = t1 - t0;
@@ -619,9 +665,13 @@ void CDCPD_Moveit_Node::reset_if_bad(CDCPD::Output const& out)
         out.status == OutputStatus::ObjectiveTooHigh)
     {
         // Recreate CDCPD from initial tracking.
-        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph,
-            deformable_object_configuration_->initial_.points_,
-            deformable_object_configuration_->initial_.edges_,
+        bool const use_initial_state = true;
+        PointCloud::Ptr vertices =
+            deformable_objects.form_vertices_cloud(use_initial_state);
+        Eigen::Matrix2Xi edges =
+            deformable_objects.form_edges_matrix(use_initial_state);
+
+        std::unique_ptr<CDCPD> cdcpd_new(new CDCPD(nh, ph, vertices, edges,
             cdcpd_params.objective_value_threshold, cdcpd_params.use_recovery, cdcpd_params.alpha,
             cdcpd_params.beta, cdcpd_params.lambda, cdcpd_params.k_spring, cdcpd_params.zeta,
             cdcpd_params.obstacle_cost_weight, cdcpd_params.fixed_points_weight));

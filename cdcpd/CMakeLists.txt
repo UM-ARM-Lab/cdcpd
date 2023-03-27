@@ -67,6 +67,8 @@ add_library(cdcpd SHARED
         src/obs_util.cpp
         src/past_template_matcher.cpp
         src/segmenter.cpp
+        src/stopwatch.cpp
+        src/tracking_map.cpp
         )
 target_include_directories(cdcpd PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

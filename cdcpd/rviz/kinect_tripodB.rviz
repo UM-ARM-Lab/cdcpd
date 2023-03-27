@@ -135,10 +135,10 @@ Visualization Manager:
           line width: 0.004999999888241291
           only edge: true
           show coords: false
-        - Class: rviz/Marker
+        - Class: rviz/MarkerArray
           Enabled: true
           Marker Topic: /cdcpd/order
-          Name: output
+          Name: MarkerArray
           Namespaces:
             line_order: true
           Queue Size: 100
