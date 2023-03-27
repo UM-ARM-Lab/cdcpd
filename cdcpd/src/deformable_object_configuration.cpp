@@ -217,7 +217,7 @@ DeformableObjectTracking ClothConfiguration::makeTemplate()
             {
                 edges_list.push_back({idx, unravel_indices(i + 1, j, num_points_width_)});
             }
-            if (j + 1 < num_points_length_)
+            if (j + 1 < num_points_width_)
             {
                 edges_list.push_back({idx, unravel_indices(i, j + 1, num_points_width_)});
             }
