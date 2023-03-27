@@ -65,8 +65,13 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
 {
     // Do some setup of parameters and gripper configuration.
     PointCloud::Ptr tracked_points = initial_tracked_points;
+
     ObstacleConstraints obstacle_constraints;  // No need to specify anything with this demo.
+
     float const max_segment_length = max_rope_length / static_cast<float>(num_points);
+    Eigen::RowVectorXd max_segment_lengths =
+        Eigen::RowVectorXd::Ones(num_points) * max_segment_length;
+
     unsigned int gripper_count = 0U;
     smmap::AllGrippersSinglePose q_config;
     const smmap::AllGrippersSinglePoseDelta q_dot{gripper_count, kinematics::Vector6d::Zero()};
@@ -79,7 +84,7 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
         // Run a single "iteration" of CDCPD mimicing the points_callback lambda function found in
         // cdcpd_node.cpp
         CDCPD::Output out = cdcpd_sim(cloud, tracked_points, obstacle_constraints,
-            max_segment_length, q_dot, q_config, gripper_indices);
+            max_segment_lengths, q_dot, q_config, gripper_indices);
         tracked_points = out.gurobi_output;
 
         // Do a health check of CDCPD

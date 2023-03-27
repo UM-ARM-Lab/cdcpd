@@ -29,6 +29,7 @@
 #include "cdcpd_ros/camera_sub.h"
 #include "cdcpd/deformable_object_configuration.h"
 #include "cdcpd/segmenter.h"
+#include "cdcpd/tracking_map.h"
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 namespace gm = geometry_msgs;
@@ -139,7 +140,7 @@ public:
     unsigned int gripper_count;
     Eigen::MatrixXi gripper_indices;
 
-    std::unique_ptr<DeformableObjectConfiguration> deformable_object_configuration_;
+    TrackingMap deformable_objects;
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;

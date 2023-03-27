@@ -16,14 +16,7 @@ enum DeformableObjectType
     cloth
 };
 
-DeformableObjectType get_deformable_object_type(std::string const& def_obj_type_str)
-{
-    std::map<std::string, DeformableObjectType> obj_type_map{
-        {"rope", DeformableObjectType::rope},
-        {"cloth", DeformableObjectType::cloth}
-    };
-    return obj_type_map[def_obj_type_str];
-}
+DeformableObjectType get_deformable_object_type(std::string const& def_obj_type_str);
 
 struct DeformableObjectTracking
 {

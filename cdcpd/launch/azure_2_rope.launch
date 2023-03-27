@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+
+  <!-- Launch the Azure Kinect driver. -->
+  <include file="$(find azure_kinect_ros_driver)/launch/driver.launch" >
+    <arg name="overwrite_robot_description" value="False" />
+    <arg name="sensor_sn" value="000269420412"/>
+    <arg name="fps" value="30" />
+    <arg name="color_resolution" value="720P" />
+    <arg name="depth_mode" value="NFOV_UNBINNED" />
+  </include>
+
+  <!-- Launch RVIZ with the corresponding Azure Kinect configuration. -->
+  <node name="$(anon rviz)" pkg="rviz" type="rviz" respawn="false" args="-d $(find cdcpd)/rviz/azure_2.rviz" output="screen" />
+
+  <!-- Launch the CDCPD Node -->
+  <env name="ROSCONSOLE_CONFIG_FILE" value="$(find cdcpd)/custom_rosconsole.conf"/>
+
+    <node pkg="cdcpd" type="cdcpd_node" name="cdcpd_node" respawn="false" output="screen">
+        <!-- This file uses the point cloud, but you can also use the RGB and Depth input by
+        commenting the "points" param and uncommenting the "rgb_topic" and "depth_topic" params. -->
+        <param name="points" value="/points2"/>
+        <!-- <param name="rgb_topic" value="/rgb_to_depth/image_raw"/> -->
+        <!-- <param name="depth_topic" value="/depth/image_raw"/> -->
+        <param name="info_topic" value="/depth/camera_info"/>
+        <param name="camera_frame" value="camera_body"/>
+
+        <!-- CDCPD deformable object parameters -->
+        <param name="deformable_object_type" value="rope"/>
+        <param name="num_points" value="15"/>
+        <param name="max_rope_length" value="0.46"/>
+        <param name="lambda" value="1.1"/>
+
+        <!-- CDCPD Node parameters -->
+        <param name="moveit_enabled" value="true"/>
+        <!-- gripper info should be a space seperated list of [TF_NAME IDX TF_NAME IDX ...] -->
+        <param name="grippers_info" value="$(find cdcpd)/gripper_info.yaml"/>
+    </node>
+
+</launch>
