@@ -16,6 +16,9 @@ CPDInterface::CPDInterface(std::string const log_name_base, double const toleran
     , start_lambda_(start_lambda)
     , m_lle_(m_lle)
     , has_point_assignments_been_set_(false)
+    , M_(-1)
+    , N_(-1)
+    , D_(-1)
 {
     // // std::cout << "past CPDInterface initializer list\n";
 }
@@ -101,7 +104,9 @@ CPD::CPD(std::string const log_name_base, double const tolerance, int const max_
     double const zeta, double const start_lambda, MatrixXf const m_lle)
     : CPDInterface(log_name_base, tolerance, max_iterations, initial_sigma_scale, w, alpha, beta,
         zeta, start_lambda, m_lle)
-{}
+{
+    // std::cout << std::string(*this);
+}
 
 Matrix3Xf CPD::operator()(const Ref<const Matrix3Xf>& X,
     const Ref<const Matrix3Xf>& Y, const Ref<const Matrix3Xf>& Y_pred,
