@@ -790,6 +790,13 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   return output;
 }
 
+Eigen::Matrix3Xf CDCPD::downsampleMatrixCloud(Eigen::Matrix3Xf mat_in)
+{
+    PointCloud::Ptr cloud_in = mat_to_cloud(mat_in);
+    PointCloud::Ptr cloud_downsampled = downsamplePointCloud(cloud_in);
+    return cloud_downsampled->getMatrixXfMap().topRows(3);
+}
+
 // Perform VoxelGrid filter downsampling.
 PointCloud::Ptr CDCPD::downsamplePointCloud(PointCloud::Ptr cloud_in)
 {

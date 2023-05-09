@@ -72,6 +72,7 @@ PYBIND11_MODULE(pycdcpd, m)
     .def("run", &CDCPD::run)
     // .def_readonly("m_lle_", &CDCPD::m_lle_)
     .def_readwrite("cpd_runner", &CDCPD::cpd_runner_)
+    .def("downsampleMatrixCloud", &CDCPD::downsampleMatrixCloud)
     ;
 
   pyCDCPDOutput.def("get_cpd_output", &CDCPD::Output::get_cpd_output)

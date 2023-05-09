@@ -255,6 +255,8 @@ class CDCPD {
         return ss.str();
     }
 
+    Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in);
+
 protected:
     // ros::NodeHandle nh_;
     // ros::NodeHandle ph_;
