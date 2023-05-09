@@ -76,6 +76,7 @@ PYBIND11_MODULE(pycdcpd, m)
 
   pyCDCPDOutput.def("get_cpd_output", &CDCPD::Output::get_cpd_output)
     .def("get_gurobi_output", &CDCPD::Output::get_gurobi_output)
+    .def("get_downsampled_cloud", &CDCPD::Output::get_downsampled_cloud)
     ;
 
   pyCDCPDIterationInputs.def(py::init<>())

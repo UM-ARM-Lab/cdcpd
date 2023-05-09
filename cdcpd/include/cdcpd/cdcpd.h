@@ -34,6 +34,8 @@
 #include "cdcpd/segmenter.h"
 #include "cdcpd/tracking_map.h"
 
+#include <iostream>
+
 typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointXYZHSV PointHSV;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
@@ -126,6 +128,11 @@ class CDCPD {
     Eigen::Matrix3Xf get_gurobi_output()
     {
         return gurobi_output->getMatrixXfMap().topRows(3);
+    }
+
+    Eigen::Matrix3Xf get_downsampled_cloud()
+    {
+        return downsampled_cloud->getMatrixXfMap().topRows(3);
     }
   };
 
