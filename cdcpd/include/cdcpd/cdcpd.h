@@ -35,6 +35,7 @@
 #include "cdcpd/tracking_map.h"
 
 #include <iostream>
+#include <string>
 
 typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointXYZHSV PointHSV;
@@ -225,6 +226,34 @@ class CDCPD {
 
     // Temporarily moving to public so that I can change point associations externally.
     std::shared_ptr<CPDInterface> cpd_runner_;
+
+    // Convert CDCPD object to string representation.
+    operator std::string() const
+    {
+        std::stringstream ss;
+
+        ss << "CDCPD Object:" << std::endl
+           << "\tlle_neighbors_: " << lle_neighbors_ << std::endl
+           << "\tw_: " << w_ << std::endl
+           << "\tstart_lambda_: " << start_lambda_ << std::endl
+           << "\tk_: " << k_ << std::endl
+           << "\tkvis_: " << kvis_ << std::endl
+           << "\tobstacle_cost_weight_: " << obstacle_cost_weight_ << std::endl
+           << "\tfixed_points_weight_: " << fixed_points_weight_ << std::endl
+           << "\tuse_recovery_: " << use_recovery_ << std::endl
+           << "\tobjective_value_threshold_: " << objective_value_threshold_ << std::endl
+           << "\ttotal_frames_: " << total_frames_ << std::endl
+           << "\tgripper_idx_: " << gripper_idx_ << std::endl
+           << "\tlast_grasp_status_: " << last_grasp_status_ << std::endl
+           << "\toriginal_template_:" << std::endl << original_template_ << std::endl
+           << "\ttemplate_edges_:" << std::endl << template_edges_ << std::endl
+           << "\tm_lle_:" << std::endl << m_lle_ << std::endl
+           << "\tL_lle_:" << std::endl << L_lle_ << std::endl
+           << "\tlast_lower_bounding_box_: " << last_lower_bounding_box_ << std::endl
+           << "\tlast_upper_bounding_box_: " << last_upper_bounding_box_ << std::endl;
+
+        return ss.str();
+    }
 
 protected:
     // ros::NodeHandle nh_;
