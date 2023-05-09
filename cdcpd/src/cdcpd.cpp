@@ -127,18 +127,20 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
   // lle_neighbors: parameter for lle calculation
   // reg: regularization term (necessary when lle_neighbor > dimension)
   PointCloud::ConstPtr cloud = kdtree.getInputCloud();
+  uint32_t num_tracked_verts = cloud->width;
+
   // std::cout << "Cloud height: " << cloud->height << std::endl;
   // std::cout << "Cloud width: " << cloud->width << std::endl;
   assert(cloud->height == 1);
   // std::cout << "After assert\n";
   // adjacencies: save index of adjacent points
-  MatrixXi adjacencies = MatrixXi(cloud->width, lle_neighbors);
+  MatrixXi adjacencies = MatrixXi(num_tracked_verts, lle_neighbors);
   // B: save weight W_ij
-  MatrixXf B = MatrixXf::Zero(cloud->width, lle_neighbors);
+  MatrixXf B = MatrixXf::Zero(num_tracked_verts, lle_neighbors);
   MatrixXf v = VectorXf::Ones(lle_neighbors);
   // algorithm: see https://cs.nyu.edu/~roweis/lle/algorithm.html
   // std::cout << "before loop\n";
-  for (size_t i = 0; i < cloud->width; ++i) {
+  for (size_t i = 0; i < num_tracked_verts; ++i) {
     std::vector<int> neighbor_inds(lle_neighbors + 1);
     std::vector<float> neighbor_dists(lle_neighbors + 1);
     kdtree.nearestKSearch(i, lle_neighbors + 1, neighbor_inds, neighbor_dists);
@@ -161,7 +163,7 @@ MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtr
     B.row(i) = w / w.sum();
   }
   // std::cout << "Loop done\n";
-  MatrixXf graph = MatrixXf::Zero(cloud->width, cloud->width);
+  MatrixXf graph = MatrixXf::Zero(num_tracked_verts, num_tracked_verts);
   for (ssize_t i = 0; i < graph.rows(); ++i) {
     for (ssize_t j = 0; j < lle_neighbors; ++j) {
       graph(i, adjacencies(i, j)) = B(i, j);
