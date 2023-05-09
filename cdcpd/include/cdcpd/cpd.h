@@ -40,6 +40,31 @@ public:
     double initial_sigma2(const Ref<const MatrixXf>&  X,
         const Ref<const MatrixXf>&  Y);
 
+    operator std::string() const
+    {
+        std::stringstream ss;
+
+        ss << "CPD Object:" << std::endl
+           << "\tlog_name_: " << log_name_ << std::endl
+           << "\ttolerance_: " << tolerance_ << std::endl
+           << "\tmax_iterations_: " << max_iterations_ << std::endl
+           << "\tinitial_sigma_scale_: " << initial_sigma_scale_ << std::endl
+           << "\tw_: " << w_ << std::endl
+           << "\talpha_: " << alpha_ << std::endl
+           << "\tbeta_: " << beta_ << std::endl
+           << "\tzeta_: " << zeta_ << std::endl
+           << "\tstart_lambda_: " << start_lambda_ << std::endl
+           << "\tM_: " << M_ << std::endl
+           << "\tN_: " << N_ << std::endl
+           << "\tD_: " << D_ << std::endl
+           << "\tm_lle_:" << std::endl << m_lle_ << std::endl
+           << "\toriginal_template_:" << std::endl << original_template_ << std::endl
+           << "\thas_point_assignments_been_set_: " << has_point_assignments_been_set_ << std::endl
+           << "\tpoint_assignments_:" << std::endl << point_assignments_ << std::endl;
+
+        return ss.str();
+    }
+
 protected:
     std::string const log_name_;
     double const tolerance_;
