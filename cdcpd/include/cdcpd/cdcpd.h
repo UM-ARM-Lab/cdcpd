@@ -63,6 +63,9 @@ Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ
 
 Eigen::MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_neighbors, double reg);
 
+// Perform VoxelGrid filter downsampling on an Eigen matrix representing a point cloud.
+Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in);
+
 static std::ostream &operator<<(std::ostream &out, FixedPoint const &p) {
   out << "[" << p.template_index << "] " << p.position;
   return out;
@@ -254,8 +257,6 @@ class CDCPD {
 
         return ss.str();
     }
-
-    Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in);
 
 protected:
     // ros::NodeHandle nh_;

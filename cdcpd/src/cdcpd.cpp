@@ -118,6 +118,23 @@ static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat)
   return cloud;
 }
 
+// Perform VoxelGrid filter downsampling on an Eigen matrix representing a point cloud.
+// NOTE: I was getting ROS errors due to the ROS logging in the downsamplePointCloud routine that
+// is a member of the CDCPD class. Due to this, I just replicated the functionality here instead
+// of refactoring.
+Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in)
+{
+    PointCloud::Ptr cloud_in = mat_to_cloud(mat_in);
+
+    PointCloud::Ptr cloud_downsampled(new PointCloud);
+    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    sor.setInputCloud(cloud_in);
+    sor.setLeafSize(0.02f, 0.02f, 0.02f);
+    sor.filter(*cloud_downsampled);
+
+    return cloud_downsampled->getMatrixXfMap().topRows(3);
+}
+
 MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree,
     int lle_neighbors, double reg)
 {

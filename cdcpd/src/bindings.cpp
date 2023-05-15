@@ -16,6 +16,9 @@ PYBIND11_MODULE(pycdcpd, m)
 {
   m.doc() = "Python bindings to CDCPD";
 
+  // Free functions.
+  m.def("downsampleMatrixCloud", &downsampleMatrixCloud);
+
   // Somewhat forward declaration to avoid having C++ type names in the generated Python docs.
   auto pyCDCPD = py::class_<CDCPD>(m, "PyCDCPD");
   auto pyCDCPDOutput = py::class_<CDCPD::Output>(m, "CDCPDOutput");
@@ -72,7 +75,6 @@ PYBIND11_MODULE(pycdcpd, m)
     .def("run", &CDCPD::run)
     // .def_readonly("m_lle_", &CDCPD::m_lle_)
     .def_readwrite("cpd_runner", &CDCPD::cpd_runner_)
-    .def("downsampleMatrixCloud", &CDCPD::downsampleMatrixCloud)
     ;
 
   pyCDCPDOutput.def("get_cpd_output", &CDCPD::Output::get_cpd_output)
