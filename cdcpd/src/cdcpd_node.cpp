@@ -24,26 +24,7 @@ cv::Mat getHsvMask(ros::NodeHandle const& ph, cv::Mat const& rgb) {
     auto const sat_max = ROSHelpers::GetParamDebugLog<double>(ph, "saturation_max", 1.0);
     auto const val_max = ROSHelpers::GetParamDebugLog<double>(ph, "value_max", 1.0);
 
-    cv::Mat rgb_f;
-    rgb.convertTo(rgb_f, CV_32FC3);
-    rgb_f /= 255.0;  // get RGB 0.0-1.0
-    cv::Mat color_hsv;
-    cvtColor(rgb_f, color_hsv, CV_RGB2HSV);
-
-    cv::Mat mask1;
-    cv::Mat mask2;
-    cv::Mat hsv_mask;
-    auto hue_min1 = hue_min;
-    auto hue_max2 = hue_max;
-    if (hue_min > hue_max) {
-        hue_max2 = 360;
-        hue_min1 = 0;
-    }
-    cv::inRange(color_hsv, cv::Scalar(hue_min, sat_min, val_min), cv::Scalar(hue_max2, sat_max, val_max), mask1);
-    cv::inRange(color_hsv, cv::Scalar(hue_min1, sat_min, val_min), cv::Scalar(hue_max, sat_max, val_max), mask2);
-    bitwise_or(mask1, mask2, hsv_mask);
-
-    return hsv_mask;
+    return getHsvMask(rgb, hue_min, sat_min, val_min, hue_max, sat_max, val_max);
 }
 
 void print_bodies(robot_state::RobotState const& state) {
