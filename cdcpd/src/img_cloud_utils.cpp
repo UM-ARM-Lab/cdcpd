@@ -1,4 +1,4 @@
-#include "cdcpd/img_utils.h"
+#include "cdcpd/img_cloud_utils.h"
 
 // TODO: Refactor this with the getHsvMask function in cdcpd_node.
 cv::Mat getHsvMask(cv::Mat const& rgb, double const hue_min, double const sat_min,

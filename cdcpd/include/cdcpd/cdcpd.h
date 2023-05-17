@@ -28,7 +28,7 @@
 #include <opencv2/core/eigen.hpp>
 
 #include "cdcpd/cpd.h"
-#include "cdcpd/img_utils.h"
+#include "cdcpd/img_cloud_utils.h"
 #include "cdcpd/obs_util.h"
 #include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"

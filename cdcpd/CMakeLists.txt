@@ -64,7 +64,7 @@ add_library(cdcpd SHARED
         src/deformable_object_configuration.cpp
         src/cdcpd.cpp
         src/cpd.cpp
-        src/img_utils.cpp
+        src/img_cloud_utils.cpp
         src/optimizer.cpp
         src/obs_util.cpp
         src/past_template_matcher.cpp
