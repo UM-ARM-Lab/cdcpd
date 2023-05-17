@@ -25,8 +25,10 @@
 #include <arc_utilities/ostream_operators.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 #include <opencv2/core.hpp>
+#include <opencv2/core/eigen.hpp>
 
 #include "cdcpd/cpd.h"
+#include "cdcpd/img_utils.h"
 #include "cdcpd/obs_util.h"
 #include "cdcpd/optimizer.h"
 #include "cdcpd/past_template_matcher.h"
@@ -62,9 +64,6 @@ Eigen::MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ
                                             double reg);
 
 Eigen::MatrixXf locally_linear_embedding(PointCloud::ConstPtr template_cloud, int lle_neighbors, double reg);
-
-// Perform VoxelGrid filter downsampling on an Eigen matrix representing a point cloud.
-Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in);
 
 static std::ostream &operator<<(std::ostream &out, FixedPoint const &p) {
   out << "[" << p.template_index << "] " << p.position;

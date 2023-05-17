@@ -64,6 +64,7 @@ add_library(cdcpd SHARED
         src/deformable_object_configuration.cpp
         src/cdcpd.cpp
         src/cpd.cpp
+        src/img_utils.cpp
         src/optimizer.cpp
         src/obs_util.cpp
         src/past_template_matcher.cpp
@@ -116,6 +117,7 @@ install(TARGETS cdcpd EXPORT cdcpd-targets DESTINATION lib/${PROJECT_NAME})
 install(FILES
         include/cdcpd/deformable_object_configuration.h
         include/cdcpd/cdcpd.h
+        include/cdcpd/img_utils.h
         include/cdcpd/optimizer.h
         include/cdcpd/obs_util.h
         include/cdcpd/past_template_matcher.h

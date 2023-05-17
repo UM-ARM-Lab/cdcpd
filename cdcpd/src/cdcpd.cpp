@@ -108,33 +108,6 @@ class CompHSV : public pcl::ComparisonBase<PointHSV>
   CompHSV() : component_offset_(), compare_val_() {}  // not allowed
 };
 
-static PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat)
-{
-  PointCloud::Ptr cloud(new PointCloud);
-  cloud->points.reserve(mat.cols());
-  for (ssize_t i = 0; i < mat.cols(); ++i) {
-    cloud->push_back(pcl::PointXYZ(mat(0, i), mat(1, i), mat(2, i)));
-  }
-  return cloud;
-}
-
-// Perform VoxelGrid filter downsampling on an Eigen matrix representing a point cloud.
-// NOTE: I was getting ROS errors due to the ROS logging in the downsamplePointCloud routine that
-// is a member of the CDCPD class. Due to this, I just replicated the functionality here instead
-// of refactoring.
-Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in)
-{
-    PointCloud::Ptr cloud_in = mat_to_cloud(mat_in);
-
-    PointCloud::Ptr cloud_downsampled(new PointCloud);
-    pcl::VoxelGrid<pcl::PointXYZ> sor;
-    sor.setInputCloud(cloud_in);
-    sor.setLeafSize(0.02f, 0.02f, 0.02f);
-    sor.filter(*cloud_downsampled);
-
-    return cloud_downsampled->getMatrixXfMap().topRows(3);
-}
-
 MatrixXf barycenter_kneighbors_graph(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree,
     int lle_neighbors, double reg)
 {
@@ -290,75 +263,6 @@ VectorXf CDCPD::visibility_prior(const Matrix3Xf &vertices, const Mat &depth, co
   return prob;
 }
 
-// NOTE: based on the implementation here:
-// https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
-// we expect that cx, cy, fx, fy are in the appropriate places in P
-static std::tuple<PointCloudRGB::Ptr, PointCloud::Ptr> point_clouds_from_images(
-    const cv::Mat &depth_image, const cv::Mat &rgb_image, const cv::Mat &mask,
-    const Eigen::Matrix3f &intrinsics, const Eigen::Vector3f &lower_bounding_box,
-    const Eigen::Vector3f &upper_bounding_box)
-{
-  // depth_image: CV_16U depth image
-  // rgb_image: CV_8U3C rgb image
-  // mask: CV_8U mask for segmentation
-  // intrinsic matrix of Kinect using the Pinhole camera model
-  //  [[fx 0  px];
-  //   [0  fy py];
-  //   [0  0  1 ]]
-  // lower_bounding_box_vec: bounding for mask
-  // upper_bounding_box_vec: bounding for mask
-
-  float pixel_len;
-  cv::Mat local_depth_image;
-  depth_image.convertTo(local_depth_image, CV_32F);
-  pixel_len = 0.0002645833;
-
-  // Use correct principal point from calibration
-  auto const center_x = intrinsics(0, 2);
-  auto const center_y = intrinsics(1, 2);
-
-  auto const unit_scaling = 0.001;
-  auto const constant_x = 1.0f / (intrinsics(0, 0) * pixel_len);
-  auto const constant_y = 1.0f / (intrinsics(1, 1) * pixel_len);
-  auto constexpr bad_point = std::numeric_limits<float>::quiet_NaN();
-
-  PointCloud::Ptr filtered_cloud(new PointCloud);
-  PointCloudRGB::Ptr unfiltered_cloud(new PointCloudRGB(depth_image.cols, depth_image.rows));
-  auto unfiltered_iter = unfiltered_cloud->begin();
-
-  for (int v = 0; v < depth_image.rows; ++v) {
-    for (int u = 0; u < depth_image.cols; ++u) {
-      float depth = local_depth_image.at<float>(v, u);
-
-      // Assume depth = 0 is the standard was to note invalid
-      if (std::isfinite(depth)) {
-        float x = (float(u) - center_x) * pixel_len * float(depth) * unit_scaling * constant_x;
-        float y = (float(v) - center_y) * pixel_len * float(depth) * unit_scaling * constant_y;
-        float z = float(depth) * unit_scaling;
-        // Add to unfiltered cloud
-        // ENHANCE: be more concise
-        unfiltered_iter->x = x;
-        unfiltered_iter->y = y;
-        unfiltered_iter->z = z;
-        unfiltered_iter->r = rgb_image.at<Vec3b>(v, u)[0];
-        unfiltered_iter->g = rgb_image.at<Vec3b>(v, u)[1];
-        unfiltered_iter->b = rgb_image.at<Vec3b>(v, u)[2];
-
-        Eigen::Array<float, 3, 1> point(x, y, z);
-        if (mask.at<bool>(v, u) && point.min(upper_bounding_box.array()).isApprox(point) &&
-            point.max(lower_bounding_box.array()).isApprox(point)) {
-          filtered_cloud->push_back(pcl::PointXYZ(x, y, z));
-        }
-      } else {
-        unfiltered_iter->x = unfiltered_iter->y = unfiltered_iter->z = bad_point;
-      }
-      ++unfiltered_iter;
-    }
-  }
-
-  assert(unfiltered_iter == unfiltered_cloud->end());
-  return {unfiltered_cloud, filtered_cloud};
-}
 
 Matrix3Xd CDCPD::predict(const Matrix3Xd &P, const smmap::AllGrippersSinglePoseDelta &q_dot,
                          const smmap::AllGrippersSinglePose &q_config, const int pred_choice)
