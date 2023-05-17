@@ -412,7 +412,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
         last_upper_bounding_box_(original_template_.rowwise().maxCoeff()),       // TODO make configurable?
         // lle_neighbors_(std::min(8, static_cast<int>(original_template_.cols()))), // TODO make
         // configurable?
-        lle_neighbors_(2),
+        // lle_neighbors_(2),
+        lle_neighbors_(8),
         // m_lle_(locally_linear_embedding(template_cloud, lle_neighbors_, 1e-3)),  // TODO make
         m_lle_(MatrixXf::Zero(8, 8)),
         // configurable?
@@ -425,7 +426,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
         fixed_points_weight_(fixed_points_weight),
         use_recovery_(use_recovery),
         last_grasp_status_({false, false}),
-        objective_value_threshold_(objective_value_threshold)
+        objective_value_threshold_(objective_value_threshold),
+        segmenter(new SegmenterHSV(last_lower_bounding_box_, last_upper_bounding_box_))
 {
   // Temporary for Python binding testing.
   ros::Time::init();

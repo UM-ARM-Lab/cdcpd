@@ -52,7 +52,12 @@ public:
     struct SegmenterParameters
     {
     public:
-        SegmenterParameters(ros::NodeHandle& ph);
+        SegmenterParameters();
+        // Opted to remove this as a means to decouple segmentation from ROS. This obviously means
+        // that we can't get the parameters from the parameter server now. Need to find a good
+        // compromise for this. Peter and I have discussed rewriting the CDCPD node in Python for a
+        // better experience working with ROS.
+        // SegmenterParameters(ros::NodeHandle& ph);
 
         float const hue_min;
         float const hue_max;
@@ -62,7 +67,7 @@ public:
         float const val_max;
     };
 
-    SegmenterHSV(ros::NodeHandle& ph, Eigen::Vector3f const last_lower_bounding_box,
+    SegmenterHSV(Eigen::Vector3f const last_lower_bounding_box,
         Eigen::Vector3f const last_upper_bounding_box);
 
     virtual PointCloudHSV get_segmented_cloud() const override;

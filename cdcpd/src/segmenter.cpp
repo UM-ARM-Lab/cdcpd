@@ -1,19 +1,18 @@
 #include "cdcpd/segmenter.h"
 
-SegmenterHSV::SegmenterParameters::SegmenterParameters(ros::NodeHandle& ph)
-    : hue_min(ROSHelpers::GetParamDebugLog<float>(ph, "hue_min", 340.0)),
-      hue_max(ROSHelpers::GetParamDebugLog<float>(ph, "hue_max", 20.0)),
-      sat_min(ROSHelpers::GetParamDebugLog<float>(ph, "saturation_min", 0.3)),
-      sat_max(ROSHelpers::GetParamDebugLog<float>(ph, "saturation_max", 1.0)),
-      val_min(ROSHelpers::GetParamDebugLog<float>(ph, "value_min", 0.4)),
-      val_max(ROSHelpers::GetParamDebugLog<float>(ph, "value_max", 1.0))
+SegmenterHSV::SegmenterParameters::SegmenterParameters()
+    : hue_min(340.0)
+    , hue_max(20.0)
+    , sat_min(0.3)
+    , sat_max(1.0)
+    , val_min(0.4)
+    , val_max(1.0)
 {}
 
-SegmenterHSV::SegmenterHSV(ros::NodeHandle& ph, Eigen::Vector3f const last_lower_bounding_box,
+SegmenterHSV::SegmenterHSV(Eigen::Vector3f const last_lower_bounding_box,
         Eigen::Vector3f const last_upper_bounding_box)
-    : last_lower_bounding_box_{last_lower_bounding_box},
-      last_upper_bounding_box_{last_upper_bounding_box},
-      params_{ph}
+    : last_lower_bounding_box_{last_lower_bounding_box}
+    , last_upper_bounding_box_{last_upper_bounding_box}
 {}
 
 PointCloudHSV SegmenterHSV::get_segmented_cloud() const

@@ -134,12 +134,10 @@ TEST(StaticRope, testResimPointEquivalency)
     bag.close();
 }
 
-int main(int argc, char** argv){
+int main(int argc, char** argv)
+{
     ros::init(argc, argv, "StaticRopeTestNode");
     testing::InitGoogleTest(&argc, argv);
-    auto nh = ros::NodeHandle();
-    auto ph = ros::NodeHandle("~");
-
     auto res = RUN_ALL_TESTS();
 
     ros::shutdown();
