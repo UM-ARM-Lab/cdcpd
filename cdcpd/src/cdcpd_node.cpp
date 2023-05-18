@@ -454,8 +454,9 @@ void CDCPD_Moveit_Node::callback(cv::Mat const& rgb, cv::Mat const& depth,
     auto const hsv_mask = getHsvMask(ph, rgb);
     Eigen::RowVectorXd max_segment_lengths =
         deformable_objects.form_max_segment_length_matrix();
-    auto const out = (*cdcpd)(rgb, depth, hsv_mask, intrinsics, deformable_objects,
-        obstacle_constraints, max_segment_lengths, q_dot, q_config, gripper_indices);
+    auto const out = cdcpd->runImageInputKnownGripperCorrespondence(rgb, depth, hsv_mask,
+        intrinsics, deformable_objects, obstacle_constraints, max_segment_lengths, q_dot, q_config,
+        gripper_indices);
     deformable_objects.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);
@@ -478,8 +479,8 @@ void CDCPD_Moveit_Node::points_callback(const sensor_msgs::PointCloud2ConstPtr& 
 
     Eigen::RowVectorXd max_segment_lengths =
         deformable_objects.form_max_segment_length_matrix();
-    auto const out = (*cdcpd)(points, deformable_objects, obstacle_constraints, max_segment_lengths,
-        q_dot, q_config, gripper_indices);
+    auto const out = cdcpd->runPointCloudWithSegmentation(points, deformable_objects,
+        obstacle_constraints, max_segment_lengths, q_dot, q_config, gripper_indices);
     deformable_objects.update_def_obj_vertices(out.gurobi_output);
     publish_outputs(t0, out);
     reset_if_bad(out);

@@ -7,6 +7,7 @@
 
 #include <cdcpd/cdcpd.h>
 #include <cdcpd/cpd.h>
+#include <cdcpd/img_cloud_utils.h>
 #include <cdcpd/tracking_map.h>
 #include <cdcpd/deformable_object_configuration.h>
 
@@ -18,6 +19,7 @@ PYBIND11_MODULE(pycdcpd, m)
 
   // Free functions.
   m.def("downsampleMatrixCloud", &downsampleMatrixCloud);
+  m.def("boxFilterMatrixCloud", &boxFilterMatrixCloud);
 
   // Somewhat forward declaration to avoid having C++ type names in the generated Python docs.
   auto pyCDCPD = py::class_<CDCPD>(m, "PyCDCPD");

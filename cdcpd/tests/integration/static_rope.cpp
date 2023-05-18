@@ -88,8 +88,8 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
     {
         // Run a single "iteration" of CDCPD mimicing the points_callback lambda function found in
         // cdcpd_node.cpp
-        CDCPD::Output out = cdcpd_sim(cloud, tracking_map, obstacle_constraints,
-            max_segment_lengths, q_dot, q_config, gripper_indices);
+        CDCPD::Output out = cdcpd_sim.runPointCloudWithSegmentation(cloud, tracking_map,
+            obstacle_constraints, max_segment_lengths, q_dot, q_config, gripper_indices);
         tracking_map.update_def_obj_vertices(out.gurobi_output);
 
         // Do a health check of CDCPD

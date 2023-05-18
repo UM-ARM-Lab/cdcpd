@@ -7,6 +7,7 @@
 #include <opencv2/imgproc/types_c.h>
 #include <opencv2/imgproc.hpp>
 
+#include <pcl/filters/crop_box.h>
 #include <pcl/filters/conditional_removal.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
@@ -26,6 +27,9 @@ cv::Mat getHsvMask(cv::Mat const& rgb, double const hue_min=340.0, double const 
 
 // Perform VoxelGrid filter downsampling on an Eigen matrix representing a point cloud.
 Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in);
+
+// Runs point cloud through a box filter to mitigate segmentation outliers.
+Eigen::Matrix3Xf boxFilterMatrixCloud(const Eigen::Matrix3Xf &mat_in);
 
 PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat);
 

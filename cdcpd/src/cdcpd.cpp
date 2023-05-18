@@ -298,18 +298,6 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
     const Matrix2Xi &_template_edges, const float objective_value_threshold, const bool use_recovery,
     const double alpha, const double beta, const double lambda, const double k, const float zeta,
     const float obstacle_cost_weight, const float fixed_points_weight)
-//     : CDCPD(ros::NodeHandle(), ros::NodeHandle("~"), template_cloud, template_edges,
-//         objective_value_threshold, use_recovery, alpha, beta, lambda, k, zeta, obstacle_cost_weight,
-//         fixed_points_weight)
-// {}
-
-// CDCPD::CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-//     const Matrix2Xi &_template_edges, const float objective_value_threshold,
-//     const bool use_recovery, const double alpha, const double beta, const double lambda,
-//     const double k, const float zeta, const float obstacle_cost_weight,
-//     const float fixed_points_weight)
-//     : nh_(nh),
-//       ph_(ph),
       : original_template_(template_cloud->getMatrixXfMap().topRows(3)),
         template_edges_(_template_edges),
         last_lower_bounding_box_(original_template_.rowwise().minCoeff()),       // TODO make configurable?
@@ -436,7 +424,8 @@ CDCPD::CDCPD(PointCloud::ConstPtr template_cloud,  // this needs a different dat
   // cpd_runner_ = cpd_runner_choice;
 }
 
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
+CDCPD::Output CDCPD::runImageInputAutomaticGripperCorrespondence(const Mat &rgb, const Mat &depth,
+    const Mat &mask,
     const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
     ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
@@ -493,7 +482,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
     }
   }
 
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, tracking_map,
+  auto const cdcpd_out = runImageInput(rgb, depth, mask, intrinsics, tracking_map,
                                     obstacle_constraints, max_segment_length, q_dot, q_config,
                                     pred_choice);
 
@@ -502,22 +491,30 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
   return cdcpd_out;
 }
 
-// NOTE: this is the one I'm current using for rgb + depth
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
+// If you want to used a known correspondence between grippers and node indices (gripper_idx)
+// - Manually sets the gripped vertex index to the given indexes.
+// - Calls the operator for running images.
+CDCPD::Output CDCPD::runImageInputKnownGripperCorrespondence(const Mat &rgb, const Mat &depth,
+    const Mat &mask,
     const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
     ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
     const Eigen::MatrixXi &gripper_idx, const int pred_choice)
 {
   this->gripper_idx_ = gripper_idx;
-  auto const cdcpd_out = operator()(rgb, depth, mask, intrinsics, tracking_map,
+  auto const cdcpd_out = runImageInput(rgb, depth, mask, intrinsics, tracking_map,
                                     obstacle_constraints,
                                     max_segment_length, q_dot, q_config, pred_choice);
   return cdcpd_out;
 }
 
 // NOTE: for point cloud inputs that need to be segmented/filtered.
-CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
+// Does the following:
+// - Manually sets the gripped vertex index to the given indexes.
+// - Performs HSV segmentation on the input cloud.
+// - Predicts the fixed (grasped) points' next positions.
+// - Runs the core routine, `runCore`.
+CDCPD::Output CDCPD::runPointCloudWithSegmentation(const PointCloudRGB::Ptr &points,
     TrackingMap const& tracking_map, ObstacleConstraints obstacle_constraints,
     Eigen::RowVectorXd const max_segment_length, const smmap::AllGrippersSinglePoseDelta &q_dot,
     const smmap::AllGrippersSinglePose &q_config, const Eigen::MatrixXi &gripper_idx,
@@ -573,7 +570,7 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
 
   std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx, q_config);
 
-  Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
+  Output output = runCore(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
     pred_fixed_points, tracking_map, q_dot, q_config, pred_choice);
   output.original_cloud = points;
   output.masked_point_cloud = cloud_segmented;
@@ -582,7 +579,13 @@ CDCPD::Output CDCPD::operator()(const PointCloudRGB::Ptr &points,
   return output;
 }
 
-CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mask,
+// Does the following:
+// - Converts the given images to point clouds.
+// - Computes the visibility prior.
+// - Downsamples the point cloud.
+// - Predicts the fixed (grasped) points' next positions.
+// - Runs the core routine, `runCore`.
+CDCPD::Output CDCPD::runImageInput(const Mat &rgb, const Mat &depth, const Mat &mask,
     const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
     ObstacleConstraints obstacle_constraints, Eigen::RowVectorXd const max_segment_length,
     const smmap::AllGrippersSinglePoseDelta &q_dot, const smmap::AllGrippersSinglePose &q_config,
@@ -633,7 +636,7 @@ CDCPD::Output CDCPD::operator()(const Mat &rgb, const Mat &depth, const Mat &mas
 
   std::vector<FixedPoint> pred_fixed_points = getPredictedFixedPoints(gripper_idx_, q_config);
 
-  Output output = operator()(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
+  Output output = runCore(Y, Y_emit_prior, X, obstacle_constraints, max_segment_length,
     pred_fixed_points, tracking_map, q_dot, q_config, pred_choice);
   output.original_cloud = entire_cloud;
   output.masked_point_cloud = cloud;
@@ -646,11 +649,11 @@ CDCPD::Output CDCPD::run(CDCPDIterationInputs const& in)
 {
   Eigen::Matrix3Xf const Y = in.tracking_map.form_vertices_cloud()->getMatrixXfMap().topRows(3);
   Eigen::RowVectorXd max_segment_lengths = in.tracking_map.form_max_segment_length_matrix();
-  return (*this)(Y, in.Y_emit_prior, in.X, in.obstacle_constraints, max_segment_lengths,
+  return runCore(Y, in.Y_emit_prior, in.X, in.obstacle_constraints, max_segment_lengths,
     in.pred_fixed_points, in.tracking_map, in.q_dot, in.q_config, in.pred_choice);
 }
 
-CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
+CDCPD::Output CDCPD::runCore(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
       Eigen::Matrix3Xf const& X, ObstacleConstraints obstacle_constraints,
       Eigen::RowVectorXd const max_segment_length,
       std::vector<FixedPoint> pred_fixed_points,
@@ -711,13 +714,6 @@ CDCPD::Output CDCPD::operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const
   output.status = status;
 
   return output;
-}
-
-Eigen::Matrix3Xf CDCPD::downsampleMatrixCloud(Eigen::Matrix3Xf mat_in)
-{
-    PointCloud::Ptr cloud_in = mat_to_cloud(mat_in);
-    PointCloud::Ptr cloud_downsampled = downsamplePointCloud(cloud_in);
-    return cloud_downsampled->getMatrixXfMap().topRows(3);
 }
 
 // Perform VoxelGrid filter downsampling.

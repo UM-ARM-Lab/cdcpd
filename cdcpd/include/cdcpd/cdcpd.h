@@ -139,24 +139,24 @@ class CDCPD {
     }
   };
 
+  // Constructor that utilizes the new TrackingMap.
   CDCPD(TrackingMap const& tracking_map, float objective_value_threshold, bool use_recovery = false,
       double alpha = 0.5, double beta = 1.0, double lambda = 1.0, double k = 100.0,
       float zeta = 10.0, float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
+  // Common constructor that the other calls.
   CDCPD(PointCloud::ConstPtr template_cloud, const Eigen::Matrix2Xi &_template_edges,
       float objective_value_threshold, bool use_recovery = false, double alpha = 0.5,
       double beta = 1.0, double lambda = 1.0, double k = 100.0, float zeta = 10.0,
       float obstacle_cost_weight = 1.0, float fixed_points_weight = 10.0);
 
-//   CDCPD(ros::NodeHandle nh, ros::NodeHandle ph, PointCloud::ConstPtr template_cloud,
-//       const Eigen::Matrix2Xi &_template_edges, float objective_value_threshold,
-//       bool use_recovery = false, double alpha = 0.5, double beta = 1.0, double lambda = 1.0,
-//       double k = 100.0, float zeta = 10.0, float obstacle_cost_weight = 1.0,
-//       float fixed_points_weight = 10.0);
-
   // If you have want gripper constraints to be added and removed automatically based on is_grasped
   // and distance
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
+  // Does the following:
+  // - Automatically determines which vertex is grasped.
+  // - Calls `runImageInput`
+  Output runImageInputAutomaticGripperCorrespondence(const cv::Mat &rgb, const cv::Mat &depth,
+      const cv::Mat &mask,
       const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
@@ -164,14 +164,23 @@ class CDCPD {
       int pred_choice = 0);
 
   // If you want to used a known correspondence between grippers and node indices (gripper_idx)
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
+  // - Manually sets the gripped vertex index to the given indexes.
+  // - Calls `runImageInput`
+  // TODO: This shouldn't be a function. Instead, the user should set the correspondence outside of
+  // the function call, then call runImageInput
+  Output runImageInputKnownGripperCorrespondence(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
       const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
       int pred_choice = 0);
 
-  Output operator()(const PointCloudRGB::Ptr &points, TrackingMap const& tracking_map,
+  // Does the following:
+  // - Manually sets the gripped vertex index to the given indexes.
+  // - Performs HSV segmentation on the input cloud.
+  // - Predicts the fixed (grasped) points' next positions.
+  // - Runs the core routine, `runCore`.
+  Output runPointCloudWithSegmentation(const PointCloudRGB::Ptr &points, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},
       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
@@ -187,10 +196,13 @@ class CDCPD {
 //       const smmap::AllGrippersSinglePose &q_config = {}, const Eigen::MatrixXi &gripper_idx = {},
 //       int pred_choice = 0);
 
-  // The common implementation that the above overloads call
-  // TODO(Dylan): This should call the point cloud method (without segmentation) as it repeats the
-  // same code.
-  Output operator()(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
+  // Does the following:
+  // - Converts the given images to point clouds.
+  // - Computes the visibility prior.
+  // - Downsamples the point cloud.
+  // - Predicts the fixed (grasped) points' next positions.
+  // - Runs the core routine, `runCore`.
+  Output runImageInput(const cv::Mat &rgb, const cv::Mat &depth, const cv::Mat &mask,
       const cv::Matx33d &intrinsics, TrackingMap const& tracking_map,
       ObstacleConstraints points_normals, Eigen::RowVectorXd const max_segment_length,
       const smmap::AllGrippersSinglePoseDelta &q_dot = {},  // TODO: this should be one data structure
@@ -204,7 +216,7 @@ class CDCPD {
   // as indicated by the paper.
   // TODO(Dylan): Clean up just passing in the TrackingMap. There's redundant information passing
   // in both Y and the TrackingMap since the latter contains Y.
-  Output operator()(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
+  Output runCore(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y_emit_prior,
       Eigen::Matrix3Xf const& X, ObstacleConstraints obstacle_constraints,
       Eigen::RowVectorXd const max_segment_length,
       std::vector<FixedPoint> pred_fixed_points,

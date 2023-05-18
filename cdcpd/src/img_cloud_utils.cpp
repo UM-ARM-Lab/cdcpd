@@ -1,5 +1,7 @@
 #include "cdcpd/img_cloud_utils.h"
 
+inline static Eigen::Vector3f const bounding_box_extend(0.1, 0.2, 0.1);
+
 // TODO: Refactor this with the getHsvMask function in cdcpd_node.
 cv::Mat getHsvMask(cv::Mat const& rgb, double const hue_min, double const sat_min,
     double const val_min, double const hue_max, double const sat_max,
@@ -52,6 +54,25 @@ Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in)
     sor.filter(*cloud_downsampled);
 
     return cloud_downsampled->getMatrixXfMap().topRows(3);
+}
+
+// Runs point cloud through a box filter to mitigate segmentation outliers.
+Eigen::Matrix3Xf boxFilterMatrixCloud(const Eigen::Matrix3Xf &mat_in,
+    const Eigen::Vector3f &lower_bounding_box, const Eigen::Vector3f &upper_bounding_box)
+{
+    PointCloud::Ptr cloud_in = mat_to_cloud(mat_in);
+
+    const Eigen::Vector4f box_min = (lower_bounding_box - bounding_box_extend).homogeneous();
+    const Eigen::Vector4f box_max = (upper_bounding_box + bounding_box_extend).homogeneous();
+
+    PointCloud::Ptr cloud_clipped(new PointCloud);
+    pcl::CropBox<pcl::PointXYZ> box_filter;
+    box_filter.setMin(box_min);
+    box_filter.setMax(box_max);
+    box_filter.setInputCloud(cloud_in);
+    box_filter.filter(*cloud_clipped);
+
+    return cloud_clipped->getMatrixXfMap().topRows(3);
 }
 
 // NOTE: based on the implementation here:
