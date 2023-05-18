@@ -528,21 +528,16 @@ CDCPD::Output CDCPD::runPointCloudWithSegmentation(const PointCloudRGB::Ptr &poi
   // template_edges: (2, K) matrix corresponding to E in the paper
 
   // Perform HSV segmentation
-  boost::shared_ptr<PointCloud> cloud_segmented;
-  PointCloud::Ptr cloud_downsampled(new PointCloud);
+  PointCloud::Ptr cloud_segmented;
+  PointCloud::Ptr cloud_downsampled;
   {
     Stopwatch stopwatch_segmentation("Segmentation");
-    // auto segmenter = std::make_unique<SegmenterHSV>(ph_, last_lower_bounding_box_,
-    //     last_upper_bounding_box_);
     segmenter->set_last_lower_bounding_box(last_lower_bounding_box_);
     segmenter->set_last_upper_bounding_box(last_upper_bounding_box_);
-    segmenter->segment(points);
+    segmenter->set_input_cloud(points);
+    segmenter->segment();
 
-    // Drop color info from the point cloud.
-    // NOTE: We use a boost pointer here because that's what our version of pcl is expecting in
-    // the `setInputCloud` function call.
-    cloud_segmented = boost::make_shared<PointCloud>();
-    pcl::copyPointCloud(segmenter->get_segmented_cloud(), *cloud_segmented);
+    cloud_segmented = segmenter->get_segmented_cloud();
 
     cloud_downsampled = downsamplePointCloud(cloud_segmented);
   }

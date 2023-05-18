@@ -23,29 +23,30 @@ std::string const LOGNAME_SEGMENTER = "cdcpd_segmenter";
 
 // The base class that all Segmenter classes should inherit from. This defines the functions with
 // which the user will interact with the Segmenter.
-// Template argument here is for the type of the segmented point cloud.
-template<typename T>
 class Segmenter
 {
 public:
-    Segmenter(){}
+    Segmenter();
     virtual ~Segmenter(){}
+
+    virtual void set_input_cloud(const PointCloudRGB::Ptr input_cloud) { input_cloud_ = input_cloud; }
 
     // Return a copy of the segmented point cloud. This prevents accidentally making changes to the
     // output of the segmentation.
-    virtual T get_segmented_cloud() const = 0;
+    virtual PointCloud::Ptr get_segmented_cloud();
 
     // Do the segmentation and store output as member variables of this class.
-    virtual void segment(const PointCloudRGB::Ptr & inputs_points) = 0;
+    virtual void segment() = 0;
 
 protected:
+    // The cloud to be segmented.
+    PointCloudRGB::Ptr input_cloud_;
+
     // The segmented point cloud.
-    // Adding const here ensures that the segmented point cloud is not changed downstream of
-    // segmentation, preventing unexpected behavior if the user modifies the segmented point cloud.
-    std::unique_ptr<const T> segmented_points_;
+    PointCloud::Ptr segmented_points_;
 };
 
-class SegmenterHSV : public Segmenter<PointCloudHSV>
+class SegmenterHSV : public Segmenter
 {
 public:
 
@@ -70,9 +71,7 @@ public:
     SegmenterHSV(Eigen::Vector3f const last_lower_bounding_box,
         Eigen::Vector3f const last_upper_bounding_box);
 
-    virtual PointCloudHSV get_segmented_cloud() const override;
-
-    virtual void segment(const PointCloudRGB::Ptr & input_points);
+    virtual void segment();
 
     void set_last_lower_bounding_box(Eigen::Vector3f const& last_lower_bounding_box);
 

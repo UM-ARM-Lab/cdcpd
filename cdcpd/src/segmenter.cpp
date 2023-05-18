@@ -1,5 +1,14 @@
 #include "cdcpd/segmenter.h"
 
+Segmenter::Segmenter()
+    : segmented_points_{new PointCloud()}
+{}
+
+PointCloud::Ptr Segmenter::get_segmented_cloud()
+{
+    return PointCloud::Ptr(new PointCloud(*segmented_points_));
+}
+
 SegmenterHSV::SegmenterParameters::SegmenterParameters()
     : hue_min(340.0)
     , hue_max(20.0)
@@ -11,16 +20,12 @@ SegmenterHSV::SegmenterParameters::SegmenterParameters()
 
 SegmenterHSV::SegmenterHSV(Eigen::Vector3f const last_lower_bounding_box,
         Eigen::Vector3f const last_upper_bounding_box)
-    : last_lower_bounding_box_{last_lower_bounding_box}
+    : Segmenter()
+    , last_lower_bounding_box_{last_lower_bounding_box}
     , last_upper_bounding_box_{last_upper_bounding_box}
 {}
 
-PointCloudHSV SegmenterHSV::get_segmented_cloud() const
-{
-    return *segmented_points_;
-}
-
-void SegmenterHSV::segment(const PointCloudRGB::Ptr & input_points)
+void SegmenterHSV::segment()
 {
     auto points_cropped = boost::make_shared<PointCloudRGB>();
     auto points_hsv = boost::make_shared<PointCloudHSV>();
@@ -37,7 +42,7 @@ void SegmenterHSV::segment(const PointCloudRGB::Ptr & input_points)
     pcl::CropBox<PointRGB> box_filter;
     box_filter.setMin(box_min);
     box_filter.setMax(box_max);
-    box_filter.setInputCloud(input_points);
+    box_filter.setInputCloud(input_cloud_);
     box_filter.filter(*points_cropped);
 
     // convert to HSV
@@ -78,8 +83,8 @@ void SegmenterHSV::segment(const PointCloudRGB::Ptr & input_points)
     ROS_DEBUG_STREAM_THROTTLE_NAMED(1, LOGNAME_SEGMENTER + ".points",
         "val filtered " << filtered_points_hsv->size());
 
-    // Store results of segmentation in member variable
-    segmented_points_ = std::make_unique<PointCloudHSV>(*filtered_points_hsv);
+    // Drop color info from the segmented points and store in member variable.
+    pcl::copyPointCloud(*filtered_points_hsv, *segmented_points_);
 }
 
 void SegmenterHSV::set_last_lower_bounding_box(Eigen::Vector3f const& last_lower_bounding_box)
