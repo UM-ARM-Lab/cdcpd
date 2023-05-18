@@ -52,6 +52,7 @@ PYBIND11_MODULE(pycdcpd, m)
                  m,
                  "CPDMultiTemplateExternalPointAssignment"
                );
+  auto pySegmenterHSV = py::class_<SegmenterHSV, std::shared_ptr<SegmenterHSV> >(m, "SegmenterHSV");
 
   pyCDCPD.def(py::init<TrackingMap const&,
                        const float,
@@ -75,6 +76,8 @@ PYBIND11_MODULE(pycdcpd, m)
               py::arg("fixed_points_weight")
       ) // Constructor
     .def("run", &CDCPD::run)
+    .def("get_last_lower_bounding_box", &CDCPD::get_last_lower_bounding_box)
+    .def("get_last_upper_bounding_box", &CDCPD::get_last_upper_bounding_box)
     // .def_readonly("m_lle_", &CDCPD::m_lle_)
     .def_readwrite("cpd_runner", &CDCPD::cpd_runner_)
     ;
@@ -164,7 +167,13 @@ PYBIND11_MODULE(pycdcpd, m)
       .def("set_point_assignments", &CPDInterface::set_point_assignments);
 
 
-
+    pySegmenterHSV.def(py::init<Eigen::Vector3f const, Eigen::Vector3f const>())
+      .def("set_last_lower_bounding_box", &SegmenterHSV::set_last_lower_bounding_box)
+      .def("set_last_upper_bounding_box", &SegmenterHSV::set_last_upper_bounding_box)
+      .def("set_input_cloud_from_matrices", &SegmenterHSV::set_input_cloud_from_matrices)
+      .def("get_segmented_cloud_matrix", &SegmenterHSV::get_segmented_cloud_matrix)
+      .def("segment", &SegmenterHSV::segment)
+      ;
 
 
 

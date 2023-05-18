@@ -39,6 +39,27 @@ PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat)
   return cloud;
 }
 
+PointCloudRGB::Ptr mat_to_cloud(const Eigen::Matrix3Xf &xyz, const Eigen::Matrix3Xi &rgb)
+{
+  assert(xyz.cols() == rgb.cols());
+
+  PointCloudRGB::Ptr cloud(new PointCloudRGB);
+  cloud->points.reserve(xyz.cols());
+  for (ssize_t i = 0; i < xyz.cols(); ++i) {
+    auto const &pt_xyz = xyz.col(i);
+    auto const &pt_rgb = rgb.col(i);
+
+    PointRGB pt = PointRGB(pt_rgb(0), pt_rgb(1), pt_rgb(2));
+    pt.x = pt_xyz(0);
+    pt.y = pt_xyz(1);
+    pt.z = pt_xyz(2);
+
+    cloud->push_back(pt);
+  }
+
+  return cloud;
+}
+
 // Perform VoxelGrid filter downsampling on an Eigen matrix representing a point cloud.
 // NOTE: I was getting ROS errors due to the ROS logging in the downsamplePointCloud routine that
 // is a member of the CDCPD class. Due to this, I just replicated the functionality here instead

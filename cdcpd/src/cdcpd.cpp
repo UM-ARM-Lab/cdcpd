@@ -703,6 +703,7 @@ CDCPD::Output CDCPD::runCore(Eigen::Matrix3Xf const& Y, Eigen::VectorXf const& Y
   }
 
   Output output;
+  output.downsampled_cloud = mat_to_cloud(X);
   output.cpd_output = cdcpd_cpd;
   output.cpd_predict = cdcpd_pred;
   output.gurobi_output = cdcpd_out;

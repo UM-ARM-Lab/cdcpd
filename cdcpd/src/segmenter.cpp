@@ -4,9 +4,21 @@ Segmenter::Segmenter()
     : segmented_points_{new PointCloud()}
 {}
 
+void Segmenter::set_input_cloud_from_matrices(const Eigen::Matrix3Xf &xyz,
+        const Eigen::Matrix3Xi &rgb)
+{
+    input_cloud_ = mat_to_cloud(xyz, rgb);
+}
+
 PointCloud::Ptr Segmenter::get_segmented_cloud()
 {
+    // Copy point cloud to new pointer so we don't accidentally modify the segmentation results.
     return PointCloud::Ptr(new PointCloud(*segmented_points_));
+}
+
+Eigen::Matrix3Xf Segmenter::get_segmented_cloud_matrix()
+{
+    return segmented_points_->getMatrixXfMap().topRows(3);
 }
 
 SegmenterHSV::SegmenterParameters::SegmenterParameters()

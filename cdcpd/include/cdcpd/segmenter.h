@@ -12,6 +12,8 @@
 
 #include <arc_utilities/ros_helpers.hpp>
 
+#include "cdcpd/img_cloud_utils.h"
+
 typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointXYZHSV PointHSV;
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
@@ -31,9 +33,14 @@ public:
 
     virtual void set_input_cloud(const PointCloudRGB::Ptr input_cloud) { input_cloud_ = input_cloud; }
 
+    virtual void set_input_cloud_from_matrices(const Eigen::Matrix3Xf &xyz,
+        const Eigen::Matrix3Xi &rgb);
+
     // Return a copy of the segmented point cloud. This prevents accidentally making changes to the
     // output of the segmentation.
     virtual PointCloud::Ptr get_segmented_cloud();
+
+    virtual Eigen::Matrix3Xf get_segmented_cloud_matrix();
 
     // Do the segmentation and store output as member variables of this class.
     virtual void segment() = 0;

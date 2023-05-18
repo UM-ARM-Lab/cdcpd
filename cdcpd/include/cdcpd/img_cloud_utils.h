@@ -34,6 +34,9 @@ Eigen::Matrix3Xf boxFilterMatrixCloud(const Eigen::Matrix3Xf &mat_in,
 
 PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat);
 
+// Converts XYZ and RGB matrices into a pcl PointCloudXYZRGB
+PointCloudRGB::Ptr mat_to_cloud(const Eigen::Matrix3Xf &xyz, const Eigen::Matrix3Xi &rgb);
+
 // NOTE: based on the implementation here:
 // https://github.com/ros-perception/image_pipeline/blob/melodic/depth_image_proc/src/nodelets/point_cloud_xyzrgb.cpp
 // we expect that cx, cy, fx, fy are in the appropriate places in P
