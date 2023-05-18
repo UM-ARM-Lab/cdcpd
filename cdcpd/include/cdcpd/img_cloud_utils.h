@@ -29,7 +29,8 @@ cv::Mat getHsvMask(cv::Mat const& rgb, double const hue_min=340.0, double const 
 Eigen::Matrix3Xf downsampleMatrixCloud(Eigen::Matrix3Xf mat_in);
 
 // Runs point cloud through a box filter to mitigate segmentation outliers.
-Eigen::Matrix3Xf boxFilterMatrixCloud(const Eigen::Matrix3Xf &mat_in);
+Eigen::Matrix3Xf boxFilterMatrixCloud(const Eigen::Matrix3Xf &mat_in,
+    const Eigen::Vector3f &lower_bounding_box, const Eigen::Vector3f &upper_bounding_box);
 
 PointCloud::Ptr mat_to_cloud(const Eigen::Matrix3Xf &mat);
 
