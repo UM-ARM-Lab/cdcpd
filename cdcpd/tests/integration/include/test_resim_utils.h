@@ -11,6 +11,7 @@
 
 typedef pcl::PointXYZRGB PointRGB;
 typedef pcl::PointCloud<PointRGB> PointCloudRGB;
+typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
 // Read the CDCPD input point clouds from the specified bag file.
 // These are the point clouds that come from the kinect in the demo and are ultimately used to run
@@ -22,4 +23,4 @@ void expectPointCloudsEqual(pcl::PointCloud<pcl::PointXYZ> const& truth,
     pcl::PointCloud<pcl::PointXYZ> const& test);
 
 // Reads the last CDCPD output message from the specified bag file.
-boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> readLastCdcpdOutput(rosbag::Bag const& bag);
+std::vector<boost::shared_ptr<PointCloud> > readCdcpdOutput(rosbag::Bag const& bag);

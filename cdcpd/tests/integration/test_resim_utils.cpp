@@ -44,14 +44,28 @@ void expectPointCloudsEqual(pcl::PointCloud<pcl::PointXYZ> const& truth,
     // Test individual points.
     for (int idx = 0; idx < truth.size(); ++idx)
     {
-        EXPECT_FLOAT_EQ(truth.points[idx].x, test.points[idx].x);
-        EXPECT_FLOAT_EQ(truth.points[idx].y, test.points[idx].y);
-        EXPECT_FLOAT_EQ(truth.points[idx].z, test.points[idx].z);
+        auto const& truth_pt = truth.points[idx];
+        auto const& test_pt = test.points[idx];
+
+        EXPECT_FLOAT_EQ(truth_pt.x, test_pt.x);
+        EXPECT_FLOAT_EQ(truth_pt.y, test_pt.y);
+        EXPECT_FLOAT_EQ(truth_pt.z, test_pt.z);
+
+        // Uncomment this if you want high resolution info printed.
+        // auto x_err = std::pow(truth_pt.x - test_pt.x, 2.0);
+        // auto y_err = std::pow(truth_pt.y - test_pt.y, 2.0);
+        // auto z_err = std::pow(truth_pt.z - test_pt.z, 2.0);
+
+        // auto pt_err = std::pow(x_err + y_err + z_err, 0.5);
+
+        // ROS_WARN_STREAM("Truth point: " << truth_pt.x << ", " << truth_pt.y << ", " << truth_pt.z);
+        // ROS_WARN_STREAM("Test point: " << test_pt.x << ", " << test_pt.y << ", " << test_pt.z);
+        // ROS_WARN_STREAM("Pointwise error: " << pt_err);
     }
 }
 
 // Reads the last CDCPD output message from the specified bag file.
-boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> readLastCdcpdOutput(rosbag::Bag const& bag)
+std::vector<boost::shared_ptr<PointCloud> > readCdcpdOutput(rosbag::Bag const& bag)
 {
     // List the topics we want to view
     std::vector<std::string> topics;
@@ -60,26 +74,29 @@ boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> readLastCdcpdOutput(rosbag::Ba
     // Create the view so that we can iterate through all of the topic messages.
     rosbag::View view(bag, rosbag::TopicQuery(topics));
 
-    // Read the last CDCPD point cloud message that was output in the ROS bag.
+    // Read the CDCPD output (template vertices).
+    std::vector<boost::shared_ptr<PointCloud> > output_clouds;
     sensor_msgs::PointCloud2Ptr pt_cloud_last_ptr;
     for(rosbag::MessageInstance const m: view)
     {
-        auto i = m.instantiate<sensor_msgs::PointCloud2>();
-        if (i != nullptr)
+        auto points_msg = m.instantiate<sensor_msgs::PointCloud2>();
+        if (points_msg == nullptr)
         {
-            pt_cloud_last_ptr = i;
+            ROS_ERROR("Point cloud pointer is empty!");
         }
-        else
+
+        // Do any data transformation on the message to put into form that we can compare with new
+        // CDCPD output.
+        // TODO(dylan.colli): This mimics some of the functionality in points_callback that should
+        // likely be refactored.
+        auto points_output = boost::make_shared<PointCloud>();
         {
-            ROS_WARN("No data!");
+            pcl::PCLPointCloud2 points_v2;
+            pcl_conversions::toPCL(*points_msg, points_v2);
+            pcl::fromPCLPointCloud2(points_v2, *points_output);
         }
+        output_clouds.push_back(points_output);
     }
 
-    // Convert the last point cloud message to a usable point cloud type.
-    auto pt_cloud_last = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    pcl::PCLPointCloud2 points_v2;
-    pcl_conversions::toPCL(*pt_cloud_last_ptr, points_v2);
-    pcl::fromPCLPointCloud2(points_v2, *pt_cloud_last);
-
-    return pt_cloud_last;
+    return output_clouds;
 }

@@ -64,8 +64,9 @@ CDCPD initializeCdcpdSimulator(DeformableObjectTracking const& rope_tracking_ini
 }
 
 // Resimulate CDCPD on a set of previously recorded input point clouds in a bag file.
-PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
+void resimulateCdcpd(CDCPD& cdcpd_sim,
     std::vector<boost::shared_ptr<PointCloudRGB>> const& input_clouds,
+    std::vector<boost::shared_ptr<PointCloud>> const& output_clouds_expected,
     TrackingMap& tracking_map, float const max_rope_length,
     int const num_points)
 {
@@ -84,13 +85,16 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
 
     // Read the CDCPD input from the rosbag and step through the execution until the end of input is
     // reached.
+    int i = 0;
     for (auto & cloud : input_clouds)
     {
         // Run a single "iteration" of CDCPD mimicing the points_callback lambda function found in
         // cdcpd_node.cpp
         CDCPD::Output out = cdcpd_sim.runPointCloudWithSegmentation(cloud, tracking_map,
             obstacle_constraints, max_segment_lengths, q_dot, q_config, gripper_indices);
-        tracking_map.update_def_obj_vertices(out.gurobi_output);
+
+        auto const& out_test = out.gurobi_output;
+        tracking_map.update_def_obj_vertices(out_test);
 
         // Do a health check of CDCPD
         if (out.status == OutputStatus::NoPointInFilteredCloud ||
@@ -100,9 +104,12 @@ PointCloud::Ptr resimulateCdcpd(CDCPD& cdcpd_sim,
                 "cdcpd_node.cpp reset_if_bad lambda function!";
             ROS_ERROR(err_msg.c_str());
         }
+
+        auto const& out_expected = output_clouds_expected.at(i);
+        expectPointCloudsEqual(*out_expected, *out_test);
+
+        ++i;
     }
-    PointCloud::Ptr tracked_points_final = tracking_map.form_vertices_cloud();
-    return tracked_points_final;
 }
 
 // Run CDCPD on rosbag input so as to simulate a full run of CDCPD and test that the
@@ -114,7 +121,7 @@ TEST(StaticRope, testResimPointEquivalency)
     std::string package_path = ros::package::getPath("cdcpd");
     std::string bag_file_path = package_path + "/../demos/rosbags/demo_1_static_rope.bag";
     bag.open(bag_file_path, rosbag::bagmode::Read);
-    auto pt_cloud_last = readLastCdcpdOutput(bag);
+    auto output_clouds_expected = readCdcpdOutput(bag);
 
     // Setup the initial tracking of the rope.
     float const max_rope_length = 0.46F;  // Taken from kinect_tripodB.launch
@@ -126,10 +133,8 @@ TEST(StaticRope, testResimPointEquivalency)
     CDCPD cdcpd_sim = initializeCdcpdSimulator(def_obj_config->initial_);
 
     auto input_clouds = readCdcpdInputPointClouds(bag);
-    PointCloud::Ptr tracked_points = resimulateCdcpd(cdcpd_sim, input_clouds,
-        tracking_map, max_rope_length, num_points);
-
-    expectPointCloudsEqual(*pt_cloud_last, *tracked_points);
+    resimulateCdcpd(cdcpd_sim, input_clouds, output_clouds_expected, tracking_map, max_rope_length,
+        num_points);
 
     bag.close();
 }
