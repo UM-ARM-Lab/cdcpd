@@ -1,0 +1,9 @@
+- git:
+    local-name: arc_utilities
+    uri: https://github.com/UM-ARM-Lab/arc_utilities
+- git:
+    local-name: cdcpd
+    uri: https://github.com/UM-ARM-Lab/cdcpd
+- git:
+    local-name: pyrosmsg
+    uri: https://github.com/UM-ARM-Lab/pyrosmsg.git
