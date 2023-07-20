@@ -51,15 +51,27 @@ The master branch is the version the users outside the lab should use.
 
 Run `sudo -u USER_NAME install_scripts/install_ros_melodic.sh` if you use Ubuntu 18.04, or `sudo -u USER_NAME install_scripts/install_ros_noetic.sh` if you use Ubuntu 20.04
 
-### Installing Dependencies
+### Create catkin workspace & clone ROS packages
 
-Modify USR\_NAME in `install_scripts/install_dep.sh` and run `sudo -u USER_NAME ./install_dep.sh` under `install_scripts`. It will install all dependency listed above in `~/.local`.
+1. Create a catkin workspace
+2. Clone this repo to that workspace
+3. Use `wstool` to clone the other necessary ros packages from the ARMLab repositories.
+
+```
+# From the cdcpd/ root
+cp cdcpd.rosinstall ..
+cd ..
+wstool init
+wstool update # this will clone arc_utilities and pyrosmsg
+# Use this to install other ROS dependencies. If it fails, that's fine, you can just install the ROS packages manually with `sudo apt install`.
+rosdep install -r --ignore-src -y --from-paths cdcpd
+```
+
+### Installing non-ROS Dependencies
+
+To install non-ROS dependencies, use `install_scripts/install_dep.sh YOUR_USERNAME`. It will install all dependency listed above in `~/.local` or `/opt/`. Reading the install script will be helpful in case something goes wrong and you need to skip or modify some of the install steps.
 
 NOTE: `source ~/.bashrc` inside `install_dep.sh` might not run successfully according to the platform. If you encounter the problem like `catkin-config.cmake` not found, please run `source ~/.bashrc` and run `./install_pybind11_catkin.sh`.
-
-### Create catkin workspace
-
-We assume you have created a catkin workspace. Now clone this repo to that worksace. See `install_scripts/create_ws_ROS_Version.sh` or the ROS wiki on how to setup a catkin workspace.
 
 ### Gurobi Licence
 
@@ -67,12 +79,12 @@ Gurobi is a proprietary optimization package that we use. Please obtain a [free 
 
 ### Building
 
-```
-# in the src directory
-git clone https://github.com/UM-ARM-Lab/cdcpd.git
-```
+Build with `catkin` as normal.
 
-Once you've cloned, it might be a good idea to `rosdep install -r --from-paths cdcpd -y` to get any ROS packages you might be depending on.
+```
+# From the root of your workspace, not the `src` or `cdcpd` folders:
+catkin build
+```
 
 ### Testing
 
