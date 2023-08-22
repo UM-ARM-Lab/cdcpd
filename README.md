@@ -71,8 +71,6 @@ rosdep install -r --ignore-src -y --from-paths cdcpd
 
 To install non-ROS dependencies, use `install_scripts/install_dep.sh YOUR_USERNAME`. It will install all dependency listed above in `~/.local` or `/opt/`. Reading the install script will be helpful in case something goes wrong and you need to skip or modify some of the install steps.
 
-NOTE: `source ~/.bashrc` inside `install_dep.sh` might not run successfully according to the platform. If you encounter the problem like `catkin-config.cmake` not found, please run `source ~/.bashrc` and run `./install_pybind11_catkin.sh`.
-
 ### Gurobi Licence
 
 Gurobi is a proprietary optimization package that we use. Please obtain a [free academic license](https://www.gurobi.com/academia/academic-program-and-licenses).
